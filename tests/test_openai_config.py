@@ -99,7 +99,7 @@ def test_graph_node_routes_with_dummy_llm(monkeypatch):
     from retailiq import assistant
     from retailiq.core import config
     class Model:
-        def invoke(self,messages):return types.SimpleNamespace(content='Grounded product description [EL-001]')
+        def invoke(self,messages):return types.SimpleNamespace(content='Grounded product description [S1]')
     monkeypatch.setattr(config,'chat_model',lambda:Model())
     monkeypatch.setattr(assistant,'retrieve',lambda q:[{'source':'EL-001','text':'EL-001 is a laptop'}])
     assert graph.classify('How many AlphaBook Pro 14 in stock?')=='stock'
