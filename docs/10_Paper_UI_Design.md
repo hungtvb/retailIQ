@@ -12,6 +12,14 @@ This is an **operations workspace**, not a marketing landing page. The first scr
 - **Execution Logs**: compact filters and event rows backed by local JSONL.
 - **Cost & ROI**: form, estimates, sensitivity and token-cost projection; figures remain illustrative.
 
+## RetailIQ brand and mascot
+
+- Logo: compact retail shelf + analytics + conversation icon in navy `#0b203b` and amber `#eea13a`. Wordmark retains the product name **RetailIQ Copilot**.
+- **IQ** is the friendly robot mascot. The chat header and all restored AI replies use `/assets/brand/mascot-avatar.svg`; the new/empty conversation shows the compact guide illustration `/assets/brand/mascot-guide.svg`.
+- An anonymous **U** avatar represents the user during the unauthenticated Week 1 local demo; it is not a user identity/profile photo.
+- Brand files are locally served SVGs, without remote images/scripts; chat labels remain accessible text. Mascot is confined to chat and does not introduce a landing hero.
+- Favicon: `/assets/brand/logo-mark.svg`. Structural coverage: `tests/test_chat_branding.py`.
+
 ## Files and validation
 - `web/index.html` — semantic layout and preserved element IDs.
 - `web/assets/styles.css` — legacy baseline tokens/components.
