@@ -12,10 +12,13 @@ def intent(q):
  if any(x in q for x in ['stock','inventory','tồn kho','in stock','available units']):return 'stock'
  return 'product'
 def product_sku(q):
- q=q.lower()
- for p in products():
-  if p['name'].lower() in q or p['sku'].lower() in q or p['name'].lower().split()[0] in q:return p['sku']
- return None
+ """Recognize only a unique full product name or an explicit SKU."""
+ import re
+ text=q.casefold()
+ matches={p['sku'] for p in products()
+          if re.search(r'(?<![\\w-])'+re.escape(p['sku'].casefold())+r'(?![\\w-])',text)
+          or re.search(r'(?<!\\w)'+re.escape(p['name'].casefold())+r'(?!\\w)',text)}
+ return next(iter(matches)) if len(matches)==1 else None
 def do(q,category):
  if category=='stock':
   sku=product_sku(q)
