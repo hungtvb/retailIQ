@@ -264,3 +264,87 @@ def test_provider_error_propagates_instead_of_hallucinating(monkeypatch):
     ])
     with pytest.raises(TimeoutError):
         agents.product_analysis('Tell me about this product')
+
+
+def test_search_is_blocked_during_index_write(harness):
+    store, manifest, docs = harness
+    indexing.sync_index(store=store, manifest_path=manifest)
+    assert indexing._INDEX_SYNC_LOCK.acquire(blocking=False)
+    try:
+        with pytest.raises(indexing.IndexNotReadyError, match='being updated'):
+            indexing.vector_search('AlphaBook Pro specifications')
+    finally:
+        indexing._INDEX_SYNC_LOCK.release()
+
+
+def test_index_rejects_huge_document_before_reading_into_memory(harness):
+    store, manifest, docs = harness
+    large = docs / 'oversized.txt'
+    with large.open('wb') as stream:
+        stream.truncate(10 * 1024 * 1024 + 1)
+    with pytest.raises(ValueError, match='size limit'):
+        indexing.sync_index(store=store, manifest_path=manifest)
+    assert not store.documents
+    assert not indexing._recovery_path(manifest).exists()
+
+
+def test_document_zip_bomb_is_rejected_without_unpacking(tmp_path):
+    import zipfile
+    from retailiq.rag.loaders import load_file
+    target = tmp_path / 'huge.docx'
+    with zipfile.ZipFile(target, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr('word/document.xml', 'A' * (13 * 1024 * 1024))
+    assert target.stat().st_size < 100_000
+    with pytest.raises(ValueError, match='member exceeds size budget'):
+        load_file(target)
+
+
+def test_document_zip_path_traversal_is_rejected(tmp_path):
+    import zipfile
+    from retailiq.rag.loaders import load_file
+    target = tmp_path / 'traversal.xlsx'
+    with zipfile.ZipFile(target, 'w') as archive:
+        archive.writestr('../outside.xml', '<p>bad</p>')
+    with pytest.raises(ValueError, match='unsafe ZIP member path'):
+        load_file(target)
+
+
+def test_pdf_document_page_budget_prevents_unbounded_extraction(tmp_path, monkeypatch):
+    from retailiq.rag.loaders import load_file
+    target = tmp_path / 'manual.pdf'
+    target.write_bytes(b'%PDF-1.7\n')
+    fake = types.ModuleType('pypdf')
+
+    class PdfReader:
+        def __init__(self, path):
+            self.pages = [object()] * 201
+            self.is_encrypted = False
+
+    fake.PdfReader = PdfReader
+    monkeypatch.setitem(sys.modules, 'pypdf', fake)
+    with pytest.raises(ValueError, match='page budget'):
+        load_file(target)
+
+
+def test_empty_or_unusable_evidence_does_not_create_citation():
+    evidence, labels = grounding.build_evidence([
+        {'source': '', 'text': 'not usable'},
+        {'source': 'valid.md', 'text': '   '},
+        None,
+    ])
+    assert json.loads(evidence) == []
+    assert labels == {}
+    assert not grounding.validate_answer('Claim [S1]', labels)[0]
+
+
+def test_grounding_enforces_strict_answer_size_and_capped_evidence():
+    evidence, labels = grounding.build_evidence([
+        {'source': 'doc1.md', 'text': 'a' * 9999},
+        {'source': 'doc2.md', 'text': 'b' * 9999},
+        {'source': 'doc3.md', 'text': 'c' * 9999},
+        {'source': 'doc4.md', 'text': 'd' * 9999},
+    ])
+    parsed = json.loads(evidence)
+    assert len(parsed) == 3
+    assert all(len(x['untrusted_text']) == grounding.MAX_CONTEXT_CHARS for x in parsed)
+    assert not grounding.validate_answer('x' * (grounding.MAX_ANSWER_CHARS + 1) + ' [S1]', labels)[0]
