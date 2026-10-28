@@ -1,5 +1,6 @@
 from .analytics import products,inventory,revenue,top,month
 from .retrieval import retrieve
+from .observability import log_event, observed
 import os
 # Load project .env at application import, before RETAILIQ_MODE is first checked.
 from .core import config as _provider_config
@@ -35,11 +36,16 @@ def offline(q, *, history=None, active_agent=''):
  from .skills import skill_for
  category=classify(q)
  effective=resolve_followup(q,history)
- result=replenish_review_offline() if category=='decision' else do(effective,category)
+ agent=AGENT_FOR_INTENT[category]
+ log_event('agent.routed', intent=category, agent=agent, execution_mode='offline')
+ log_event('skill.selected', skill=skill_for(category), execution_mode='offline')
+ with observed('tool.offline_lookup', agent=agent, tool='reviewed_sql_or_lexical', execution_mode='offline'):
+  result=replenish_review_offline() if category=='decision' else do(effective,category)
  agent=AGENT_FOR_INTENT[category]
  handoff=({'from':'sales_agent','to':'inventory_agent',
            'reason':'Follow-up inventory question'}
           if active_agent=='sales_agent' and category=='stock' else None)
+ if handoff: log_event('agent.handoff', previous_agent='sales_agent', target_agent='inventory_agent', execution_mode='offline')
  return {'question':q,'intent':category,
          'mode':'OFFLINE deterministic fallback — not LangGraph/VectorDB',
          'as_of':month(),'active_agent':agent,'handoff':handoff,
