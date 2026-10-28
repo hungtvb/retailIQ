@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 DOCS = ROOT / 'data' / 'product_docs'
 KNOWLEDGE = ROOT / 'data' / 'knowledge'
 MAX_INDEX_FILES = 1000
+MAX_TOTAL_CHUNKS = 10_000
 
 
 def input_paths(roots: list[Path] | None = None) -> list[Path]:
@@ -35,6 +36,8 @@ def input_paths(roots: list[Path] | None = None) -> list[Path]:
             if not item.resolve().is_relative_to(ROOT.resolve()):
                 raise ValueError('Knowledge path escapes project root')
             files.append(item)
+    if len(files) > MAX_INDEX_FILES:
+        raise ValueError('Knowledge corpus exceeds configured file budget')
     return files
 
 
@@ -42,6 +45,7 @@ def plan_chunks(paths: list[Path] | None = None, *, strict: bool = True) -> tupl
     """Extract and chunk source files; no embedding/network needed."""
     documents = {}
     errors = {}
+    total_chunks = 0
     for path in paths if paths is not None else input_paths():
         path = Path(path)
         if path.is_symlink() or not path.resolve().is_relative_to(ROOT.resolve()):
@@ -54,6 +58,9 @@ def plan_chunks(paths: list[Path] | None = None, *, strict: bool = True) -> tupl
                 raise ValueError('No readable text content')
             if len(chunks) > 1500:
                 raise ValueError('Document exceeds chunk budget')
+            if total_chunks + len(chunks) > MAX_TOTAL_CHUNKS:
+                raise ValueError('Corpus exceeds global chunk budget')
+            total_chunks += len(chunks)
             documents[relative] = chunks
         except Exception as exc:
             # Format parsers raise their own exception families (PDF, ZIP, XML).
