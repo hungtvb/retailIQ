@@ -11,6 +11,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import tempfile
 from uuid import uuid4
 
@@ -88,22 +89,21 @@ def build_report(samples: list[dict], *, evaluator: str, execution_mode: str) ->
     if not isinstance(samples, list) or len(samples) < MIN_CASES:
         raise EvaluationDataError('Too few evaluated cases for the configured dataset')
     ids = set()
+    normalized = []
     for sample in samples:
         if not isinstance(sample, dict) or set(sample) != {
                 'case_id', 'source_count', *EVALUATION_METRICS}:
             raise EvaluationDataError('Malformed evaluation sample')
         case_id = sample['case_id']
-        if not isinstance(case_id, str) or len(case_id) != 16 or case_id in ids:
+        if not isinstance(case_id, str) or not re.fullmatch(r'[0-9a-f]{16}', case_id) or case_id in ids:
             raise EvaluationDataError('Duplicate or invalid evaluation case ID')
         ids.add(case_id)
-        if type(sample['source_count']) is not int or sample['source_count'] < 1:
-            raise EvaluationDataError('Invalid retrieved source count')
-        for metric in EVALUATION_METRICS:
-            checked_score(sample[metric], metric)
+        normalized.append(checked_measurement(
+            sample, sample['faithfulness'], sample['answer_relevancy']))
     summary = {
         metric: {
-            'mean': sum(sample[metric] for sample in samples) / len(samples),
-            'min': min(sample[metric] for sample in samples),
+            'mean': sum(sample[metric] for sample in normalized) / len(normalized),
+            'min': min(sample[metric] for sample in normalized),
         }
         for metric in EVALUATION_METRICS
     }
@@ -113,18 +113,35 @@ def build_report(samples: list[dict], *, evaluator: str, execution_mode: str) ->
         'evaluated_at': datetime.now(timezone.utc).isoformat(),
         'execution_mode': execution_mode,
         'evaluator': evaluator,
-        'sample_count': len(samples),
+        'sample_count': len(normalized),
         'summary': summary,
-        'samples': samples,
+        'samples': normalized,
         'note': 'Provider-backed evaluation; scores are not a production quality certification.',
     }
 
 
 def save_report_atomic(target: Path, report: dict) -> None:
     """Write only a complete validated report; keep previous result on failure."""
-    if not isinstance(report, dict) or report.get('schema_version') != 1:
+    required = {'schema_version', 'run_id', 'evaluated_at', 'execution_mode',
+                'evaluator', 'sample_count', 'summary', 'samples', 'note'}
+    if not isinstance(report, dict) or set(report) != required or report.get('schema_version') != 1:
         raise EvaluationDataError('Invalid report schema')
-    # Do not persist NaN/Infinity even if a caller bypasses build_report.
+    if not isinstance(report.get('run_id'), str) or not re.fullmatch(r'[0-9a-f]{32}', report['run_id']):
+        raise EvaluationDataError('Invalid report ID')
+    try:
+        stamp = datetime.fromisoformat(report['evaluated_at'])
+        if stamp.tzinfo is None or stamp.utcoffset() is None:
+            raise ValueError('Timezone required')
+    except (TypeError, ValueError, KeyError) as error:
+        raise EvaluationDataError('Invalid evaluation timestamp') from error
+    if report.get('note') != 'Provider-backed evaluation; scores are not a production quality certification.':
+        raise EvaluationDataError('Invalid report note')
+    computed = build_report(report['samples'], evaluator=report.get('evaluator'),
+                            execution_mode=report.get('execution_mode'))
+    if (report['sample_count'] != computed['sample_count'] or
+            report['summary'] != computed['summary'] or
+            report['samples'] != computed['samples']):
+        raise EvaluationDataError('Inconsistent evaluation report')
     raw = json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False)
     target = Path(target)
     target.parent.mkdir(parents=True, exist_ok=True)
