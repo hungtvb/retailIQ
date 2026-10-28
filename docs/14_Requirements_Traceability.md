@@ -17,6 +17,20 @@
 
 **Evidence snapshot:** Code commit `224fcb79fe3008e1c6462ed2d83e64a4789de5a3` passed [Week 1 CI](https://github.com/hungtvb/retailIQ/actions/runs/40721904503) (276 Python, 12 Node) and [mocked graph/localhost quality CI](https://github.com/hungtvb/retailIQ/actions/runs/40721904431) (3 mocked graph tests, 5 E2E groups, 400/400 measured calls). The local audit also passed 276 Python tests after installing the missing SQLite checkpoint package into a temporary path, plus 12 Node tests. Live LLM, Chroma, RAGAS, and LangSmith checks remain unverified. QA records a dated run and artifact link when updating a status.
 
+## Business objective traceability — separate from Week 1 course gates
+
+The updated business hypothesis is **Faster · Easier · Reliable** through natural-language interaction across existing operational tools; **Replenishment Review is one cross-source demonstration**. These UX outcomes are **not replacements** for mandatory LangGraph/RAGAS/LangSmith/agent-pattern requirements or for the original Week 4 five-agent order scenario.
+
+| Business objective | Measured evidence required | Existing support | Status |
+|---|---|---|---|
+| **Faster — user task completion** | End-to-end time from receiving question through user-checked correct answer; failures, retries and clarifications documented; equivalent manual tool task and agent task | Synthetic 24-trial pilot can collect durations and correct-only medians; no real end-user baseline | **NOT MEASURED**; API p95 is not a business time metric |
+| **Easier — interaction effort** | Counts of clicks/filters/tool switches for manual vs RetailIQ on equivalent tasks | Pilot has optional manual_steps only; no standardized interaction taxonomy or true POS/WMS screens | **PARTIAL INSTRUMENT — NOT MEASURED** |
+| **Easier — perceived usability** | Post-task 1–5 ease score with anchored scale + feedback | Pilot notes field can hold comments but does **not** collect/scored structured rating | **NOT IMPLEMENTED in current pilot** |
+| **Reliable — correctness and completion** | Independently checked task success/correctness, SKU, month, availability, citations and safe abstention | Golden business tests and offline/mocked graph paths | **PASS — local/mocked calculations only**; live provider not verified |
+| **Contextual natural language** | Variants and multi-turn references: “the first one”, “that product”, “what about Hanoi?”; ungrounded ambiguity asks clarification | Selected top-seller / SKU follow-up tests exist, full sequence unsupported | **PARTIAL — additional acceptance tests required** |
+
+**Business gates:** no validated Faster/Easier uplift or ROI until real human observations are collected with a suitable instrument. Four volunteers on synthetic data can provide *exploratory*, not generalizable, results. No numerical success target has been approved. See [Business scope](21_INVENTORY_SALES_BUSINESS_SCOPE.md) and [pilot limitations](23_INTERNAL_SYNTHETIC_BUSINESS_PILOT.md).
+
 ## Week 1 traceability matrix
 
 | Requirement / story | Acceptance evidence required | Implementation references | Existing test/evidence | Current status | Accountable role / next action |
@@ -33,6 +47,18 @@
 | NFR input and safe diagnostics | Question/filter validation; no prompt/key/stack trace in log viewer; loopback-only logs | `retailiq/api/http.py`, `retailiq/api/logs.py`, `retailiq/observability.py` | `tests/test_observability.py`, `tests/test_web_smoke.py` | PASS — local tests; app has no authentication | DevOps/Security: review local-only boundary and retention guidance |
 | Clean-machine runbook | Fresh setup, seed, mode selection, smoke test, reset, troubleshooting | `docs/03_Week1_Demo_Runbook.md` | No clean-machine execution recorded in this issue | NOT TESTED | QA: follow runbook from fresh venv; record OS, Python, and result |
 | Accessibility and latency | Keyboard/contrast review and measured latency record | `docs/12_Product_Brief_and_PRD.md` | No evidence recorded | NOT TESTED | QA: record findings; PO approves any numerical target |
+
+## Week 1 pattern demo coverage — show paths, not labels
+
+| Pattern | Demo path | Evidence limitation |
+|---|---|---|
+| **Chain** | Product document retrieval → evidence → generation → citation validation | Sequential path exists, but no explicit LCEL RunnableSequence claimed |
+| **Agent and Router** | Request routed to Sales/Inventory/Product tool path | Full model/tool execution must be demonstrated; offline rules are not autonomous agent execution |
+| **Handoff** | Sales → Inventory on a grounded stock follow-up | Selected references work; arbitrary “first one” not yet proven |
+| **Subagent & Custom Workflow** | Supervisor → verified top seller → exact-SKU inventory → rule/evidence verification | Mocked compiled graph demonstrated; verify actual live agentic supervisor separately |
+| **Skill** | Approved domain skill loaded and applied in appropriate execution path | Do not count only returned skill name as proof of behavior |
+
+See [FDE/Harness patterns](07_FDE_Harness_and_Patterns.md) and [official rubric](00_WEEK1_OFFICIAL_CHECKLIST.md).
 
 ## Live Week 1 acceptance gates
 

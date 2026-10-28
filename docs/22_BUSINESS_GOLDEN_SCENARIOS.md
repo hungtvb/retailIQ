@@ -1,6 +1,6 @@
 # RetailIQ — Business Golden Scenarios (UC-01)
 
-**Selected problem:** Inventory & Sales Decision Support. **Evidence:** synthetic-data automated business-contract tests, not a real retailer user study.
+**Selected product problem:** Complex multi-tool retail data interaction; desired outcomes **Faster · Easier · Reliable**. **UC-01 is the featured cross-source Inventory & Sales Replenishment Review scenario**, not the entire product problem. **Evidence:** synthetic-data business-contract tests verify calculation reliability, **not** real retailer task-time savings, ease-of-use or production stockout impact.
 
 **Acceptance owner:** BA/Domain Analyst + QA (proposed). **PO/domain sign-off:** pending.
 
@@ -67,7 +67,7 @@ The golden suite tests real SQLite arithmetic, FastAPI request handling and offl
 - **Human decision gate:** a result is a *review flag* only and must not create orders or claim a demand forecast.
 - **Missing-data gate:** if no trustworthy stock/sales evidence exists, abstain or fail closed.
 - **Freshness gate:** **NOT IMPLEMENTED** in Week 1; G14 documents observed behavior, not an accepted freshness SLA. Stale inventory must be labeled as a known limitation.
-- **Business value gate:** no measured manual baseline, assisted baseline, reviewer usefulness, or validated reduction in time-to-insight exists. Persona/PO review and success criteria remain pending.
+- **Business value gate:** no measured human manual/assisted baseline, structured ease-of-use survey, reviewer usefulness or validated reduction in time-to-insight exists. Synthetic correctness is **Reliable engineering evidence**, not proof of Faster or Easier. Persona/PO review and thresholds are pending.
 
 ## Three-minute business demo
 

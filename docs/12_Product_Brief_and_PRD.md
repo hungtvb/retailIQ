@@ -8,16 +8,16 @@
 
 RetailIQ Copilot is a local demonstration assistant for an omnichannel electronics retailer. It answers read-only inventory and sales questions from a synthetic SQLite fixture and answers product-detail questions from local product knowledge documents. Week 1 demonstrates the path from natural-language input to a grounded result, while keeping offline simulation distinct from live model, vector-search, evaluation, and tracing evidence.
 
-**Selected business focus:** **Inventory & Sales Decision Support** — help an Inventory / Retail Operations Analyst assess whether a verified top-selling SKU needs **human replenishment review**, based on completed-order sales and available stock across locations. This is a read-only, evidence-backed decision-support workflow, **not** Order Status & Delivery Exception Resolution, an automated purchase order, or a demand forecast. See [Business Problem & Decision Scope](21_INVENTORY_SALES_BUSINESS_SCOPE.md) for the chosen problem, as-is/to-be workflow, user jobs, KPI measurement plan, business acceptance gates and four-week narrative.
+**Selected business problem:** Retail users may need to navigate multiple existing tools/screens, configure filters, reconcile SKU/period/location data and interpret separate reports to answer an operational question. **RetailIQ's proposed value is Faster · Easier · Reliable completion of retail information tasks through a natural-language interface.** This remains a hypothesis, not validated retailer evidence. **Inventory & Sales** are the initial data domains; a verified top-seller **Replenishment Review** is the featured *multi-tool decision-support scenario*, not the entire business problem. RetailIQ remains read-only in Week 1. The separate Week 2–4 order, fulfilment, pricing and approval requirements remain in the course rubric. See [Business Problem, Outcomes & Scope](21_INVENTORY_SALES_BUSINESS_SCOPE.md).
 
-**Outcome hypothesis:** store and operations staff can produce a correct, traceable stock-versus-sales review with fewer manual lookups. This remains **unvalidated**: no observation of an actual inventory analyst, time-saving baseline, business threshold or realized outcome has been measured. The business direction has been selected; PO/domain sign-off and KPI validation remain pending.
+**Outcome hypothesis:** compared with using existing operational software manually, users can complete equivalent retail information tasks with **less end-to-end time (Faster)**, **fewer interactions/higher ease-of-use (Easier)** and **correct, source-backed answers (Reliable)**. “Manual” refers to navigating and coordinating tools, not absence of software. Faster is a target, **not a promise**: model/tool latency, clarification and verification may outweigh navigation savings. No actual retailer baseline, measured time reduction, usability score or ROI exists; PO/domain sign-off is pending.
 
 ### Users and stakeholders
 
 | Persona / stakeholder | Need | Evidence status |
 |---|---|---|
-| Store or inventory operator (assumed primary user) | Check a product's available units across locations and understand reservations | Synthetic scenario; not validated with an external operator |
-| Retail operations analyst (assumed secondary user) | Review monthly revenue and top sellers using consistent definitions | Synthetic scenario; not validated with an external analyst |
+| Store / retail operations user (assumed primary) | Ask stock, sales and product questions in natural language rather than navigating numerous filters/tools | Synthetic scenario; not validated with an external operator |
+| Inventory / retail operations analyst (secondary) | Combine verified SKU sales and inventory evidence for human replenishment review | Synthetic scenario; not validated with an external analyst |
 | Product Owner / reviewer | Confirm scope, rubric coverage, evidence, and known gaps | PO sign-off pending |
 | Engineering and QA team | Run locally and distinguish offline, mocked, and live results | Runbook provided; clean-machine review pending |
 
@@ -25,7 +25,8 @@ RetailIQ Copilot is a local demonstration assistant for an omnichannel electroni
 
 **Week 1 goals**
 
-- Answer stock, current synthetic-month revenue, top-seller, and product-detail questions.
+- Offer a natural-language interaction path for stock, current synthetic-month revenue, top-seller and product-detail questions; demonstrate a bounded cross-source review question.
+- Demonstrate the required course patterns (Chain, Agent, Router, Subagent, Handoff, Skill, Custom Workflow) in appropriate executable scenarios, distinguishing a deterministic tool executor from an autonomous agent.
 - Use read-only SQL for numeric inventory/sales facts and source-addressable documents for product facts.
 - Provide deterministic offline mode and separate full mode using LangGraph, an OpenAI-compatible model, and Chroma.
 - Treat tests, RAGAS evaluation, and LangSmith tracing as distinct evidence gates; never infer a live pass from an offline or mocked run.
@@ -100,6 +101,23 @@ As a demo user, I want to create, switch, and delete local conversations so that
 - Successful turns are saved once to the selected session; failed execution does not create a completed answer turn.
 - Session content is local demo data, not authenticated or encrypted production storage.
 
+### US-08 — Simplify task completion through natural language (P0 product goal; UX validation pending)
+
+As a retail operations user, I want to ask an information question in natural language and obtain the correct evidence without needing to know SQL, multiple report screens or database relationships.
+
+- For stock, top sellers, monthly revenue and product details, test multiple equivalent phrasings on the same frozen data; compare against an independent truth key.
+- Measure *human* end-to-end Task Completion Time, Interaction Effort (clicks/filters/tool switches), post-task Ease-of-Use Rating and Task Success Rate in addition to API latency. Record retries/clarifications and incorrect answers; do not claim gains from technical benchmarks.
+- The current synthetic pilot records time, correctness and optional manual steps, but **does not yet include a structured ease-of-use field or real POS/WMS comparison**. These UX criteria are targets, not a claim of implemented or validated outcomes.
+- Maintain correct source facts: SKU, sales period, location, data timestamps and missing/ambiguous-data abstention.
+
+### US-09 — Contextual follow-up experience (P1; partial implementation)
+
+As a retail operations user, I want to refer to a product or location from an earlier answer without repeating the identifier.
+
+- Target checks include “the first one”, “that product”, “what about Hanoi?” and a follow-up replenishment review.
+- Ambiguous references must prompt for clarification, not silently choose a product.
+- Current code supports a limited set of SKU/top-seller references; **the entire dialogue is NOT demonstrated as passing**. Treat as a UX gap and Week 2 enhancement, not an alternative to Week 1 mandatory live RAGAS/LangSmith evidence.
+
 ### US-07 — Inspect an illustrative cost/ROI estimate (P1)
 
 As a PO, I want editable assumptions and sensitivity cases so that I can discuss a business case transparently.
@@ -115,7 +133,7 @@ As a PO, I want editable assumptions and sensitivity cases so that I can discuss
 | Input handling | `/ask` accepts a question from 3 through 500 characters; malformed requests return validation errors | Enforced by request schema; see API contract |
 | Privacy | Keep keys in local `.env`; do not put secrets or personal/customer data in demo questions; log viewer must not expose prompt text, answers, keys, or stack traces | Key/log protections exist; chat messages persist in local SQLite. No production auth/encryption is provided. |
 | Network exposure | Bind to `127.0.0.1`; do not publish the unauthenticated API or logs endpoint | Required by runbook; production deployment out of scope |
-| Performance | No response-time SLA is approved. Capture local and live latency before making a performance claim. | Measurement pending; no numeric target claimed |
+| Performance and usability | No API-response SLA or measured human time-saving target is approved. Measure total task completion time, interaction count and ease rating separately from API latency. | Human baseline and ease-rating instrument pending; no improvement percentage claimed |
 | Accessibility | Main controls should have labels, visible keyboard focus, keyboard operation, and readable contrast | QA review pending; no conformance claim |
 | Reliability/evidence | Report deterministic tests, mocked graph tests, and live external checks separately | Traceability matrix is the status source |
 | Compatibility | Python 3.11+ and a local browser for the demo | Verify on the actual demo machine |

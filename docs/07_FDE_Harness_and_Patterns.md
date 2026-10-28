@@ -3,9 +3,9 @@
 ## 1. Forward Deployed Engineering (FDE) in RetailIQ
 FDE is an iterative delivery approach: work closely with domain users to identify a concrete workflow, integrate with the actual data context, build a small usable solution, evaluate it and refine it from feedback. For this course's **synthetic** mock retailer, we simulate the discovery steps; **we have not interviewed actual store managers**, nor do we claim validated business savings.
 
-**RetailIQ application:** Retail/E-commerce (#15) → Electronics & Accessories → inventory/sales reporting bottleneck hypothesis → data contracts (available stock, net revenue, top sellers) → four demonstrable questions → test/evaluation → feedback and Week 2 backlog.
+**RetailIQ application:** Retail/E-commerce (#15) → Electronics & Accessories → **multi-tool interaction complexity hypothesis** → product objectives **Faster · Easier · Reliable** → governed Sales/Inventory/Product tools → four Week 1 required questions + featured multi-source Replenishment Review → pattern/evidence demo → feedback and Week 2 backlog.
 
-**AS-IS:** users switch between inventory, sales and product documents and aggregate answers manually. **TO-BE (Week 1):** a local UI routes questions to a vetted SQL analytics function or Product RAG and shows sourced results. Explicit non-goals: execute orders, change prices or access production data.
+**AS-IS (unvalidated hypothesis):** users operate existing POS/OMS/ERP/BI tools across multiple screens, filters and reports; **manual** describes the navigation/coordination, not an absence of software. **TO-BE (Week 1):** one natural-language UI routes simple requests to reviewed SQL or Product RAG; cross-source Replenishment Review demonstrates Supervisor/Subagents and verification. **Goals:** reduce end-to-end task time and interaction effort **without losing answer correctness**; these gains are not yet observed. Explicit non-goals: execute orders, change prices or access production data.
 
 ## 2. Harness architecture — five layers from the Week 1 reading
 
@@ -14,7 +14,7 @@ The assigned [Agent Harness Architecture](https://harness-engineering.ai/blog/ag
 | Harness layer | Responsibility | Actual RetailIQ implementation and current limit |
 |---|---|---|
 | **1. Orchestration** | Route, invoke specialists and control termination | `orchestration/week1_graph.py` uses LangGraph `StateGraph`, `Command` and specialist nodes. Not all specialists are autonomous tool-loop agents. |
-| **2. Context Management** | Select model context, session state and trusted domain knowledge | `State` in `week1_graph.py`; 12-message bounded history in `api/http.py`; product RAG with metadata; business definitions. Missing measured context-token budget and native graph checkpointer. |
+| **2. Context Management** | Select model context, session state and trusted domain knowledge | `State` in `week1_graph.py`; 12-message bounded history in `api/http.py`; product RAG with metadata; business definitions. Missing measured context-token budget; local SQLite graph checkpointer exists, but does not imply scalable distributed memory. |
 | **3. Tool Integration** | Validate, execute and normalize tool operations | `domain/analytics.py` exposes vetted read-only SQL via `agents.py` wrappers; Chroma Product RAG. Some calls are deterministic, not LLM-selected. |
 | **4. Verification** | Check outputs and tool/answer quality | Parameterized business queries, `tests/`, `scripts/eval_ragas.py` and sourced product answers. LLM/Chroma E2E, RAGAS scores and relevance thresholds still pending. |
 | **5. Operations** | Monitor execution, handle failures and control cost | `observability.py`, `api/logs.py`, SSE streaming, LangSmith configuration and ROI calculator. Live LangSmith traces and real per-request cost telemetry still pending. |
@@ -29,18 +29,18 @@ The assigned [Agent Harness Architecture](https://harness-engineering.ai/blog/ag
 
 | Concept/pattern | Week 1 evidence | Why / timing |
 |---|---|---|
-| Chain | Retrieval → context → LLM answer is a sequential chain concept; no separate `RunnableSequence` object implemented | Explain how it differs from an agent selecting tools dynamically |
+| Chain | Retrieval → grounded context → LLM answer → citation verification is an implemented sequential processing path; **no separate RunnableSequence object** has been evidenced | Explain fixed pipeline vs dynamic tool selection; do not claim an explicit LCEL chain if none exists |
 | Agent/tool usage | LangChain `@tool` wraps SQL lookup; LLM classifies the intent, then graph dispatches | This is a **tool-using routed workflow**, not a general autonomous tool-selection loop |
 | Router | **Implemented in source**: route `stock/revenue/top/product` | Predictable routing to authoritative data source |
 | Custom workflow | **Implemented in source**: LangGraph `StateGraph` + conditional edges | Hybrid deterministic business calculations + generative product answer |
 | Subagent | **Implemented in W1 FDE extension**: Supervisor delegates to scoped Sales/Inventory LangGraph subgraphs via LangChain tools | Week 4 expands to all mandated specialist agents |
 | Handoff | **Implemented in W1 FDE extension**: Sales Agent → Inventory Agent via LangGraph `Command(goto=...)` | Week 4 extends inter-agent transfers |
 | Skill | **Implemented in W1 FDE extension**: allowlisted, on-demand role policy instructions in `retailiq/skills/` | Skills differ from product RAG documents |
-| Multi-agent | **Implemented as a focused read-only W1 scenario**: Retail Supervisor and three specialists | Week 4 still requires five mandated autonomous retail agents |
+| Multi-agent | **Implemented as a focused read-only W1 scenario**: Retail Supervisor, Sales/Inventory specialists and separate Product path | Week 4 still requires five mandated retail agents and the approved order scenario |
 
-**FDE-driven choice:** Week 1 still routes simple questions to single specialists; a cross-domain question about bestselling items and available stock now invokes a Retail Supervisor with Sales and Inventory subagents. A follow-up can trigger an actual Sales→Inventory handoff. This makes each pattern demonstrable without implementing Week 4 write-side order/price operations. Details: `docs/10_FDE_MultiAgent_Session_Implementation.md`.
+**FDE-driven choice:** Replenishment Review is a **cross-tool demo scenario**, not the overarching business problem. Week 1 still routes simple questions to single specialists; a cross-domain question about bestselling items and available stock now invokes a Retail Supervisor with Sales and Inventory subagents. A follow-up can trigger an actual Sales→Inventory handoff. This makes each pattern demonstrable without implementing Week 4 write-side order/price operations. Details: `docs/10_FDE_MultiAgent_Session_Implementation.md`.
 
-**Chat sessions:** the UI and `/api/sessions` persist local conversations in a separate SQLite DB and pass bounded recent history/active agent into the graph. This is application-level persistence, not a LangGraph checkpointer. No production identity or tenant protection is implied.
+**Chat sessions:** the UI and `/api/sessions` persist local conversations in a separate SQLite DB and pass bounded recent history/active agent into the graph. Full-mode session graphs also use a **local SQLite LangGraph checkpointer** in the current code; this is not distributed memory, customer long-term memory, or production identity/tenant protection.
 
 ## 4. Structured local logging and LangSmith operations
 Local application logging is now implemented in `retailiq/observability.py`: JSONL events, rotating files, per-request IDs, session context, agent and tool durations, safe exception stack frame *locations*, and a read-only loopback-only **Execution Logs** UI. See `docs/11_Logging_Observability.md`. This shows harness operations for the local demo but does **not** replace LangSmith execution traces.

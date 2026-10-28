@@ -1,21 +1,26 @@
-# Week 1 Demo Script — 6 minutes
+# Week 1 Demo Script — Suggested 6-minute walkthrough
 
-| Time | Segment | On-screen action |
+**Business framing:** Workers already use POS/BI/ERP/WMS; “manual” means navigating screens, applying filters and combining outputs. **RetailIQ aims for Faster · Easier · Reliable completion of tasks through natural language**, not guaranteed speed. Replenishment Review is **one** cross-source use case. No human time saving or usability uplift has been measured.
+
+| Time | Segment | On-screen action and required pattern evidence |
 |---|---|---|
-| 0:00–0:45 | Business domain | Explain omnichannel Electronics retailer and inventory/report pain points |
-| 0:45–1:30 | Architecture | Graph: Intent → SQL tool or Product RAG |
-| 1:30–2:15 | Stock | Ask AlphaBook stock, show 3 locations, distinguish on-hand / reserved / available |
-| 2:15–3:00 | Revenue | Ask this month's revenue, show online/store breakdown and KPI formula |
-| 3:00–3:40 | Top sellers | Ask top sellers by completed-order units sold |
-| 3:40–4:30 | Product RAG | Ask about 65W charger; show source and vector retrieval in **full mode** |
-| 4:30–5:20 | Evaluation | Show real LangSmith trace and RAGAS scores if available; otherwise disclose not yet run |
-| 5:20–6:00 | Roadmap | Explain additions in W2, W3 and mandatory W4 agents |
+| 0:00–0:35 | Business domain | Hypothetical multi-screen/multi-tool AS-IS → natural-language TO-BE; Faster/Easier/Reliable **hypotheses** |
+| 0:35–1:05 | Architecture & harness | Explain UI → LangGraph Router → trusted SQL/RAG tools → verification/answer; layers and context |
+| 1:05–1:45 | Stock / Revenue | Ask AlphaBook stock and monthly revenue; expose Router → Inventory/Sales Agent → SQL Tool, data provenance |
+| 1:45–2:20 | Top sellers + Context | Ask top sellers, then **supported** follow-up about “the top seller” and stock; show real Sales→Inventory Handoff |
+| 2:20–3:15 | Cross-source review | Ask “Which top seller needs a replenishment review based on stock?”; show Supervisor, Subagents, Skills, dependent SQL calls, Custom Workflow and verified output |
+| 3:15–4:05 | Product RAG / Chain | Ask charger specs, show retrieved source → prompt/answer → citation verification; use full vector retrieval if verified |
+| 4:05–5:15 | Operations & quality | Show **actual** LangSmith trace and RAGAS output if available (otherwise explicitly NOT TESTED), illustrative cost/ROI, relevant unit/test evidence |
+| 5:15–6:00 | Limits & course roadmap | State no measured Faster/Easier gains, current context gaps, technical live gates; retain Week 2 MCP/freshness, Week 3 governance, **five Week 4 agents + approved order scenario** |
+
+**Timing is illustrative, not an official course limit.** Do not replace required pattern demonstrations with static slide labels: show the executed route/tool/subagent events where available; if the live path fails, label a mocked demonstration accurately. “The first one” and “what about Hanoi?” are *future acceptance examples*, not reliable Week 1 demo prompts.
+
 
 ## Preflight
 Follow `docs/05_Huong_dan_OpenAI_Compatible_VI.md`: configure the shared OpenAI-compatible `.env`, run `python -m scripts.check_openai` then optionally `--live`, seed with `python -m scripts.seed`, run `pytest -q`, then `uvicorn retailiq.api:app --host 127.0.0.1 --port 8000`. Open browser at http://127.0.0.1:8000. The checked-in `.env.example` selects full mode. Without a `.env` setting for `RETAILIQ_MODE`, the application falls back to offline mode. Full mode needs its dependencies and provider credentials; until a live E2E run, it remains unverified. Do not describe offline mode as LangGraph or vector RAG.
 
 ## Demo definitions
-As-of fixed 2026-10-28 for seed repeatability. Net revenue excludes taxes/shipping/returns. Stock available is on_hand minus reserved, not on_hand alone.
+The business hypothesis is natural-language interaction across existing operational tools with **Faster / Easier / Reliable** metrics. Replenishment Review is not the entire product. As-of fixed 2026-10-28 for seed repeatability. Net revenue excludes taxes/shipping/returns. Stock available is on_hand minus reserved, not on_hand alone.
 
 
 ## Presentation deck

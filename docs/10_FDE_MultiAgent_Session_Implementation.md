@@ -1,12 +1,12 @@
 # Week 1 FDE Extension: Router, Subagent, Handoff, Skill, Session Memory
 
 ## Business case and FDE approach
-**Hypothesis:** Store operators switch between sales ranking, stock by location, and product manuals to decide which bestsellers merit replenishment review. This is a synthetic scenario, *not validated via customer interviews*.
+**Product-level hypothesis:** Retail staff may need to navigate multiple existing operational tools and reports to retrieve, reconcile and interpret information. **RetailIQ aims for Faster · Easier · Reliable task completion through natural-language conversation.** The bestseller/stock replenishment review below is **one multi-source demo scenario**, not the overarching problem. This is synthetic and *not validated via retailer interviews or measured UX/time benefit*.
 
-- **AS-IS:** manual report reconciliation across sales, inventory and product documents.
-- **TO-BE:** a multi-agent conversational assistant performs read-only cross-domain analysis, shows decision evidence, and remembers each conversation.
+- **AS-IS (hypothesized):** human-operated navigation, filtering and reconciliation across existing POS/BI/ERP/WMS/catalog tools; “manual” does **not** mean no software.
+- **TO-BE:** a multi-agent conversational assistant routes read-only domain queries, performs evidence-backed cross-source review and preserves selected conversation context. Faster/Easier are **targets**, not certified outcomes.
 - **Non-goals:** creating purchase orders, changing prices, authenticating users, accessing real ERP, or predicting future demand.
-- **Success checks:** four baseline questions; cross-domain decision; sales→inventory handoff; follow-up product resolution; session isolation; delete history.
+- **Engineering/demo checks:** four required baseline questions; cross-domain review; Sales→Inventory handoff; skill/subagent/router/custom workflow evidence; follow-up product resolution; session isolation; delete history. **Business acceptance (separate):** task time, interaction effort, post-task ease and independently checked task success; not yet measured.
 
 ## Roles and four agent patterns
 
@@ -63,6 +63,7 @@ Browser stores **only active session UUID** locally; server stores messages. No 
 
 ## Validation and limitations
 
+- Flexible references such as “the first one” or “what about Hanoi?” are **target follow-up cases**, not proven in this demo; existing routing resolves only selected references and may need clarification. Do not script an unsupported phrase as a verified pass.
 - `pytest` offline regression validates APIs, SQL, graph-independent routing, session persistence and skill policy.
 - `tests/test_langgraph_smoke.py` requires real installed LangGraph; CI installs it and tests compiled graph with a stub model and deterministic SQL tools.
 - **Not yet verified with external LLM, Chroma embedding, RAGAS judge or LangSmith trace**. Do not present these as completed E2E until tested with valid credentials.
