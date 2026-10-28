@@ -24,7 +24,7 @@ def test_logo_favicon_and_chat_mascot_markup():
     assert 'class="brand-wordmark"' in html
     assert 'id="chat-welcome"' in html
     assert 'id="active-response"' in html
-    assert 'class="chat-avatar" src="/assets/brand/mascot-avatar.svg"' in html
+    assert 'id="active-agent-avatar" class="agent-avatar agent-avatar-iq"' in html
     assert 'src="/assets/brand/mascot-guide.svg"' in html
     assert "class=\"hero\"" not in html
     assert "Cost &amp; ROI" in html
@@ -33,13 +33,17 @@ def test_logo_favicon_and_chat_mascot_markup():
 
 def test_avatar_added_to_history_and_new_turn():
     js = client.get("/assets/app.js").text
-    assert "avatar.src = '/assets/brand/mascot-avatar.svg'" in js
-    assert "avatar.alt = ''" in js
+    assert "AgentID().avatar(agentType)" in js
+    assert "setActiveAgent(result.active_agent, result.intent)" in js
     assert "avatar.className = 'chat-avatar chat-avatar-user'" in js
     assert "byId('chat-welcome').hidden = messages.length > 0" in js
     assert "byId('active-response').hidden = !last" in js
     assert "byId('active-response').hidden = false" in js
     css = client.get("/assets/data-workspace.css").text
-    assert ".chat-avatar{" in css
+    assert ".agent-avatar {" in css
     assert ".chat-welcome[hidden],.chat-active-answer[hidden]" in css
     assert ".chat-message-assistant .chat-bubble" in css
+    assert '[data-agent=sales]' in css
+    assert '[data-agent=inventory]' in css
+    assert '[data-agent=product]' in css
+    assert '[data-agent=supervisor]' in css
