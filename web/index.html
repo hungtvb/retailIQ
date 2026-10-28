@@ -45,6 +45,16 @@
             <div><span class="section-kicker">NATURAL LANGUAGE ANALYTICS</span><h2>Ask RetailIQ anything.</h2></div>
             <span class="subtle-suffix">SQL + PRODUCT RAG</span>
           </div>
+          <div class="chat-workspace-tools">
+            <div class="session-controls">
+              <label for="chat-session-picker" class="sr-only">Conversation</label>
+              <select id="chat-session-picker" aria-label="Select chat session"><option value="">Loading conversations…</option></select>
+              <button type="button" id="chat-new" class="chat-action-button">+ New chat</button>
+              <button type="button" id="chat-delete" class="chat-action-button chat-delete-button" aria-label="Delete selected chat">Delete</button>
+            </div>
+            <span class="chat-session-note">LOCAL SESSION MEMORY · SQLITE</span>
+          </div>
+          <div id="chat-history" class="chat-history" aria-label="Conversation history" aria-live="polite"></div>
           <form id="ask-form" class="query-form">
             <label class="sr-only" for="q">Your retail question</label>
             <div class="query-field"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><circle cx="10.7" cy="10.7" r="6.9" stroke="currentColor" stroke-width="1.7"/><path d="m16 16 5.3 5.3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
@@ -58,6 +68,7 @@
               <button type="button" data-question="What is the revenue this month?">Monthly revenue</button>
               <button type="button" data-question="Which products are top sellers?">Top sellers</button>
               <button type="button" data-question="Tell me about USB-C GaN Charger 65W">Product knowledge</button>
+              <button type="button" data-question="Which top seller needs a replenishment review based on stock?">Multi-agent review</button>
             </div>
           </div>
           <div class="response-grid">
@@ -68,6 +79,7 @@
             </article>
             <article class="paper-card evidence-card">
               <div class="card-topline"><span class="micro-label">EXECUTION EVIDENCE</span><span class="evidence-icon" aria-hidden="true">↗</span></div>
+              <div id="agent-trace" class="agent-trace" aria-label="Agent execution details"></div>
               <div id="meta" class="execution-meta">Intent, execution mode, query period and source records will appear after a question.</div>
               <details class="raw-details"><summary>View source records <span aria-hidden="true">+</span></summary><pre id="raw">{}</pre></details>
               <div class="card-bottomline"><span>TRANSPARENT BY DESIGN</span></div>
