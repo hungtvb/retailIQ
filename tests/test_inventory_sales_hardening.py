@@ -174,3 +174,19 @@ def test_missing_sales_channel_rejected(db):
 def test_business_data_error_not_automatically_retried():
     from retailiq.orchestration.week1_graph import retryable_read_failure
     assert not retryable_read_failure(analytics.DomainDataError('bad stock'))
+
+
+def test_no_sales_data_explained_without_fake_ranking(db):
+    modify(db, "UPDATE orders SET status='cancelled'")
+    assert 'No completed-order' in assistant.do('What is revenue?', 'revenue')['answer']
+    assert 'No completed-order' in assistant.do('Which are top sellers?', 'top')['answer']
+
+
+def test_replenishment_not_assessed_without_stock_evidence(db):
+    modify(db, "DELETE FROM inventory WHERE sku='SKU-1'")
+    from retailiq import assistant as a
+    # The top-ranked seller is SKU-1 under deterministic tie ordering.
+    result = a.replenish_review_offline()
+    assert 'inventory evidence is missing' in result['answer']
+    assert 'No purchasing recommendation' in result['answer']
+    assert len(result['records']) == 1
