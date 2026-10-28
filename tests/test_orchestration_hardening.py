@@ -202,3 +202,36 @@ def test_checkpoint_graph_has_explicit_close_and_path_isolation(monkeypatch, tmp
         assert graph._CHECKPOINT_CACHE['path'] == second
     finally:
         graph.close_checkpoint_graph()
+
+
+def test_checkpoint_history_is_bounded_and_excludes_ai_output():
+    old = [{'role': 'assistant', 'content': 'untrusted product document' * 10000}]
+    old.extend({'role': 'user', 'content': f'Question {i}'+'x'*1000} for i in range(30))
+    kept = graph.bounded_history(old)
+    assert len(kept) == 12
+    assert all(item['role'] == 'user' and len(item['content']) <= 500 for item in kept)
+    assert kept[0]['content'].startswith('Question 18')
+    assert not any('untrusted product' in item['content'] for item in kept)
+    with pytest.raises(ValueError, match='list'):
+        graph.bounded_history('user supplied invalid context')
+
+
+def test_build_graph_does_not_mutate_shared_function_annotations():
+    pytest.importorskip('langgraph')
+    tracked = [graph.route, graph.sales_agent, graph.inventory_agent,
+               graph.product_agent, graph.retail_supervisor]
+    original = [dict(fn.__annotations__) for fn in tracked]
+    one = graph.build_graph()
+    two = graph.build_graph()
+    assert one is not two
+    assert [dict(fn.__annotations__) for fn in tracked] == original
+
+
+def test_run_rejects_invalid_graph_result_before_return(monkeypatch):
+    fake = SimpleNamespace(invoke=lambda inp, config: {
+        **inp, 'intent':'stock', 'active_agent':'sales_agent',
+        'answer':'stale answer from wrong specialist'
+    })
+    monkeypatch.setattr(graph, 'build_graph', lambda **kw: fake)
+    with pytest.raises(graph.GraphResultError, match='inconsistent'):
+        graph.run('How much stock for EL-001?')
