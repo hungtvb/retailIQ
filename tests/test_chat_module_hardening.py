@@ -1,5 +1,6 @@
 """Chat & Sessions hardening: bounded resources, concurrency, security and cleanup."""
 import threading
+import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 
@@ -110,3 +111,36 @@ def test_local_only_guard_rejects_untrusted_host(client):
     assert 'local-only' in rejected.json()['detail']
     assert client.get('/assets/agent-identity.js', headers={'host': 'outside.example'}).status_code == 403
     assert client.get('/api/sessions', headers={'host': 'localhost:8000'}).status_code == 200
+
+
+def test_long_session_returns_bounded_latest_history_in_order(client):
+    sid = client.post('/api/sessions', json={}).json()['id']
+    db = sessions._path()
+    with sqlite3.connect(db) as connection:
+        connection.executemany(
+            'INSERT INTO messages (session_id,role,content) VALUES (?,?,?)',
+            [(sid, 'user', f'message-{i}') for i in range(260)]
+        )
+    snapshot = client.get(f'/api/sessions/{sid}').json()
+    messages = snapshot['messages']
+    assert snapshot['messages_truncated'] is True
+    assert len(messages) == sessions.MAX_SESSION_MESSAGES
+    assert messages[0]['content'] == 'message-60'
+    assert messages[-1]['content'] == 'message-259'
+    # Data is retained in SQLite even when the API response is bounded.
+    with sqlite3.connect(db) as connection:
+        count = connection.execute('SELECT COUNT(*) FROM messages WHERE session_id=?', (sid,)).fetchone()[0]
+    assert count == 260
+
+
+def test_oversized_answer_rejected_atomically(client):
+    sid = client.post('/api/sessions', json={}).json()['id']
+    with pytest.raises(ValueError, match='persistence limit'):
+        sessions.add_turn(sid, 'A valid business question', {
+            'answer': 'x' * (sessions.MAX_STORED_ANSWER_CHARS + 1),
+            'active_agent': 'sales_agent'
+        })
+    assert client.get(f'/api/sessions/{sid}').json()['messages'] == []
+    with pytest.raises(ValueError, match='too long'):
+        sessions.add_turn(sid, 'q' * 501, {'answer': 'OK'})
+    assert client.get(f'/api/sessions/{sid}').json()['messages'] == []
