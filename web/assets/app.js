@@ -6,6 +6,7 @@ let roiLoaded = false;
 let askInProgress = false;
 let activeSessionId = '';
 let lastRequestId = '';
+let currentRows = [];
 
 async function ensureSession() {
   if (activeSessionId) return activeSessionId;
@@ -64,6 +65,10 @@ async function selectSession(id) {
   byId('answer').textContent = last ? last.content : 'New conversation. Ask your first retail question.';
   byId('meta').textContent = last ? 'Last agent: ' + (session.active_agent || 'unknown') : 'No execution yet.';
   byId('agent-trace').replaceChildren();
+  renderRecords();
+  byId('summary-agent').textContent = session.active_agent || '—';
+  byId('summary-period').textContent = '—';
+  byId('summary-mode').textContent = last ? 'Stored answer' : '—';
 }
 
 async function createNewChat() {
@@ -98,6 +103,81 @@ async function initializeSessions() {
   } catch (err) {
     byId('meta').textContent = 'Session manager unavailable: ' + err.message;
   }
+}
+
+// Render actual SQL records and Product RAG sources, not an opaque JSON blob.
+function formatCell(value) {
+  if (value === null || value === undefined) return '—';
+  if (typeof value === 'number') return value.toLocaleString('en-US', {maximumFractionDigits: 4});
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+}
+function renderRecords(result = {}) {
+  const records = Array.isArray(result.records) ? result.records.filter(row => row && typeof row === 'object' && !Array.isArray(row)) : [];
+  const contexts = Array.isArray(result.contexts) ? result.contexts : [];
+  currentRows = records;
+  byId('data-count').textContent = records.length + (records.length === 1 ? ' row' : ' rows');
+  byId('export-csv').disabled = records.length === 0;
+  const table = byId('records-table');
+  const wrapper = byId('records-table-wrap');
+  table.replaceChildren();
+  wrapper.hidden = records.length === 0;
+  const empty = byId('records-empty');
+  empty.hidden = records.length > 0;
+  empty.textContent = contexts.length ? 'Product evidence is listed below; no SQL records for this query.' : 'No structured records for this query.';
+  if (records.length) {
+    const cols = [...new Set(records.flatMap(row => Object.keys(row)))].slice(0, 18);
+    const thead = document.createElement('thead'), header = document.createElement('tr');
+    for (const col of cols) {
+      const th = document.createElement('th');
+      th.scope = 'col';
+      th.textContent = col.replaceAll('_', ' ');
+      if (records.some(row => typeof row[col] === 'number')) th.className = 'number-col';
+      header.appendChild(th);
+    }
+    thead.appendChild(header);
+    const body = document.createElement('tbody');
+    for (const record of records.slice(0, 200)) {
+      const tr = document.createElement('tr');
+      for (const col of cols) {
+        const td = document.createElement('td');
+        td.textContent = formatCell(record[col]);
+        if (typeof record[col] === 'number') td.className = 'cell-number';
+        tr.appendChild(td);
+      }
+      body.appendChild(tr);
+    }
+    table.append(thead, body);
+    if (records.length > 200) byId('data-count').textContent += ' · first 200 shown';
+  }
+  const sources = [...new Set(contexts.map(c => c && c.source).filter(Boolean).map(String))];
+  byId('sources-section').hidden = sources.length === 0;
+  const sourceList = byId('source-list');
+  sourceList.replaceChildren();
+  for (const source of sources) {
+    const li = document.createElement('li');
+    li.textContent = source;
+    sourceList.appendChild(li);
+  }
+}
+function exportRecordsCsv() {
+  if (!currentRows.length) return;
+  const columns = [...new Set(currentRows.flatMap(row => Object.keys(row)))];
+  const escapeCsv = value => {
+    let text = value === null || value === undefined ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value);
+    // User/document strings must not become spreadsheet formulas.
+    if (typeof value === 'string' && /^[\s]*[=+@-]/.test(text)) text = "'" + text;
+    return '"' + text.replaceAll('"', '""') + '"';
+  };
+  const csv = [columns.map(escapeCsv).join(','), ...currentRows.map(row => columns.map(c => escapeCsv(row[c])).join(','))].join('\r\n');
+  const url = URL.createObjectURL(new Blob([csv], {type: 'text/csv;charset=utf-8'}));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'retailiq-query-results.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 function showAgentEvidence(data) {
@@ -220,6 +300,8 @@ async function ask() {
   answer.textContent = 'Waiting for agent result — follow the live execution on the right…';
   byId('response-state').textContent = 'WORKING';
   resetLiveTrace();
+  renderRecords();
+  byId('summary-mode').textContent = 'Running';
   let result = null;
   let streamError = '';
   let streamDone = false;
@@ -265,6 +347,10 @@ async function ask() {
       'Active agent: ' + (result.active_agent || 'unknown') + '\n' +
       'LLM router fallback: ' + (result.route_fallback === true ? 'yes' : 'no');
     byId('raw').textContent = JSON.stringify({records, contexts: contexts.map(x => x.source)}, null, 2);
+    renderRecords(result);
+    byId('summary-agent').textContent = (result.active_agent || '—').replaceAll('_', ' ');
+    byId('summary-period').textContent = result.as_of || '—';
+    byId('summary-mode').textContent = result.mode && result.mode.toLowerCase().includes('offline') ? 'Offline demo' : 'Full agent';
     byId('response-state').innerHTML = '<span class="status-dot" aria-hidden="true"></span> COMPLETE';
     setLiveTraceState('COMPLETE');
   } catch (error) {
@@ -272,6 +358,7 @@ async function ask() {
     answer.textContent = 'Unable to retrieve an answer. ' + error.message;
     byId('response-state').textContent = 'ERROR';
     setLiveTraceState('ERROR');
+    byId('summary-mode').textContent = 'Error';
   } finally {
     askInProgress = false;
     button.disabled = false;
@@ -404,6 +491,7 @@ function initRetailIQ() {
   byId('tab-roi').addEventListener('click', () => showPanel('roi'));
   byId('tab-logs').addEventListener('click', () => showPanel('logs'));
   byId('logs-refresh').addEventListener('click', loadExecutionLogs);
+  byId('export-csv').addEventListener('click', exportRecordsCsv);
   byId('log-scope').addEventListener('change', loadExecutionLogs);
   byId('log-level').addEventListener('change', loadExecutionLogs);
   byId('ask-form').addEventListener('submit', (event) => { event.preventDefault(); ask(); });
