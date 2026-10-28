@@ -35,6 +35,8 @@ def split_sections(sections: list[TextSection], relative_path: str, *, chunk_siz
                             **section.metadata}
                 if sku_match:
                     metadata['product_sku'] = sku_match.group(0)
+                if len(result) >= 1500:
+                    raise ValueError('Document exceeds chunk budget')
                 result.append({'id': digest, 'text': chunk, 'metadata': metadata})
             if end == len(text):
                 break
