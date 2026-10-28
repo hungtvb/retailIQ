@@ -1,25 +1,22 @@
-# Week 1 OpenAI-Compatible Integration — Local Test Evidence
+# Week 1 — Test Evidence (current snapshot)
 
-Validated in a credentials-free build environment.
+**Updated:** 2026-10-28. This file is an evidence index, not a claim that real provider E2E passed.
 
-| Verification | Result | Meaning |
+| Check | Result | Evidence / caveat |
 |---|---|---|
-| `python -m scripts.seed` | PASS: 10 products, 30 inventory records, 120 orders | Synthetic data seeded |
-| `python -m pytest -q` | 43/43 PASS | SQL, routing, endpoint/key sharing, Azure v1 normalization, invalid URL validation, mocked provider factories, tracing controls |
-| `python -m scripts.check_openai` | PASS dry-run | Prints missing configuration when real env not provided, no requests made |
-| Local HTTP smoke test | 5/5 PASS | FastAPI `/health` + 4 offline query intents via `TestClient` |
-| External OpenAI-compatible chat + embedding | NOT TESTED | No user credential available here |
-| LangGraph + Chroma real end-to-end | NOT TESTED | Full dependencies/API credential not available here |
-| RAGAS scores | NOT TESTED | Requires live API |
-| LangSmith traces | NOT TESTED | LangSmith key not configured |
+| Local deterministic unit/API regression | **89 passed, 1 skipped** | Run `python -m pytest -q -rs`; skip is compiled LangGraph tests because package unavailable in the local execution environment |
+| HTTP session concurrency and delete lifecycle | **Passed (mocked checkpoint deletion)** | `tests/test_week1_runtime_scope.py`: 409 for overlapping turns/deletion, cleanup before chat removal, 503 on cleanup failure |
+| Read-only retry and provider-call timeout | **Passed (mocked provider)** | `tests/test_week1_runtime_scope.py`: transient vs semantic failures, 20-second default configurable bound and one SDK retry |
+| GitHub CI compiled LangGraph | **Not verified in this document** | CI installs LangGraph and requires tests to run without skip; inspect actual workflow results |
+| Live full-mode LangGraph + SQL + Chroma | **Not verified** | `python -m scripts.index_products`, `python -m scripts.full_e2e` with real provider configuration |
+| RAGAS evaluation scores | **Not verified** | `python -m scripts.eval_ragas` with live judge/model |
+| LangSmith nested traces and model cost | **Not verified** | Enable LangSmith with real key, then inspect trace links and usage |
 
-The tests use fabricated keys and mocks. **No external API call has been made and no user secret is bundled.** Run `python -m scripts.check_openai --live`, the four demo questions, and `python -m scripts.eval_ragas` before claiming full Week 1 completion.
+Historical 43/43 and 84-pass counts in earlier handoff notes were **older regression snapshots**, not the current test count.
 
-## Audit update (Checklist-Ready package)
+## Week 1 acceptance rules
 
-- Fixed local UI file path after API modularization: `GET /` now returns HTTP 200.
-- Added 7 HTTP regression tests for root/health, four supported question intents, invalid input.
-- Added 9 multi-format ingestion tests covering MD/TXT/PDF/DOCX/CSV/XLSX/JSON/HTML and chunk source metadata.
-- Added ROI calculator tests and full-mode graph dispatch test.
-- Fixed `.env` load order so `RETAILIQ_MODE=full` is read during API startup instead of silently using offline mode.
-- Latest local suite: **43/43 PASS**. Live LLM/LangGraph/Chroma/RAGAS/LangSmith remain **NOT VERIFIED**; package does not include user keys.
+- Offline success is evidence for local read-only business logic, UI and error handling only.
+- One skipped compiled-graph test is **not** LangGraph E2E proof.
+- A provider timeout limits one SDK call, **not** total request execution or true worker cancellation.
+- No human approval/write action, long-term customer memory, MCP, cost governance or advanced distributed resilience is implemented in Week 1. See [the project phase boundaries](00_PROJECT_REQUIREMENTS.md).
