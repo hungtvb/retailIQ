@@ -54,7 +54,7 @@ def test_compiled_supervisor_invokes_actual_subagents(monkeypatch):
     assert output['active_agent'] == 'retail_supervisor'
     assert output['subagents'] == ['sales_agent','inventory_agent']
     assert output['skill'] == 'replenishment_review'
-    assert 'Not a forecast' in output['answer']
+    assert 'not a demand forecast' in output['answer'].lower()
 
 
 def test_sqlite_checkpointer_persists_graph_state_across_calls(monkeypatch, tmp_path):
