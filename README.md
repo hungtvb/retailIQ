@@ -116,9 +116,11 @@ Start with `docs/09_Week1_Checklist_and_Evidence.md`, `docs/07_FDE_Harness_and_P
 
 ## Week 1 UI — Data-first workspace
 
-RetailIQ branding uses a locally hosted navy/amber shelf-and-analytics logo and a lightweight robot mascot **IQ**. The logo is in the header/favicon; IQ appears beside every assistant message and welcomes new chats. No new user-auth/profile feature was added. Brand assets live in `web/assets/brand/`.
+RetailIQ uses a simplified navy/amber geometric logo in the header/favicon and a head-only IQ mascot for the compact welcome state. Each live/historical assistant message receives a distinct allowlisted agent icon, name and color: Supervisor (navy), Sales (green), Inventory (blue), Product (purple). The same identity appears on evidence labels and execution trace events. Brand assets and UI rules live in `web/assets/brand/`, `web/assets/agent-identity.js` and `web/assets/data-workspace.css`; no auth/profile feature was added.
 
 The UI is **conversational analytics**, not a landing page or a one-shot SQL query console. The **Assistant** view shows a persistent multi-turn chat and follow-up prompts. The adjacent evidence pane shows structured SQL records, Product RAG source labels, agent metadata, and execution events for the latest turn. Switching sessions restores message text, but clears historical structured evidence because the session API does not store past tool results. SQL records can be exported to CSV with spreadsheet formula-injection protection.
+
+**Rich response formatting:** the client safely renders headings, emphasis, lists, code fences with copy, basic Markdown tables and permitted links without injecting raw model HTML. Supported Sales/Inventory questions also show KPI cards and compact bar charts derived exclusively from the returned SQL records, plus plain-text Product RAG source labels; historical sessions restore the explanation, not prior structured visuals. This is a frontend-only improvement and does not imply real model evaluation scores.
 
 **Cost & ROI** and **Execution Logs** retain their data-focused tabs. Labels distinguish synthetic data, offline mode, and illustrative (not measured) ROI. The original FastAPI endpoints, SQL semantics, model configuration and session contracts are unchanged.
 
