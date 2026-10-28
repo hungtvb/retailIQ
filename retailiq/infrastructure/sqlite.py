@@ -6,6 +6,7 @@ closed on success or failure; row count and SQLite execution time are bounded.
 from __future__ import annotations
 
 from contextlib import closing
+import os
 from pathlib import Path
 import re
 import sqlite3
@@ -31,7 +32,8 @@ def query(sql: str, args: tuple = ()) -> list[dict]:
 
     # mode=ro prevents write access even if a future caller passes bad SQL.
     # closing(), unlike "with connection", actually closes the DB handle.
-    uri = DB.resolve().as_uri() + '?mode=ro'
+    db_path = Path(os.environ.get('RETAILIQ_DATA_DB') or DB)
+    uri = db_path.resolve().as_uri() + '?mode=ro'
     with closing(sqlite3.connect(uri, uri=True, timeout=SQLITE_BUSY_SECONDS)) as connection:
         connection.row_factory = sqlite3.Row
         connection.execute('PRAGMA query_only = ON')

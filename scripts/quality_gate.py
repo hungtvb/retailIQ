@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from hashlib import sha256
 import json
 import os
@@ -34,6 +34,7 @@ QUESTIONS = {
     "decision": "Which top seller needs a replenishment review based on stock?",
 }
 SCHEMA_VERSION = 1
+FIXTURE_AS_OF = "2026-10-28"
 
 
 def check(condition, message):
@@ -108,9 +109,9 @@ def assert_stock(rows):
         check(row["available"] >= 0, "Stock must be nonnegative")
 
 
-def assert_revenue(rows):
+def assert_revenue(rows, db_path):
     check(bool(rows), "Revenue response has no evidence rows")
-    with sqlite3.connect(ROOT / "data" / "retailiq.sqlite3") as db:
+    with sqlite3.connect(db_path) as db:
         oracle = dict(db.execute("""
             SELECT o.channel, SUM(li.quantity*li.unit_price_vnd-li.discount_vnd)
             FROM orders o JOIN order_lines li ON li.order_id=o.id
@@ -124,7 +125,7 @@ def assert_revenue(rows):
           "Revenue must be nonzero for this fixture")
 
 
-def exercise_e2e(http, report):
+def exercise_e2e(http, report, db_path):
     cases = report["e2e"]["cases"]
 
     def run(name, action):
@@ -206,7 +207,7 @@ def exercise_e2e(http, report):
             if name == "stock":
                 assert_stock(result["records"])
             elif name == "revenue":
-                assert_revenue(result["records"])
+                assert_revenue(result["records"], db_path)
             elif name == "product":
                 check(bool(result["contexts"]), "Product retrieval returned no evidence")
                 check("EL-003" in result["answer"] or
@@ -321,9 +322,6 @@ def main():
         parser.error("samples must be 20..500")
 
     from scripts.seed import seed
-    seed()
-    db_path = ROOT / "data" / "retailiq.sqlite3"
-    initial_db = sha256(db_path.read_bytes()).hexdigest()
     report = {
         "schema_version": SCHEMA_VERSION,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -345,13 +343,18 @@ def main():
     }
     with tempfile.TemporaryDirectory(prefix="retailiq-quality-") as temporary:
         temp = Path(temporary)
+        db_path = temp / "retailiq.sqlite3"
+        seed(db_path, write_support_files=False,
+             reference_date=date.fromisoformat(FIXTURE_AS_OF))
+        initial_db = sha256(db_path.read_bytes()).hexdigest()
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
             port = sock.getsockname()[1]
         env = os.environ.copy()
         env.update({
             "RETAILIQ_MODE": "offline",
-            "RETAILIQ_AS_OF": "2026-10-28",
+            "RETAILIQ_AS_OF": FIXTURE_AS_OF,
+            "RETAILIQ_DATA_DB": str(db_path),
             "RETAILIQ_CHAT_DB": str(temp / "sessions.sqlite3"),
             "RETAILIQ_LOG_FILE": str(temp / "events.jsonl"),
             "LANGSMITH_TRACING": "false",
@@ -379,7 +382,7 @@ def main():
                     pass
                 time.sleep(0.1)
             check(healthy, "Uvicorn failed to start on localhost")
-            exercise_e2e(http, report)
+            exercise_e2e(http, report, db_path)
             benchmark(http, opts.samples, report)
         except Exception as error:
             report["runner_failure"] = {
@@ -392,8 +395,8 @@ def main():
                 server.kill()
                 server.wait(timeout=5)
             logfile.close()
+        report["fixture_read_only"] = sha256(db_path.read_bytes()).hexdigest() == initial_db
 
-    report["fixture_read_only"] = sha256(db_path.read_bytes()).hexdigest() == initial_db
     report["e2e"]["passed"] = sum(case["status"] == "PASS" for case in report["e2e"]["cases"])
     report["e2e"]["failed"] = sum(case["status"] != "PASS" for case in report["e2e"]["cases"])
     report["benchmark"]["total_requests"] = sum(
@@ -416,7 +419,7 @@ def main():
         "benchmark": report["benchmark"],
         "fixture_read_only": report["fixture_read_only"],
         "runner_failure": report.get("runner_failure"),
-        "report_file": str(opts.output.relative_to(ROOT))
+        "report_file": str(opts.output.resolve())
     }, ensure_ascii=False))
     if report["status"] != "PASS":
         raise SystemExit(1)

@@ -19,7 +19,7 @@ Severity reflects the current local demo context. Status remains open until the 
 | R-07 | Provider availability, deployment names, or pricing may differ from examples | Medium | Full-mode demo may fail or cost may differ | Run provider readiness check on target environment; confirm deployment names and current rates; treat token cost as illustrative | Tech Lead / Backend | Open |
 | R-08 | `python -m scripts.seed` removes and regenerates `data/retailiq.sqlite3` | Medium | Custom fixture edits in that file are lost | Warn before seeding, back up custom data, and use synthetic seed only for demo reset | Tech Lead / Backend | Mitigating; runbook documents reset |
 | R-09 | Local Chroma index may be stale, incomplete, or built with another embedding namespace | Medium | Product answers may omit or mis-rank source content | Inspect indexing output; re-index changed docs; record embedding model/endpoint without secrets; rebuild only as needed | Tech Lead / Backend | Open |
-| R-10 | Named team owners and PO approval are not recorded | Medium | Review/follow-up work may remain unassigned | Assign one person per role or explicitly record role coverage in issue/PR; PO reviews this draft | PO | Open |
+| R-10 | Named team owners and PO approval are not recorded | Medium | Review/follow-up work may remain unassigned | Assign one person per role or explicitly record role coverage and signoffs in [issue #6](https://github.com/hungtvb/retailIQ/issues/6) | PO | Open; tracked in #6 |
 | R-11 | No response-time SLA or accessibility review is recorded | Low | Demo usability/performance may be overstated | QA records target-machine latency and keyboard/contrast findings; PO approves any numerical target | QA + PO | Open |
 
 ## Role ownership and work outputs
@@ -32,7 +32,7 @@ Severity reflects the current local demo context. Status remains open until the 
 | QA | Story-to-test/evidence traceability, clean setup, smoke checks, live gate evidence | Maintain `docs/14_Requirements_Traceability.md`; do not pass live gates without run evidence |
 | DevOps / Security | Local network boundary, secret handling, data retention, operational risk/actions | Review this register and runbook security limits |
 
-**Named owners:** TBD by the team. The repository has no current member-to-role roster, so no individual assignment is inferred. One member may cover multiple roles if recorded in the issue/PR.
+**Named owners:** TBD by the team in [issue #6](https://github.com/hungtvb/retailIQ/issues/6). The repository has no current member-to-role roster, so no individual assignment is inferred. One member may cover multiple roles if recorded there.
 
 ## Document control
 
@@ -55,4 +55,4 @@ Severity reflects the current local demo context. Status remains open until the 
 3. Link requirements to tests and evidence. Record run date and commit for observed results.
 4. Use **NOT TESTED** when no real execution artifact exists; use **PASS — mocked** for provider mocks; reserve live PASS for real external integration runs.
 5. PO approves priority/scope; BA approves KPI meaning; Tech Lead approves API/architecture accuracy; QA owns evidence status; DevOps/Security owns operational/security review.
-6. Issue #1 tracks this documentation package. Leave it open until the team assigns named owners, reviews the draft, and records pending acceptance items.
+6. Issue #1 covered delivery of the initial documentation package and was closed at the project owner's request. Issue #6 tracks named owners and signoffs; its pending approvals do not turn unverified live gates into PASS.

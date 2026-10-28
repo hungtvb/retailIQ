@@ -54,10 +54,10 @@ python -m pytest -q -rs tests/test_mocked_full_graph_e2e.py
 python -m scripts.quality_gate --samples 50
 ~~~
 
-JSON report: data/quality_reports/e2e_benchmark.json, with an artifact uploaded by the quality-gate GitHub Actions workflow. **The runner reseeds the project fixture: never run it against real business data.**
+JSON report: data/quality_reports/e2e_benchmark.json, with an artifact uploaded by the quality-gate GitHub Actions workflow. The runner now seeds an isolated temporary SQLite fixture and leaves the project data file and product documents untouched. The benchmark numbers above are historical results from the linked CI run; rerun the workflow to capture results for the updated runner.
 
 ## Acceptance and residual risk
 
-**PASS for local demo:** unit/regression; mocked full-graph integration; localhost Uvicorn API/SSE E2E; synthetic 400-request performance sample; read-only business fixture.
+**PASS on the linked PR #3 run:** unit/regression; mocked full-graph integration; localhost Uvicorn API/SSE E2E; synthetic 400-request performance sample. The new runner checks that its temporary business fixture stays unchanged during requests.
 
 **NOT VERIFIED:** live LLM tool-selection quality; real Chroma embedding/retrieval; RAGAS semantic metrics; remote LangSmith traces; real browser visual/accessibility; 30-minute soak / memory leaks; multi-process/distributed concurrency; public production auth; sustained p95 latency and production traffic SLA.

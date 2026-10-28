@@ -33,7 +33,7 @@ A local **Cost & ROI** tab now calculates business benefits, estimated LLM and e
 - Handoff: a Sales→Inventory follow-up triggers a graph-level `Command` transfer and auditable metadata.
 - Skill: on-demand allowlisted business instructions; Product Agent injects skill text into its grounding prompt.
 - Chat sessions: local SQLite CRUD and bounded per-conversation context; UI session switching/delete supported.
-- Local regression suite: **89 passed, 1 compiled-graph test module skipped (2026-10-28 local run)** because LangGraph is unavailable here. GitHub CI installs it and attempts the compiled graph smoke test.
+- PR #3 CI: **260 Python and 12 Node tests passed**; the separate quality workflow passed mocked compiled-graph and localhost E2E checks. See [dated test evidence](06_Test_Evidence.md). Live provider checks remain open.
 - Local application observability: request/session correlation IDs, safe JSONL events, bounded rotation, agent/tool durations and loopback-only Execution Logs tab. Tests verify privacy and filtering. This is not LangSmith tracing.
 - Remote LLM/Chroma/RAGAS/LangSmith E2E evidence is still outstanding and should not be claimed PASS.
 

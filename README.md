@@ -45,6 +45,6 @@ Install `requirements-offline.txt` and set `RETAILIQ_MODE=offline` in `.env`. Of
 
 ## Verification status
 
-Use [test evidence](docs/06_Test_Evidence.md) and [traceability](docs/14_Requirements_Traceability.md) for current results. The recorded local snapshot reports 89 passed and 1 skipped; CI and live LLM/Chroma, RAGAS, and LangSmith evidence remain unverified there.
+Use [test evidence](docs/06_Test_Evidence.md) and [traceability](docs/14_Requirements_Traceability.md) for dated results. The PR #3 CI checks passed on its tested commit; live LLM/Chroma, RAGAS, and LangSmith evidence remains unverified.
 
 **Security:** `.env` is gitignored. Use synthetic data, bind to `127.0.0.1`, and do not expose this unauthenticated demo publicly.
