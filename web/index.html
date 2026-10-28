@@ -38,6 +38,7 @@
         <nav class="workspace-tabs" aria-label="RetailIQ views" role="tablist">
           <button id="tab-assistant" type="button" role="tab" aria-selected="true" aria-controls="assistant-panel">AI Assistant <span class="tab-hint">/ Query</span></button>
           <button id="tab-roi" type="button" role="tab" aria-selected="false" aria-controls="roi-panel">Cost &amp; ROI <span class="tab-hint">/ Estimate</span></button>
+          <button id="tab-logs" type="button" role="tab" aria-selected="false" aria-controls="logs-panel">Execution Logs <span class="tab-hint">/ Observe</span></button>
         </nav>
 
         <section id="assistant-panel" class="panel" role="tabpanel" aria-labelledby="tab-assistant">
@@ -86,6 +87,26 @@
             </article>
           </div>
           <p class="notice-line"><span class="notice-asterisk">*</span> Synthetic data only. Offline responses do not establish live LangGraph, Chroma, RAGAS or LangSmith execution.</p>
+        </section>
+
+        <section id="logs-panel" class="panel" role="tabpanel" aria-labelledby="tab-logs" hidden>
+          <div class="section-heading">
+            <div><span class="section-kicker">AGENT OBSERVABILITY / LOCAL</span><h2>Every step, in the open.</h2></div>
+            <span class="subtle-suffix">ROTATING JSONL LOGS</span>
+          </div>
+          <div class="illustrative-note"><span class="note-star" aria-hidden="true">✳</span><p><strong>Runtime event logs, not LangSmith traces.</strong> Review routing, handoffs, tool timing and failures without exposing chat content, API keys or stack traces. Full-mode telemetry requires the real LLM pipeline.</p></div>
+          <article class="paper-card logs-card">
+            <div class="card-topline"><span class="micro-label">01 / EVENT STREAM</span><span class="small-status"><span class="status-dot"></span> LOCAL ONLY</span></div>
+            <div class="log-controls">
+              <label>Scope<select id="log-scope" aria-label="Filter events by chat session"><option value="current">Current chat</option><option value="all">All sessions</option><option value="request">Last request</option></select></label>
+              <label>Severity<select id="log-level" aria-label="Filter events by severity"><option value="">All levels</option><option value="INFO">Info</option><option value="WARNING">Warning</option><option value="ERROR">Error</option></select></label>
+              <button id="logs-refresh" type="button" class="sunshine-button log-refresh">Refresh logs <span aria-hidden="true">↻</span></button>
+            </div>
+            <div class="log-stats"><div><span class="micro-label">EVENTS SHOWN</span><strong id="log-count">—</strong></div><div><span class="micro-label">REQUEST ID</span><code id="log-request-id">—</code></div><div><span class="micro-label">SOURCE</span><strong>LOCAL / JSONL</strong></div></div>
+            <p id="logs-status" class="form-feedback" role="status" aria-live="polite">Select a scope and refresh to inspect execution events.</p>
+            <div id="logs-list" class="logs-list" aria-label="Execution event log" aria-live="polite"><div class="log-empty">No events loaded yet.</div></div>
+            <p class="chart-note">Diagnostics are restricted to local requests. They are not a production audit log. Stack frame locations remain on disk only.</p>
+          </article>
         </section>
 
         <section id="roi-panel" class="panel" role="tabpanel" aria-labelledby="tab-roi" hidden>
