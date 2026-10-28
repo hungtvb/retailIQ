@@ -7,6 +7,7 @@ let askInProgress = false;
 let activeSessionId = '';
 let lastRequestId = '';
 let currentRows = [];
+let currentAnswerIsPersisted = false;
 
 async function ensureSession() {
   if (activeSessionId) return activeSessionId;
@@ -36,39 +37,68 @@ async function refreshSessions() {
   if (data.sessions.some(s => s.id === activeSessionId)) picker.value = activeSessionId;
 }
 
+function appendChatMessage(role, content, agent = '') {
+  const area = byId('chat-history');
+  const item = document.createElement('div');
+  item.className = 'chat-message chat-message-' + (role === 'user' ? 'user' : 'assistant');
+  const label = document.createElement('span');
+  label.className = 'chat-message-label';
+  label.textContent = role === 'user' ? 'YOU' : (agent || 'RETAILIQ').replaceAll('_', ' ').toUpperCase();
+  const body = document.createElement('span');
+  body.className = 'chat-message-content';
+  body.textContent = String(content);
+  item.append(label, body);
+  area.appendChild(item);
+  return item;
+}
+function scrollChatToBottom() {
+  const thread = byId('chat-thread');
+  thread.scrollTop = thread.scrollHeight;
+}
 function renderChatMessages(messages) {
   const area = byId('chat-history');
   area.replaceChildren();
-  for (const message of messages) {
-    const item = document.createElement('div');
-    item.className = 'chat-message chat-message-' + message.role;
-    const label = document.createElement('span');
-    label.className = 'chat-message-label';
-    label.textContent = message.role === 'user' ? 'YOU' : (message.agent || 'RETAILIQ').replaceAll('_', ' ').toUpperCase();
-    const content = document.createElement('span');
-    content.textContent = message.content;
-    item.append(label, content);
-    area.appendChild(item);
+  // Latest assistant message is rendered exactly once in #answer, after history.
+  const final = messages.length && messages[messages.length - 1].role === 'assistant' ? messages.length - 1 : -1;
+  for (let i = 0; i < messages.length; i++) {
+    if (i === final) continue;
+    const message = messages[i];
+    appendChatMessage(message.role, message.content, message.agent);
   }
-  area.scrollTop = area.scrollHeight;
+  scrollChatToBottom();
 }
 
-async function selectSession(id) {
+async function selectSession(id, preserveEvidence = false) {
   const response = await fetch('/api/sessions/' + encodeURIComponent(id));
   if (!response.ok) throw new Error('Session no longer exists');
   const session = await response.json();
   activeSessionId = id;
   localStorage.setItem('retailiq-active-session', id);
   byId('chat-session-picker').value = id;
-  renderChatMessages(session.messages || []);
-  const last = [...(session.messages || [])].reverse().find(x => x.role === 'assistant');
-  byId('answer').textContent = last ? last.content : 'Run a query to view the result.';
+  const messages = session.messages || [];
+  renderChatMessages(messages);
+  const last = messages.length && messages[messages.length - 1].role === 'assistant' ? messages[messages.length - 1] : null;
+  currentAnswerIsPersisted = Boolean(last);
+  byId('answer').textContent = last ? last.content : 'Ask a retail question, then continue with a follow-up.';
+  byId('answer').classList.remove('is-error');
   byId('meta').textContent = last ? 'Last agent: ' + (session.active_agent || 'unknown') : 'No execution yet.';
-  byId('agent-trace').replaceChildren();
-  renderRecords();
+  if (!preserveEvidence) {
+    byId('agent-trace').replaceChildren();
+    renderRecords();
+    byId('raw').textContent = '{}';
+    byId('live-trace-list').replaceChildren();
+    byId('live-trace-count').textContent = '0 events';
+    byId('live-trace-request').textContent = '—';
+    byId('live-trace-state').textContent = 'IDLE';
+    byId('live-indicator').className = 'live-indicator';
+    byId('live-trace-panel').classList.remove('trace-is-live');
+    lastRequestId = '';
+  }
   byId('summary-agent').textContent = session.active_agent || '—';
-  byId('summary-period').textContent = '—';
-  byId('summary-mode').textContent = last ? 'Stored answer' : '—';
+  byId('summary-period').textContent = preserveEvidence ? byId('summary-period').textContent : '—';
+  byId('summary-mode').textContent = preserveEvidence ? byId('summary-mode').textContent : (last ? 'Stored answer' : '—');
+  byId('response-state').textContent = last ? 'READY' : 'NEW CHAT';
+  scrollChatToBottom();
 }
 
 async function createNewChat() {
@@ -211,6 +241,7 @@ function showPanel(name) {
 }
 
 function sample(question) {
+  if (askInProgress) return;
   byId('q').value = question;
   showPanel('assistant');
   ask();
@@ -295,10 +326,18 @@ async function ask() {
   const button = byId('ask-submit');
   const answer = byId('answer');
   const sessionPicker = byId('chat-session-picker');
+  if (currentAnswerIsPersisted) {
+    appendChatMessage('assistant', answer.textContent, byId('summary-agent').textContent);
+  }
+  currentAnswerIsPersisted = false;
+  appendChatMessage('user', question);
+  byId('q').value = '';
+  scrollChatToBottom();
   button.disabled = true;
+  document.querySelectorAll('[data-question]').forEach(item => {item.disabled = true;});
   for (const element of [byId('chat-new'), byId('chat-delete'), sessionPicker]) element.disabled = true;
   answer.classList.remove('is-placeholder', 'is-error');
-  answer.textContent = 'Waiting for agent result — follow the live execution on the right…';
+  answer.textContent = 'Thinking…';
   byId('response-state').textContent = 'WORKING';
   resetLiveTrace();
   renderRecords();
@@ -336,7 +375,7 @@ async function ask() {
     lastRequestId = result.request_id || lastRequestId;
     answer.textContent = result.answer || 'No answer available for this question.';
     await refreshSessions();
-    await selectSession(sessionId);
+    await selectSession(sessionId, true);
     showAgentEvidence(result);
     const records = Array.isArray(result.records) ? result.records : [];
     const contexts = Array.isArray(result.contexts) ? result.contexts : [];
@@ -354,15 +393,20 @@ async function ask() {
     byId('summary-mode').textContent = result.mode && result.mode.toLowerCase().includes('offline') ? 'Offline demo' : 'Full agent';
     byId('response-state').innerHTML = '<span class="status-dot" aria-hidden="true"></span> COMPLETE';
     setLiveTraceState('COMPLETE');
+    scrollChatToBottom();
+    byId('q').focus();
   } catch (error) {
     answer.classList.add('is-error');
-    answer.textContent = 'Unable to retrieve an answer. ' + error.message;
+    answer.textContent = 'Unable to retrieve an answer (message not saved). ' + error.message;
+    if (!byId('q').value.trim()) byId('q').value = question;
+    scrollChatToBottom();
     byId('response-state').textContent = 'ERROR';
     setLiveTraceState('ERROR');
     byId('summary-mode').textContent = 'Error';
   } finally {
     askInProgress = false;
     button.disabled = false;
+    document.querySelectorAll('[data-question]').forEach(item => {item.disabled = false;});
     for (const element of [byId('chat-new'), byId('chat-delete'), sessionPicker]) element.disabled = false;
   }
 }
