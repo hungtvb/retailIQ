@@ -18,7 +18,7 @@ The first command creates `RetailIQ_Flezi_Week1_Demo.pptx`; the second adds the 
 - Reserve most of the demo for the four use cases and their evidence.
 - Explain that the retailer and transaction data are synthetic.
 - Treat the 3.75-month payback as an illustrative estimate, not a measured business result.
-- PR #3 CI passed 260 Python and 12 Node tests, plus mocked graph and localhost E2E checks; see [test evidence](../06_Test_Evidence.md). Full-mode LLM/Chroma execution, RAGAS scores, and LangSmith traces remain unverified.
+- Main CI on code commit `224fcb7` passed 276 Python and 12 Node tests, plus mocked graph and localhost E2E checks; see [test evidence](../06_Test_Evidence.md). Full-mode LLM/Chroma execution, RAGAS scores, and LangSmith traces remain unverified.
 - Do not present local logs or mocked graph tests as live LangSmith/provider evidence.
 
 For setup and the demo sequence, see [`../03_Week1_Demo_Runbook.md`](../03_Week1_Demo_Runbook.md) and [`../09_Week1_Checklist_and_Evidence.md`](../09_Week1_Checklist_and_Evidence.md).

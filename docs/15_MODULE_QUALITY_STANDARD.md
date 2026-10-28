@@ -46,7 +46,7 @@
 - **Inventory:** normalize/validate SKU, check quantity and availability arithmetic, detect duplicate or orphaned locations, verify timezone-aware timestamps; missing stock is lack of evidence, not an invented 0.
 - **Sales:** explicit month boundaries (including December rollover), completed-order filtering, accurate integer-VND net revenue, stable tie-breaking, input-line validation and rejected orphan product references.
 - **Replenishment:** do not infer a purchase need when top seller has no inventory evidence.
-- **Evidence:** [Inventory & Sales Hardening](16_INVENTORY_SALES_HARDENING.md) and `tests/test_inventory_sales_hardening.py`. The historical reconstructed-source run was **123 passed / 1 skipped / 1 deselected**; later [PR #3 Week 1 CI](https://github.com/hungtvb/retailIQ/actions/runs/40718699395) passed 260 Python and 12 Node tests.
+- **Evidence:** [Inventory & Sales Hardening](16_INVENTORY_SALES_HARDENING.md) and `tests/test_inventory_sales_hardening.py`. The historical reconstructed-source run was **123 passed / 1 skipped / 1 deselected**; [current main Week 1 CI](https://github.com/hungtvb/retailIQ/actions/runs/40721904503) passed 276 Python and 12 Node tests on code commit `224fcb7`.
 - **Deferred:** freshness SLA, returns/refunds and multi-timezone semantic governance, true production auth.
 
 ## Product Knowledge / RAG — retrieval, index and grounding hardening

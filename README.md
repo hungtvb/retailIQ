@@ -45,6 +45,6 @@ Install `requirements-offline.txt` and set `RETAILIQ_MODE=offline` in `.env`. Of
 
 ## Verification status
 
-Use [test evidence](docs/06_Test_Evidence.md) and [traceability](docs/14_Requirements_Traceability.md) for dated results. The PR #3 CI checks passed on its tested commit; live LLM/Chroma, RAGAS, and LangSmith evidence remains unverified.
+Use [test evidence](docs/06_Test_Evidence.md) and [traceability](docs/14_Requirements_Traceability.md) for dated results. Main CI passed 276 Python and 12 Node tests plus the local quality gate on code commit `224fcb7`; live LLM/Chroma, RAGAS, and LangSmith evidence remains unverified.
 
 **Security:** `.env` is gitignored. Use synthetic data, bind to `127.0.0.1`, and do not expose this unauthenticated demo publicly.

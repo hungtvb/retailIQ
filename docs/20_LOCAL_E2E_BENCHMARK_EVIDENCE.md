@@ -6,6 +6,7 @@ These tests ran **real HTTP/SSE through a localhost Uvicorn process** and, separ
 
 ## Verified CI evidence
 
+- [Current main quality run 40721904431](https://github.com/hungtvb/retailIQ/actions/runs/40721904431) on code commit `224fcb79fe3008e1c6462ed2d83e64a4789de5a3`: 3 mocked graph tests, 5 localhost E2E groups, and 400/400 measured calls passed with an isolated temporary fixture. These are the current runner results; the metrics table below records the earlier PR run.
 - [Regression run 40718345060](https://github.com/hungtvb/retailIQ/actions/runs/40718345060): **260 Python tests PASS, 12 Node frontend tests PASS**.
 - [E2E / benchmark run 40718346251](https://github.com/hungtvb/retailIQ/actions/runs/40718346251): **3 mocked-provider compiled LangGraph ASGI E2E PASS; 5 real localhost TCP E2E groups PASS; 400/400 measured HTTP calls successful**.
 - [Download structured JSON evidence](https://github.com/hungtvb/retailIQ/actions/runs/40718346251/artifacts/12828233391). GitHub artifact retention: 14 days.
@@ -54,10 +55,10 @@ python -m pytest -q -rs tests/test_mocked_full_graph_e2e.py
 python -m scripts.quality_gate --samples 50
 ~~~
 
-JSON report: data/quality_reports/e2e_benchmark.json, with an artifact uploaded by the quality-gate GitHub Actions workflow. The runner now seeds an isolated temporary SQLite fixture and leaves the project data file and product documents untouched. The benchmark numbers above are historical results from the linked CI run; rerun the workflow to capture results for the updated runner.
+JSON report: data/quality_reports/e2e_benchmark.json, with an artifact uploaded by the quality-gate GitHub Actions workflow. The runner seeds an isolated temporary SQLite fixture and leaves the project data file and product documents untouched. Current runner evidence is linked above; the metrics table is a historical PR measurement.
 
 ## Acceptance and residual risk
 
-**PASS on the linked PR #3 run:** unit/regression; mocked full-graph integration; localhost Uvicorn API/SSE E2E; synthetic 400-request performance sample. The new runner checks that its temporary business fixture stays unchanged during requests.
+**PASS on the linked current main runs:** unit/regression; mocked full-graph integration; localhost Uvicorn API/SSE E2E; synthetic 400-request performance sample. The runner checks that its temporary business fixture stays unchanged during requests.
 
 **NOT VERIFIED:** live LLM tool-selection quality; real Chroma embedding/retrieval; RAGAS semantic metrics; remote LangSmith traces; real browser visual/accessibility; 30-minute soak / memory leaks; multi-process/distributed concurrency; public production auth; sustained p95 latency and production traffic SLA.
