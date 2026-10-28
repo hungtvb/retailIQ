@@ -19,3 +19,8 @@ jobs:
         env:
           RETAILIQ_REQUIRE_LANGGRAPH: 'true'
         run: python -m pytest -q -rs
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Frontend safe-rendering and agent-branding tests
+        run: node --test tests/frontend_format.test.cjs
