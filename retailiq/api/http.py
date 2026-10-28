@@ -1,6 +1,6 @@
 """FastAPI Web UI and local demo chat API."""
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from retailiq.assistant import ask
@@ -42,8 +42,27 @@ def _safe_http_path(path: str) -> str:
     return '/api/other' if path.startswith('/api/') else '/other'
 
 
+def _local_demo_request(request: Request) -> bool:
+    """Defense in depth for the unauthenticated Week 1 single-host demo.
+
+    Both peer IP and Host must be local. Not a replacement for user auth or
+    trustworthy proxy configuration; do not deploy this app publicly.
+    """
+    client_host = request.client.host if request.client else ''
+    host = request.headers.get('host', '').lower().strip()
+    permitted_peer = client_host in {'127.0.0.1', '::1', 'testclient'}
+    permitted_host = host in {'localhost', '127.0.0.1', 'testserver', '[::1]'} or (
+        any(host.startswith(h + ':') and host[len(h) + 1:].isdigit()
+            for h in ('localhost', '127.0.0.1', 'testserver', '[::1]')))
+    return permitted_peer and permitted_host
+
+
 @app.middleware('http')
 async def record_http(request: Request, call_next):
+    if not _local_demo_request(request):
+        return JSONResponse(status_code=403, content={
+            'detail': 'RetailIQ Week 1 is local-only; authenticated remote access is not supported.'
+        })
     rid = new_request_id()
     path = request.url.path
     safe_path = _safe_http_path(path)
