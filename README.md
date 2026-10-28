@@ -114,16 +114,19 @@ Start with `docs/09_Week1_Checklist_and_Evidence.md`, `docs/07_FDE_Harness_and_P
 
 **Do not call unit-test success an end-to-end LangGraph/RAGAS/LangSmith PASS.** Real model credentials and a separate LangSmith key are needed for proof.
 
-## Week 1 UI — Paper & Highlighter redesign
+## Week 1 UI — Data-first workspace
 
-The `web/` interface follows the supplied **DESIGN 7.md / Pirsch Analytics** style reference. It uses a warm paper canvas (`#f8f5ed`), ink-black hairlines, sunshine yellow (`#ffda6e`) as the only prominent call-to-action color, and restrained mint (`#6ece9d`) for status. The UI uses DM Sans from Google Fonts when available; offline machines automatically fall back to installed Inter/system sans. No font files are bundled.
+The UI is a compact operational interface, **not a landing page**. The default **Data Query** view prioritizes question input, answer, agent metadata, visible SQL records in a table, Product RAG sources and a live execution timeline. Session history and raw execution JSON stay collapsed until needed. SQL records can be exported to CSV with formula-injection protection.
 
-- `web/index.html` — semantic markup for AI Assistant + Cost & ROI tabs.
-- `web/assets/styles.css` — shared tokens, components and mobile layout.
-- `web/assets/app.js` — questions, tab switching and ROI calculations using existing APIs.
-- `GET /assets/styles.css`, `GET /assets/app.js` — served locally by FastAPI.
+**Cost & ROI** and **Execution Logs** retain their data-focused tabs. Labels distinguish synthetic data, offline mode, and illustrative (not measured) ROI. The original FastAPI endpoints, SQL semantics, model configuration and session contracts are unchanged.
 
-No backend calculation, SQL query, model setting or ROI business assumption was changed. UI is entirely static and does not read API keys. Run `uvicorn retailiq.api:app --host 127.0.0.1 --port 8000` and open the root URL.
+- `web/index.html` — query-first semantic interface.
+- `web/assets/styles.css` + `web/assets/data-workspace.css` — baseline + responsive compact UI.
+- `web/assets/app.js` — safe text-only table/source rendering, CSV export and existing SSE/chat/ROI/log interactions.
+- `tests/test_data_first_ui.py` — regression checks.
+- `docs/10_Paper_UI_Design.md` — concise UI contract and current limitations.
+
+Run `uvicorn retailiq.api:app --host 127.0.0.1 --port 8000` and open the local UI. No secrets are exposed in browser assets.
 
 ## FDE extension: Multi-Agent + Chat Session Memory
 
