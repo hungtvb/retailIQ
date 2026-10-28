@@ -149,9 +149,16 @@ def retail_supervisor(state: State):
     return Command(update={**result, 'active_agent': 'retail_supervisor'}, goto='__end__')
 
 
+def retryable_read_failure(error: Exception) -> bool:
+    """Only transient failures in idempotent read-only SQL paths are retryable."""
+    return (isinstance(error, (ConnectionError, TimeoutError)) or
+            (isinstance(error, sqlite3.OperationalError) and
+             any(x in str(error).lower() for x in ('locked', 'busy'))))
+
+
 def build_graph(*, checkpointer=None):
     from langgraph.graph import StateGraph, START, END
-    from langgraph.types import Command
+    from langgraph.types import Command, RetryPolicy
     # Typed Command destinations make all dynamic routes visible to LangGraph's
     # static graph validation and visualizer without importing LangGraph offline.
     route.__annotations__['return'] = Command[Literal['sales_agent', 'inventory_agent',
@@ -162,8 +169,11 @@ def build_graph(*, checkpointer=None):
     retail_supervisor.__annotations__['return'] = Command[Literal['__end__']]
     graph = StateGraph(State)
     graph.add_node('router', route)
-    graph.add_node('sales_agent', sales_agent)
-    graph.add_node('inventory_agent', inventory_agent)
+    # Minimal Week 1 resilience: retry only transient read failures, at most twice.
+    read_retry = RetryPolicy(max_attempts=2, initial_interval=0.25,
+                             jitter=False, retry_on=retryable_read_failure)
+    graph.add_node('sales_agent', sales_agent, retry_policy=read_retry)
+    graph.add_node('inventory_agent', inventory_agent, retry_policy=read_retry)
     graph.add_node('product_agent', product_agent)
     graph.add_node('retail_supervisor', retail_supervisor)
     graph.add_edge(START, 'router')
@@ -171,12 +181,25 @@ def build_graph(*, checkpointer=None):
     return graph.compile(checkpointer=checkpointer)
 
 
+def checkpoint_path() -> Path:
+    return Path(os.getenv('RETAILIQ_CHECKPOINT_DB') or
+                Path(__file__).resolve().parents[2] / 'data' / 'agent_checkpoints.sqlite3')
+
+
+def delete_session_checkpoints(sid: str) -> None:
+    """Logically remove a deleted chat's checkpoint state (local Week 1 only)."""
+    if not checkpoint_path().exists():
+        return
+    # Requires the runtime package when old checkpoint data actually exists.
+    # A failed deletion is surfaced to the API instead of silently leaking state.
+    _session_graph().checkpointer.delete_thread(sid)
+
+
 @lru_cache(maxsize=1)
 def _session_graph():
     """Reuse a durable SQLite checkpointer for one-process local demos."""
     from langgraph.checkpoint.sqlite import SqliteSaver
-    path = Path(os.getenv('RETAILIQ_CHECKPOINT_DB') or
-                Path(__file__).resolve().parents[2] / 'data' / 'agent_checkpoints.sqlite3')
+    path = checkpoint_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(str(path), check_same_thread=False)
     return build_graph(checkpointer=SqliteSaver(connection))
