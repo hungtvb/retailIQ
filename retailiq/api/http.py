@@ -4,6 +4,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from retailiq.assistant import ask
+from retailiq.rag.indexing import IndexNotReadyError
 from retailiq.infrastructure.sessions import history, add_turn, get_session, session_mutation, SessionBusyError
 from pathlib import Path
 from contextlib import nullcontext
@@ -133,6 +134,10 @@ def answer(data: AskBody):
             raise HTTPException(status_code=404, detail='Session not found') from None
         except SessionBusyError:
             raise HTTPException(status_code=409, detail='Session is processing another request') from None
+        except IndexNotReadyError as error:
+            log_exception('chat.knowledge_index_unavailable', error)
+            raise HTTPException(status_code=503,
+                                detail='Product knowledge index unavailable; run scripts/index_products.py') from None
         except Exception as error:
             # Stack frame locations (not prompt content) are available in local JSONL.
             log_exception('chat.execution_failed', error)
@@ -194,6 +199,11 @@ def stream_answer(data: AskBody, request: Request):
                 except SessionBusyError:
                     enqueue_final('error', {'code': 'session_busy',
                                            'message': 'This chat is already processing another request.',
+                                           'request_id': rid})
+                except IndexNotReadyError as error:
+                    log_exception('chat.knowledge_index_unavailable', error)
+                    enqueue_final('error', {'code': 'index_not_ready',
+                                           'message': 'Product knowledge index unavailable; run scripts/index_products.py',
                                            'request_id': rid})
                 except Exception as error:
                     log_exception('chat.execution_failed', error)
