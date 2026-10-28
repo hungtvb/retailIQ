@@ -49,6 +49,17 @@
 - **Evidence:** [Inventory & Sales Hardening](16_INVENTORY_SALES_HARDENING.md) and `tests/test_inventory_sales_hardening.py`. Local reconstructed-source run: **123 passed / 1 skipped / 1 deselected**; GitHub main CI remains unverified.
 - **Deferred:** freshness SLA, returns/refunds and multi-timezone semantic governance, true production auth.
 
+## Product Knowledge / RAG — retrieval, index and grounding hardening
+
+- **Crash consistency:** write an index dirty journal before Chroma changes. On partial upsert/delete, retrieval fails closed until the next indexing run reconciles pending and committed chunk IDs.
+- **Provenance:** only return finite-scored matches whose source/chunk IDs are in the committed manifest; never index implicitly during a user query.
+- **Prompt safety:** document text is untrusted JSON evidence; validate exact [S1] source references and append provenance paths outside model output. Citations are NOT semantic faithfulness proofs.
+- **Resource bounds:** maximum 10 MiB per input document; 1000 files; 1500 chunks per file; 10,000 chunks corpus-wide; ZIP expansion/member limits and PDF page limit. Read locks exclude in-process index writes.
+- **Failure behavior:** strict ingestion fails on corrupt documents; incomplete offline lexical extraction does not silently answer. REST and SSE return actionable index_not_ready rather than fabricated product facts.
+- **Tests:** [Product RAG Hardening Report](17_PRODUCT_RAG_MODULE_HARDENING.md) and tests/test_rag_module_hardening.py (partial vector writes/deletes, crash recovery, invalid manifest, malicious contexts, provider timeouts, archive bombs and resource limits).
+- **Verified CI baseline:** GitHub Actions run 40708549592 — 200 Python tests + 6 Node tests PASS; commits after that run require their own fresh CI verification.
+- **Not claimed:** RAGAS semantic correctness, prompt-injection immunity, measured live vector relevance, production multi-process indexing or access control.
+
 ## Next modules to harden, in dependency order
 
 | Module | Critical contract / failure modes | Tests before acceptance |
