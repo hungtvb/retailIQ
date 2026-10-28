@@ -406,7 +406,8 @@ def test_global_chunk_limit_blocks_partial_corpus_index(harness, monkeypatch):
     store, manifest, docs = harness
     (docs / 'EL-002.md').write_text('NovaPhone 128 GB')
     monkeypatch.setattr(indexing, 'MAX_TOTAL_CHUNKS', 1)
-    with pytest.raises(ValueError, match='global chunk budget'):
+    # Public ingestion errors intentionally redact parser/internal messages.
+    with pytest.raises(ValueError, match='Unable to ingest.*ValueError'):
         indexing.plan_chunks()
     with pytest.raises(ValueError, match='global chunk budget'):
         indexing.sync_index(store=store, manifest_path=manifest)
