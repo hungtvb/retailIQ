@@ -17,3 +17,7 @@ data/full_e2e_report.json
 # Local observability records (never commit)
 data/logs/
 *.jsonl
+
+# Synthetic internal usability study exports and volunteer observations
+data/business_pilot*/
+data/pilot_ci_seed.sqlite3*
