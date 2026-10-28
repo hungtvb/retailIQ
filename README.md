@@ -114,3 +114,17 @@ This edition also implements the four Week 1 examples **Router, Subagent, Handof
 - **Data:** chat state stored in `data/chat_sessions.sqlite3`; this local database is ignored by Git and created automatically.
 
 For Week 1 demo, try: `Which top seller needs a replenishment review based on stock?` and then a two-turn sales-to-inventory handoff in the same session. Running with `RETAILIQ_MODE=offline` demonstrates the business logic and session management but **does not execute LangGraph**. Set `RETAILIQ_MODE=full`, install `requirements-full.txt`, configure the provider and LangSmith keys, and run `python -m scripts.eval_ragas` to verify the live AI pipeline.
+
+## Execution Logs — Week 1 Observability (local)
+
+The **Execution Logs** tab next to **AI Assistant** and **Cost & ROI** reads safe structured event metadata from the running FastAPI application. Filter by **current chat**, **all sessions**, or **last request**, and severity INFO/WARNING/ERROR. Refresh on demand; no background polling.
+
+- File: `data/logs/retailiq.jsonl` (2 MB rotating log + three backups); set `RETAILIQ_LOG_FILE` to override locally. Logs are gitignored and created with file mode 0600 on supported platforms.
+- API: `GET /api/logs?limit=80&session_id=<uuid>&level=ERROR` (read-only and **loopback-only**); `X-Request-ID` response header and `request_id` in successful `/ask` responses. Logs are not visible from remote IPs.
+- Events include HTTP start/complete, chat turns, routing, fallback, agent handoff, SQL/vector tools, skill load, supervisor subagent calls, failures and durations. Offline events explicitly declare `execution_mode=offline`; they **do not count as full LangGraph execution**.
+- Private file stores stack **locations** (filename/function/line number only) for exceptions. API/UI never return stack traces, question text, chat answers, model secrets or provider URLs. Avoid putting production data into the local demonstration.
+- LangSmith tracing remains a distinct capability requiring its own API key; local JSONL events are not LangSmith run traces. LLM usage is captured only where a model exposes `usage_metadata`, not promised on all calls.
+
+**Security limitation:** this is for `uvicorn retailiq.api:app --host 127.0.0.1 --port 8000`, without multi-tenant auth. Do not publish `/api/logs` through a reverse proxy. Production requires authenticated RBAC/tenant scoped audit events, centralized log collection and retention controls.
+
+Run: `python -m pytest -q`, `python -m scripts.seed`, `uvicorn retailiq.api:app --host 127.0.0.1 --port 8000`, open the third tab and try an Assistant question.
