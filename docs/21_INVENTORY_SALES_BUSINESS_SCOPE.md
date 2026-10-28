@@ -47,7 +47,7 @@ Retail staff may already use POS, OMS, ERP/WMS, product catalogs, spreadsheets a
 | **UC-E Multi-source review (featured)** | Which top seller needs replenishment review? | Sales → verified SKU → Inventory → deterministic business rule | Demonstrate orchestration of multiple existing sources |
 | **UC-F Contextual follow-up (target)** | How much stock does the first one have? What about Hanoi? | Conversation referent + filtered inventory | Demonstrate reduced re-entry/navigation; not all phrasing supported today |
 
-**UC-E is the featured read-only multi-agent demonstration, not the sole business problem.** UC-A through UC-D are the four required Week 1 questions; UC-F is a desired experience that must be tested independently, not assumed implemented.
+**UC-E retains the existing golden-test identifier UC-01** (Replenishment Review) and is the featured read-only multi-agent demonstration, **not the sole business problem**. UC-A through UC-D are the four required Week 1 questions; UC-F is a desired experience that must be tested independently, not assumed implemented.
 
 ### UC-E business contract (existing limited implementation)
 
