@@ -68,18 +68,32 @@ def configure_langsmith() -> bool:
     return enabled
 
 
+def _provider_timeout() -> float:
+    """A per-provider-call bound, not a promise of whole-agent cancellation."""
+    raw = os.getenv('RETAILIQ_PROVIDER_TIMEOUT_SECONDS', '20')
+    try:
+        seconds = float(raw)
+    except ValueError as error:
+        raise ValueError('Invalid RETAILIQ_PROVIDER_TIMEOUT_SECONDS') from error
+    if not 1 <= seconds <= 120:
+        raise ValueError('RETAILIQ_PROVIDER_TIMEOUT_SECONDS must be between 1 and 120')
+    return seconds
+
+
 def chat_model():
     from langchain_openai import ChatOpenAI
     cfg = settings()
     temperature = os.getenv('LLM_TEMPERATURE','').strip()
     extra = {'temperature':float(temperature)} if temperature else {}
-    return ChatOpenAI(base_url=cfg.base_url,api_key=cfg.api_key,model=cfg.chat_model,**extra)
+    return ChatOpenAI(base_url=cfg.base_url,api_key=cfg.api_key,model=cfg.chat_model,
+                      timeout=_provider_timeout(), max_retries=1, **extra)
 
 
 def embeddings_model():
     from langchain_openai import OpenAIEmbeddings
     cfg = settings()
-    return OpenAIEmbeddings(base_url=cfg.base_url,api_key=cfg.api_key,model=cfg.embedding_model)
+    return OpenAIEmbeddings(base_url=cfg.base_url,api_key=cfg.api_key,model=cfg.embedding_model,
+                            request_timeout=_provider_timeout(), max_retries=1)
 
 
 def safe_status() -> dict:
