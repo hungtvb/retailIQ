@@ -438,3 +438,29 @@ def test_offline_lexical_retrieval_fails_on_partial_document_ingestion(monkeypat
                         lambda **kw: ({}, {'bad.md': 'PdfReadError'}))
     with pytest.raises(ValueError, match='incomplete'):
         retrieval.lexical('Tell me about AlphaBook Pro')
+
+
+def test_index_not_ready_has_safe_actionable_rest_and_sse_errors(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+    from retailiq.api import app
+    from retailiq.api import http
+
+    monkeypatch.setenv('RETAILIQ_CHAT_DB', str(tmp_path / 'chat.sqlite3'))
+    monkeypatch.setenv('RETAILIQ_LOG_FILE', str(tmp_path / 'events.jsonl'))
+
+    def not_ready(*args, **kwargs):
+        raise indexing.IndexNotReadyError('INTERNAL_SECRET_PATH')
+
+    monkeypatch.setattr(http, 'ask', not_ready)
+    client = TestClient(app)
+    body = {'question': 'Tell me about the product'}
+    rest = client.post('/ask', json=body)
+    assert rest.status_code == 503
+    assert 'scripts/index_products.py' in rest.json()['detail']
+    assert 'INTERNAL_SECRET_PATH' not in rest.text
+    stream = client.post('/ask/stream', json=body)
+    assert stream.status_code == 200
+    assert '"code":"index_not_ready"' in stream.text
+    assert 'scripts/index_products.py' in stream.text
+    assert 'INTERNAL_SECRET_PATH' not in stream.text
+    assert 'event: done' in stream.text
