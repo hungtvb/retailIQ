@@ -1,0 +1,18 @@
+[
+  {
+    "question": "How many units of AlphaBook Pro 14 are currently in stock?",
+    "expected_intent": "stock"
+  },
+  {
+    "question": "What is the revenue this month?",
+    "expected_intent": "revenue"
+  },
+  {
+    "question": "Which products are top sellers?",
+    "expected_intent": "top"
+  },
+  {
+    "question": "Tell me about USB-C GaN Charger 65W",
+    "expected_intent": "product"
+  }
+]

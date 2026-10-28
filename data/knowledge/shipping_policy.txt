@@ -1,0 +1,1 @@
+RetailIQ synthetic policy: Online orders are dispatched from the HCMC warehouse if stock is available. Carrier tracking updates may lag. Never invent delivery dates.

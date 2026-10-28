@@ -1,0 +1,14 @@
+{
+  "items": [
+    {
+      "id": "KB-001",
+      "topic": "charger",
+      "content": "The 65W GaN charger does not include a cable; check USB PD support."
+    },
+    {
+      "id": "KB-002",
+      "topic": "hub",
+      "content": "HDMI via the USB-C Hub 7-in-1 needs DP Alt Mode on the host laptop."
+    }
+  ]
+}

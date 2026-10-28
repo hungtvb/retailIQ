@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+.chroma/
+data/ragas_results.json
+data/retailiq.sqlite3-shm
+data/retailiq.sqlite3-wal
