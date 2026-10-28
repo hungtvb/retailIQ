@@ -24,6 +24,8 @@ def do(q,category):
   sku=product_sku(q)
   if not sku:return {'answer':'Please specify a known product name or SKU.','records':[],'contexts':[]}
   rows=inventory(sku)
+  if not rows:
+   return {'answer':f'No inventory records are available for SKU {sku}.', 'records':[], 'contexts':[]}
   total=sum(r['available'] for r in rows)
   return {'answer':f"{rows[0]['name']} ({sku}): {total} available units across locations. "+'; '.join(f"{r['location']}: {r['available']} available (on hand {r['on_hand']}, reserved {r['reserved']})" for r in rows)+'.','records':rows,'contexts':[]}
  if category=='revenue':
