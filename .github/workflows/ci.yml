@@ -12,8 +12,10 @@ jobs:
           python-version: '3.11'
       - name: Install offline suite + LangGraph runtime
         run: |
-          python -m pip install -r requirements-offline.txt 'langgraph>=1,<2' 'langchain-core>=1,<2'
+          python -m pip install -r requirements-offline.txt 'langgraph>=1,<2' 'langchain-core>=1,<2' 'langchain>=1,<2' 'langgraph-checkpoint-sqlite>=3,<4'
       - name: Seed deterministic fixture
         run: python -m scripts.seed
       - name: Regression and compiled graph tests
+        env:
+          RETAILIQ_REQUIRE_LANGGRAPH: 'true'
         run: python -m pytest -q -rs
