@@ -1,5 +1,14 @@
 # RetailIQ Copilot — Week 1 (Single OpenAI-Compatible API)
 
+## Source of truth — requirements & Week 1 assessment
+
+- **[Project requirements: Weeks 1–4](docs/00_PROJECT_REQUIREMENTS.md)** — mandatory scope, deliverables, and the local-demo working agreement.
+- **[Week 1 presentation & demo checklist](docs/00_WEEK1_OFFICIAL_CHECKLIST.md)** — evaluation criteria, including FDE, Harness Architecture, Chain/Agent patterns, LangSmith, Cost/ROI, demo, testing and risks.
+- **[Week 1 checklist evidence matrix](docs/09_Week1_Checklist_and_Evidence.md)** — implementation references and unfinished verification gates.
+
+**Important:** Requirements are not completion claims. Real LangGraph/LLM, Chroma, RAGAS, and LangSmith evidence must be verified before reporting full Week 1 acceptance.
+
+
 **Project:** RetailIQ Copilot – Omnichannel Inventory Intelligence & Conversational Analytics  
 **Week 1:** Local Inventory & Sales SQL assistant, Product RAG with Chroma, LangGraph routing, RAGAS evaluation, optional LangSmith tracing.  
 **Synthetic data:** 10 products, 3 locations, 30 inventory rows, 120 orders, fixed demo date `2026-10-28`.
