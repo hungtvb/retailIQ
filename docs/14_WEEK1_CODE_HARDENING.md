@@ -21,7 +21,7 @@
 
 ## Local test evidence
 
-Offline source regression: **84 passed, 1 skipped** at implementation time. Skip = compiled LangGraph test unavailable because package couldn't be installed in the local tool environment. This does **not** prove real LLM, Chroma, or LangSmith execution.
+Offline source regression: **89 passed, 1 skipped** at implementation time. Skip = compiled LangGraph test unavailable because package couldn't be installed in the local tool environment. This does **not** prove real LLM, Chroma, or LangSmith execution.
 
 ## Real full-mode acceptance runbook
 
@@ -38,6 +38,16 @@ python -m scripts.eval_ragas
 ```
 
 Review a real trace in the LangSmith project separately. The E2E report intentionally leaves `langsmith_remote_trace_verified=false` and `ragas_scores_verified=false`; those must not be silently marked PASS.
+
+## Minimal Week 1 runtime safeguards (2026-10-28)
+
+- Same-session request overlap: local `session_mutation` guard returns 409 on synchronous requests, or a `session_busy` event on SSE; no multi-process locking claims.
+- Session deletion: logically delete LangGraph checkpoints first via `SqliteSaver.delete_thread`; preserve the chat session if checkpoint cleanup fails.
+- Read-only SQL nodes: up to 2 attempts only for transient read failures (network/timeout/SQLite busy); invalid SKUs and permission failures are not retried.
+- Chat/embedding provider call: `RETAILIQ_PROVIDER_TIMEOUT_SECONDS=20` by default (range 1–120), with one SDK retry; no total request deadline or cancellation.
+- Five additional tests in `tests/test_week1_runtime_scope.py`; current local regression 89 PASS / 1 SKIP.
+
+**Deferred by lesson/project phase:** advanced retries/timeouts/long-term memory/MCP (Week 2); human approval, RBAC and advanced cost governance (Week 3); autonomous order/pricing/fulfilment writes (Week 4). These should not block Week 1's read-only demo.
 
 ## Critical limits
 
