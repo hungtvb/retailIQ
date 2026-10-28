@@ -28,7 +28,7 @@
 - Full-request deadline and cancellation are not guaranteed; SDK timeouts bound individual model calls, not an entire workflow.
 - Per-process locking is not a distributed lock; do not claim multi-instance safety.
 - Database retains historical rows by design; retention, pagination and per-tenant quotas remain to design.
-- **Local smoke result:** 80 PASS / 1 SKIP on a reconstructed project snapshot with the Chat/Sessions patches applied, including six new hardening integration tests. This is not a verified CI run of the GitHub HEAD.
+- **Local smoke result:** 85 PASS / 1 SKIP on a reconstructed project snapshot with Chat/Sessions and SQL adapter hardening applied, including six Chat and five SQL local integration tests. The targeted local run measured **84% branch-aware coverage** across API HTTP + Sessions + SQL adapter (HTTP 77%, Sessions 91%, SQLite adapter 94%). This is diagnostic only, not a verified CI run of the GitHub HEAD or a production reliability certification.
 - Real LangGraph + provider E2E, load/soak and production security remain unverified.
 
 ## SQL Data Access — second hardened slice
