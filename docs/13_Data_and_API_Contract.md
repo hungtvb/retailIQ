@@ -124,7 +124,7 @@ Illustrative offline stock response shape (sample values from the seeded fixture
   "subagents":[],
   "skill":"inventory_availability",
   "answer":"AlphaBook Pro 14 (EL-001): 108 available units across locations.",
-  "records":[{"sku":"EL-001","name":"AlphaBook Pro 14","location":"HCMC Warehouse","on_hand":25,"reserved":0,"available":25,"updated_at":"2026-10-28 09:00 +07:00"}],
+  "records":[{"sku":"EL-001","name":"AlphaBook Pro 14","location_id":"WH-HCM","location":"HCMC Warehouse","channel":"warehouse","on_hand":25,"reserved":0,"available":25,"updated_at":"2026-10-28 09:00 +07:00"}],
   "contexts":[],
   "session_id":null,
   "request_id":"<generated-request-id>"
@@ -143,7 +143,7 @@ Uses the same request validation and returns Server-Sent Events over HTTP POST. 
 |---|---|---|
 | `POST /api/sessions` | `201` | Optional `{"title":"..."}` (max 80 chars); creates and returns a session |
 | `GET /api/sessions` | `200` | Returns `{"sessions":[...]}`, newest updated first; default list limit is 50 |
-| `GET /api/sessions/{session_id}` | `200` | Returns session and ordered messages; `404` if missing |
+| `GET /api/sessions/{session_id}` | `200` | Returns session and up to 200 newest messages in ascending display order, plus `messages_truncated`; `404` if missing |
 | `DELETE /api/sessions/{session_id}` | `204` | Deletes graph checkpoints and then session/messages; `404` if missing, `409` while a turn is active, `503` if checkpoint cleanup fails |
 
 Invalid body values return `422`. These endpoints are not authenticated or user-scoped.
@@ -159,7 +159,7 @@ Exact per-field bounds are defined by `ROIForm` in `retailiq/api/roi.py`. USD to
 
 ### Local logs
 
-`GET /api/logs?limit=80&session_id=<36-char-id>&request_id=<id>&level=ERROR` returns an `events` array with `source: local_rotating_jsonl`. `limit` is 1–200; level is INFO/WARNING/ERROR/DEBUG. The route is loopback-only (`403` otherwise), uses `Cache-Control: no-store`, and invalid filters return `422`. Middleware also rejects non-local requests to all app routes. This is neither production audit logging nor LangSmith tracing.
+`GET /api/logs?limit=80&session_id=<36-char-id>&request_id=<id>&level=ERROR` returns `events`, `source: local_rotating_jsonl`, `logging_health`, and a safe note. `limit` is 1–200; level is INFO/WARNING/ERROR/DEBUG. The route is loopback-only (`403` otherwise), uses `Cache-Control: no-store`, and invalid filters return `422`. Middleware also rejects non-local requests to all app routes. This is neither production audit logging nor LangSmith tracing.
 
 ## Contract change rules
 

@@ -15,7 +15,7 @@
 | BLOCKED | A named dependency or decision prevents verification |
 | Planned | Future-week work; not a Week 1 pass/fail claim |
 
-**Evidence snapshot:** Latest recorded local suite: 80 passed on 2026-10-28 with Python 3.12. Compiled LangGraph paths were exercised with a mocked model. Live LLM, Chroma, RAGAS, and LangSmith checks were not run. QA must record a dated run and artifact link when updating a status.
+**Evidence snapshot:** Latest recorded local suite: 89 passed, 1 skipped (2026-10-28). The skipped check is compiled LangGraph coverage because LangGraph was unavailable in that local environment; the CI result is not recorded here. Live LLM, Chroma, RAGAS, and LangSmith checks remain unverified. QA must record a dated run and artifact link when updating a status.
 
 ## Week 1 traceability matrix
 
@@ -25,7 +25,7 @@
 | US-02 monthly revenue | Completed-order, line-discount formula; month and channel breakdown; exclusions stated | `retailiq/domain/analytics.py` | `tests/test_week1.py`, `tests/test_web_smoke.py` | PASS — local deterministic logic; full provider run NOT TESTED | BA: approve KPI meaning; QA: capture full-mode answer |
 | US-02 top sellers | Top five completed-order units; deterministic tie order | `retailiq/domain/analytics.py` | `tests/test_week1.py`, `tests/test_web_smoke.py` | PASS — local deterministic logic; full provider run NOT TESTED | QA: capture full-mode answer and validate ranking |
 | US-03 product knowledge | Source-grounded response; no inference of live stock from documents | `retailiq/rag/loaders.py`, `retailiq/rag/indexing.py`, `retailiq/retrieval.py` | `tests/test_rag_formats.py` verifies parsing/chunking, not live Chroma search | PASS — parser/chunking local tests; Chroma + live embedding NOT TESTED | Tech Lead/QA: run full-mode retrieval and record sources |
-| US-04 workflow/router | Compiled graph routes to specialist path; mocked result labeled mocked; live run separate | `retailiq/orchestration/week1_graph.py`, `retailiq/graph.py` | `tests/test_langgraph_smoke.py`, `tests/test_full_mode_dispatch.py` | PASS — mocked graph; live LLM/Chroma NOT TESTED | Tech Lead/QA: run live stock, sales, and product scenarios |
+| US-04 workflow/router | Compiled graph routes to specialist path; mocked result labeled mocked; live run separate | `retailiq/orchestration/week1_graph.py`, `retailiq/graph.py` | `tests/test_langgraph_smoke.py`, `tests/test_full_mode_dispatch.py`; `docs/06_Test_Evidence.md` | Local snapshot: 1 compiled-graph check SKIPPED; mocked/unit coverage is separate; CI and live LLM/Chroma NOT VERIFIED | Tech Lead/QA: run CI graph checks and live stock, sales, and product scenarios |
 | US-05 RAGAS | Dated real evaluation result, failed cases reviewed, no fabricated scores | `scripts/eval_ragas.py`, `data/demo_cases.json` | No live result recorded; see `docs/06_Test_Evidence.md` | NOT TESTED | QA: run `python -m scripts.eval_ragas` with approved provider and review artifact |
 | US-05 LangSmith tracing | Actual remote trace in project, correlated to demo request | `retailiq/core/config.py`, `retailiq/orchestration/week1_graph.py`, `docs/11_Logging_Observability.md` | Configuration/mocks only; no remote trace recorded | NOT TESTED | Tech Lead/QA: enable tracing with local key, capture trace URL/screenshot |
 | US-06 sessions and streamed events | CRUD, isolated histories, SSE ordering and error behavior | `retailiq/api/sessions.py`, `retailiq/api/http.py`, `retailiq/infrastructure/sessions.py` | `tests/test_multi_agent_sessions.py`, `tests/test_chat_stream.py` | PASS — local test evidence recorded | QA: repeat against clean local setup |
@@ -41,8 +41,8 @@ Each gate remains open until QA records run date, environment/mode, result, and 
 | Gate | Run / evidence | Close condition |
 |---|---|---|
 | L-01 Provider readiness | `python -m scripts.check_openai --live` from demo environment | One actual chat and one embedding request succeed; no credentials copied into evidence |
-| L-02 Full workflow | Set `RETAILIQ_MODE=full`; run stock, revenue, top-seller, product, and follow-up scenarios | Real answers complete; numeric records agree with fixture; product answer includes source |
-| L-03 Chroma retrieval | `python -m scripts.index_rag` or full-mode product question | Actual embedding/index/search run succeeds and source is reviewed |
+| L-02 Full workflow | Set `RETAILIQ_MODE=full`; run `python -m scripts.full_e2e` | Real answers complete; numeric records agree with fixture; product answer includes source |
+| L-03 Chroma retrieval | Run `python -m scripts.index_products`, then a full-mode product question | Actual embedding/index/search run succeeds and source is reviewed |
 | L-04 RAGAS | `python -m scripts.eval_ragas` | Real result artifact exists; scores and failed cases are disclosed |
 | L-05 LangSmith | Real full-mode request with `LANGSMITH_TRACING=true` and separate local key | Remote project shows a real trace correlated to the request |
 | L-06 Clean setup | Follow `docs/03_Week1_Demo_Runbook.md` on target demo machine | Setup, seed, app, smoke checks, reset, and teardown recorded without undocumented steps |

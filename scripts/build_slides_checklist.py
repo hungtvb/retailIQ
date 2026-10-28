@@ -79,7 +79,7 @@ block(s,.8,5.54,11.6,.99,DARK)
 t(s,'ALL VALUES ARE ASSUMPTIONS. Actual ROI needs LangSmith tokens, current model rates, measured handling time and human QA.',1.08,5.71,11.05,.68,14,GOLD,True)
 
 s=base('Testing + limitations + next verification','What passed locally versus what still needs real provider and LangSmith evidence')
-panel(s,.74,2.5,5.92,2.65,'VERIFIED LOCALLY','43/43 pytest tests: SQL math, URL/key isolation, API root + 4 question flows, 8 document loaders, ROI calculations.',TEAL,17,14)
+panel(s,.74,2.5,5.92,2.65,'VERIFIED LOCALLY','89 passed, 1 skipped in the latest local snapshot. Compiled graph CI and live provider checks remain unverified.',TEAL,17,14)
 panel(s,6.78,2.5,5.77,2.65,'REMAINING E2E GATES','Full LangGraph + Chroma with real models; actual RAGAS scores; LangSmith trace with separate key.',GOLD,17,14)
 block(s,.79,5.49,11.7,.99,DARK)
 t(s,'RISKS: synthetic and snapshot data, ambiguous intent, RAG hallucination, no production authentication. W2/W3 address freshness and governance.',1.08,5.7,11.08,.67,13,GOLD,True)
@@ -100,8 +100,8 @@ for slide_index,slide in enumerate(prs.slides,1):
         new=txt0
         new=re.sub(r'^\d{2}  /  RETAILIQ COPILOT',f'{slide_index:02d}  /  RETAILIQ COPILOT',new)
         new=re.sub(r'\d{2} / 09$',f'{slide_index:02d} / 14',new)
-        new=new.replace('VERIFIED NOW: 6 OFFLINE TESTS PASS.', 'VERIFIED NOW: 43 LOCAL TESTS PASS.')
-        new=new.replace('6 deterministic tests passing','43 deterministic + format tests pass')
+        new=new.replace('VERIFIED NOW: 6 OFFLINE TESTS PASS.', 'VERIFIED NOW: 89 PASS, 1 SKIP; CI PENDING.')
+        new=new.replace('6 deterministic tests passing','89 passed; 1 skipped in local snapshot')
         if new!=txt0:
             # Keep original styling by changing runs in existing single paragraph when possible.
             if len(sh.text_frame.paragraphs)==1 and len(sh.text_frame.paragraphs[0].runs)==1:
