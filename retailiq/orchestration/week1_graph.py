@@ -254,6 +254,34 @@ def _session_graph():
         return compiled
 
 
+
+class GraphResultError(ValueError):
+    """Graph finished without a complete, correctly routed business result."""
+
+
+def validate_graph_result(result: dict) -> dict:
+    """Do not leak incomplete state or label one agent's output as another."""
+    if not isinstance(result, dict):
+        raise GraphResultError('Graph result is not an object')
+    category = result.get('intent')
+    agent = result.get('active_agent')
+    if category not in AGENT_FOR_INTENT or agent != AGENT_FOR_INTENT[category]:
+        raise GraphResultError('Graph result has inconsistent intent and agent')
+    answer = result.get('answer')
+    if not isinstance(answer, str) or not answer.strip() or len(answer) > 20_000:
+        raise GraphResultError('Graph result has no valid bounded answer')
+    if not isinstance(result.get('records', []), list) or not isinstance(result.get('contexts', []), list):
+        raise GraphResultError('Graph result has invalid evidence collections')
+    handoff = result.get('handoff')
+    if handoff is not None:
+        if (not isinstance(handoff, dict) or
+                handoff.get('from') != 'sales_agent' or
+                handoff.get('to') != 'inventory_agent' or
+                agent != 'inventory_agent'):
+            raise GraphResultError('Graph result has an invalid handoff')
+    return result
+
+
 def run(q: str, *, history: list[dict] | None = None, active_agent: str = '') -> dict:
     configure_langsmith()
     sid = session_id()
@@ -285,6 +313,7 @@ def run(q: str, *, history: list[dict] | None = None, active_agent: str = '') ->
             raise ValueError('Graph stream completed without a verified answer')
     else:
         result = graph.invoke(inputs, config=config)
+    result = validate_graph_result(result)
     return {'question': q, 'intent': result['intent'],
             'mode': 'LangGraph Multi-Agent + SQL / Chroma RAG',
             'as_of': month(), 'answer': result['answer'],
