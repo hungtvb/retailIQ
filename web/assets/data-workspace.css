@@ -120,3 +120,73 @@ legend{font-size:10px;letter-spacing:.05em;margin-bottom:12px;color:#667085}
 @media(max-width:850px){.response-grid{grid-template-columns:1fr}.answer-card,.evidence-card{min-height:0}.live-trace-list{max-height:200px}.shell{padding:0 16px}}
 @media(max-width:720px){.site-header{min-height:57px}.workspace-tabs{margin-bottom:14px}.section-heading h1{font-size:18px}.subtle-suffix{display:block;font-size:9px}.paper-card{padding:14px}.data-card{padding:0}.response-grid{gap:10px}.roi-layout{grid-template-columns:1fr}.roi-output-column{grid-template-columns:1fr}.roi-fields{grid-template-columns:1fr 1fr}.suggestions{margin-bottom:12px}.query-form{flex-direction:row}.query-form .sunshine-button{width:auto}}
 @media(max-width:520px){.shell{padding:0 12px}.data-label{display:none}.brand-name{font-size:15px}.workspace-tabs button{padding:12px;font-size:12px}.subtle-suffix{display:none}#chat-session-picker{min-width:130px;flex:1}.chat-workspace-tools{display:block}.session-controls{flex-wrap:nowrap}.chat-action-button{padding:6px 8px;white-space:nowrap}.query-form{flex-direction:column}.query-form .sunshine-button{width:100%}.roi-fields{grid-template-columns:1fr}.answer-metrics{gap:6px}.answer-metrics strong{font-size:10px}.data-title{gap:7px}}
+
+/* Conversational analytics: visible multi-turn chat with evidence beside it. */
+.conversation-workspace{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(350px,.8fr);gap:12px;align-items:stretch}
+.conversation-card{padding:0;display:flex;flex-direction:column;min-height:540px;height:calc(100dvh - 195px);max-height:820px;overflow:hidden}
+.conversation-heading{padding:12px 17px;border-bottom:1px solid #e6eaf0}
+.conversation-heading h2{font-size:14px;font-weight:700;margin:0}
+.chat-thread{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:10px;padding:20px 17px;scrollbar-color:#c6d1de transparent}
+.chat-history{display:flex;flex-direction:column;gap:10px;max-height:none;overflow:visible;padding:0;margin:0;flex-shrink:0}
+.chat-message{display:flex;flex-direction:column;align-self:flex-start;gap:5px;padding:10px 13px;max-width:88%;width:fit-content;border-radius:12px;font-size:13px;line-height:1.55;box-shadow:none}
+.chat-message-label{display:block;font-size:10px;font-weight:750;letter-spacing:.06em;color:#64748b;line-height:1.4}
+.chat-message-content{white-space:pre-wrap;overflow-wrap:anywhere}
+.chat-message-user{align-self:flex-end;margin-left:auto;background:#edf3fb;border:1px solid #d4e2f2;color:#1e293b;border-bottom-right-radius:3px}
+.chat-message-assistant{background:#f7f9fb;border:1px solid #e2e8ef;border-bottom-left-radius:3px;color:#243044}
+.chat-active-answer{flex-shrink:0;max-width:93%}
+.chat-active-answer .answer{font-size:13px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;max-height:none;overflow:visible;min-height:0}
+.chat-active-answer .answer.is-error{color:#a22d2d}
+.chat-composer{border-top:1px solid #e5e9ef;padding:12px 14px 14px;background:#fff;flex-shrink:0}
+.chat-composer .suggestions{margin:0 0 10px;display:flex;align-items:center;gap:9px}
+.chat-composer .suggestions-label{font-size:10px;color:#7b8796;letter-spacing:.06em}
+.chat-composer .suggestion-pills{display:flex;gap:5px;flex-wrap:wrap}
+.chat-composer .suggestion-pills button{padding:4px 8px;font-size:11px;border:1px solid #e0e6ed;border-radius:6px}
+.chat-composer .suggestion-pills button:disabled{opacity:.5;cursor:not-allowed}
+.chat-composer .query-form{display:flex;align-items:center;gap:5px;border-radius:9px;padding:4px;background:#fbfcfd;border:1px solid #cbd5e1}
+.chat-composer .query-field{display:flex;align-items:center;flex:1;min-width:0;padding:0 8px;gap:8px}
+.chat-composer .query-field input{font-size:13px;padding:9px 2px;line-height:1.5;width:100%;min-width:0}
+.chat-composer .query-field svg{width:15px;height:15px;color:#667085}
+.chat-composer #ask-submit{height:37px;min-height:37px;padding:6px 12px;border-radius:6px;font-size:12px}
+.chat-composer #ask-submit span{margin-left:2px;font-size:14px}
+.insights-column{display:flex;flex-direction:column;gap:12px;min-width:0;max-height:820px}
+.insight-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border:1px solid #dbe2ea;border-radius:9px;background:#fff;padding:10px 11px}
+.insight-summary>div{display:flex;flex-direction:column;gap:4px;min-width:0;padding:0 10px;border-right:1px solid #edf0f4}
+.insight-summary>div:last-child{border-right:0}
+.insight-summary span{font-size:10px;color:#7b8491}
+.insight-summary strong{font-size:11px;font-weight:650;overflow-wrap:anywhere}
+.insights-column .data-card{margin-top:0;min-height:205px;flex:1 1 auto;max-height:465px;display:flex;flex-direction:column}
+.insights-column .table-scroll{flex:1 1 auto;min-height:0;max-height:390px}
+.insights-column .records-empty{padding:22px 17px}
+.insights-column .evidence-card{min-height:0;flex:0 1 auto;padding:13px 15px}
+.insights-column .evidence-card .live-trace-list{max-height:145px;overflow-y:auto}
+.insights-column .evidence-card .live-trace{margin-top:8px}
+.insights-column .evidence-card .trace-details{margin-top:3px}
+.insights-column .evidence-card .card-topline h2{font-size:13px}
+.insights-column .data-topline{padding:11px 14px}
+.insights-column .sources-section{padding:10px 14px}
+.insights-column #records-table{min-width:480px}
+@media(max-width:1000px){
+ .conversation-workspace{grid-template-columns:minmax(0,1fr) minmax(310px,.75fr)}
+ .conversation-card{min-height:520px}
+ .chat-composer .suggestions-label{display:none}
+}
+@media(max-width:760px){
+ .conversation-workspace{grid-template-columns:minmax(0,1fr)}
+ .conversation-card{height:min(610px,72dvh);min-height:395px;max-height:none}
+ .insights-column{max-height:none}
+ .insights-column .data-card{min-height:170px;max-height:none}
+ .insights-column .table-scroll{max-height:320px}
+ .insights-column .evidence-card .live-trace-list{max-height:190px}
+}
+@media(max-width:520px){
+ .conversation-card{height:min(590px,70dvh);min-height:390px}
+ .chat-thread{padding:12px;gap:8px}
+ .chat-message{font-size:12px;max-width:95%;padding:9px 11px}
+ .chat-composer{padding:10px}
+ .chat-composer .query-form{flex-direction:row}
+ .chat-composer #ask-submit{width:auto;min-width:62px}
+ .chat-composer .suggestions{margin:0 0 8px}
+ .chat-composer .suggestion-pills{flex-wrap:nowrap;overflow-x:auto;padding-bottom:3px}
+ .chat-composer .suggestion-pills button{white-space:nowrap;flex-shrink:0}
+ .insights-column{gap:10px}
+}
