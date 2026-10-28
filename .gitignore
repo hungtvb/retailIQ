@@ -9,6 +9,5 @@ __pycache__/
 data/ragas_results.json
 data/retailiq.sqlite3-shm
 data/retailiq.sqlite3-wal
-
-# Generated local database
 data/retailiq.sqlite3
+data/chat_sessions.sqlite3
