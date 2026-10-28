@@ -135,4 +135,5 @@ Keep these as small test-only fixtures, not a second large dataset or a new inte
 - [Data and API definitions](13_Data_and_API_Contract.md)
 - [Four-week course requirements](00_PROJECT_REQUIREMENTS.md)
 - [Four-week implementation roadmap](16_Roadmap_and_Timeline.md)
+- [Business Golden Scenarios — synthetic acceptance register](22_BUSINESS_GOLDEN_SCENARIOS.md)
 - [Local E2E and benchmark](20_LOCAL_E2E_BENCHMARK_EVIDENCE.md)
