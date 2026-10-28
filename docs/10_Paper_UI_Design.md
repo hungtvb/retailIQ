@@ -20,6 +20,30 @@ This is an **operations workspace**, not a marketing landing page. The first scr
 - Brand files are locally served SVGs, without remote images/scripts; chat labels remain accessible text. Mascot is confined to chat and does not introduce a landing hero.
 - Favicon: `/assets/brand/logo-mark.svg`. Structural coverage: `tests/test_chat_branding.py`.
 
+## Brand refresh and per-agent identity (2026-10-28)
+
+**Visual direction:** understated B2B analytics, not a cartoon-heavy landing page. Brand mark is a geometric navy box with a small amber verification accent; wordmark uses the existing RetailIQ name. The robot is reduced to a clean head-only treatment and appears only in the empty state. During conversation each agent is identified by a compact icon, human-readable label and understated color (color is never the sole indicator).
+
+| Agent | Token | Hue |
+|---|---|---|
+| Supervisor | compass | Navy `#1c3656` |
+| Sales | trending-up | Green `#126e50` |
+| Inventory | package | Blue `#265dba` |
+| Product | tag | Purple `#7046af` |
+| IQ fallback | sparkles | Slate `#26415e` |
+
+The single allowlisted mapper lives in `web/assets/agent-identity.js` and controls message labels, avatars, evidence badges and trace events. Unexpected agent names always fall back to IQ, never become arbitrary CSS class names.
+
+## Rich response format (Week 1)
+
+- **Markdown**: headings, bold/italic, lists, code spans, fenced code with copy, simple pipe tables, blockquotes and permitted `https/http` links.
+- **Safe rendering**: `web/assets/response-format.js` creates DOM nodes and text nodes; it does **not** execute HTML from LLM output or allow JavaScript links. Markdown is supported on restored chat history and new answers.
+- **Data-backed KPIs and charts**: Sales revenue (summed across actual SQL channel rows), stock available (summed across actual SQL location rows), top seller units (first ranked product). Mini bar charts only when numeric SQL rows exist, using the actual returned values. This is presentation logic, not a new tool or AI numerical inference.
+- **Sources**: Product RAG source names appear as text citations, not arbitrary clickable filenames.
+- **Limits**: Only simple Markdown, not full GitHub-Flavored Markdown, and only bar charts for appropriate known metrics; no fabricated line/pie/time-series charts. Historical session restore provides message text, not past structured charts/citations. Current session evidence is for the latest executed response.
+
+Validation: `tests/test_rich_responses.py`, `tests/test_chat_branding.py`, and the existing chat/API/UI tests. Provider-backed LangGraph/LangSmith/RAGAS evidence is independent of this UI change.
+
 ## Files and validation
 - `web/index.html` — semantic layout and preserved element IDs.
 - `web/assets/styles.css` — legacy baseline tokens/components.
