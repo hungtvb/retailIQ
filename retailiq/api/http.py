@@ -128,6 +128,18 @@ def stream_answer(data: AskBody, request: Request):
     rid = getattr(request.state, 'request_id', None) or new_request_id()
     events: queue.Queue = queue.Queue(maxsize=512)
 
+    def enqueue_final(kind, payload):
+        # No blocked worker when a browser stops draining its event queue.
+        while True:
+            try:
+                events.put_nowait((kind, payload))
+                return
+            except queue.Full:
+                try:
+                    events.get_nowait()
+                except queue.Empty:
+                    continue
+
     def run_agent():
         def push_log(payload: dict):
             try:
@@ -139,14 +151,14 @@ def stream_answer(data: AskBody, request: Request):
         with bind_context(request=rid, session=data.session_id), bind_event_sink(push_log):
             try:
                 result = _perform_turn(data)
-                events.put(('result', result))
+                enqueue_final('result', result)
             except Exception as error:
                 log_exception('chat.execution_failed', error)
-                events.put(('error', {'code': 'execution_failed',
+                enqueue_final('error', {'code': 'execution_failed',
                                       'message': 'Agent execution failed; check local diagnostics.',
                                       'request_id': rid}))
             finally:
-                events.put(('done', {'request_id': rid}))
+                enqueue_final('done', {'request_id': rid})
 
     def live_events():
         # Worker begins as soon as the response body is consumed; no precomputed logs.
