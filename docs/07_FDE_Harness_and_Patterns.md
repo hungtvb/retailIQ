@@ -40,7 +40,7 @@ The assigned [Agent Harness Architecture](https://harness-engineering.ai/blog/ag
 
 **FDE-driven choice:** Replenishment Review is a **cross-tool demo scenario**, not the overarching business problem. Week 1 still routes simple questions to single specialists; a cross-domain question about bestselling items and available stock now invokes a Retail Supervisor with Sales and Inventory subagents. A follow-up can trigger an actual Sales→Inventory handoff. This makes each pattern demonstrable without implementing Week 4 write-side order/price operations. Details: `docs/10_FDE_MultiAgent_Session_Implementation.md`.
 
-**Chat sessions:** the UI and `/api/sessions` persist local conversations in a separate SQLite DB and pass bounded recent history/active agent into the graph. This is application-level persistence, not a LangGraph checkpointer. No production identity or tenant protection is implied.
+**Chat sessions:** the UI and `/api/sessions` persist local conversations in a separate SQLite DB and pass bounded recent history/active agent into the graph. Full-mode session graphs also use a **local SQLite LangGraph checkpointer** in the current code; this is not distributed memory, customer long-term memory, or production identity/tenant protection.
 
 ## 4. Structured local logging and LangSmith operations
 Local application logging is now implemented in `retailiq/observability.py`: JSONL events, rotating files, per-request IDs, session context, agent and tool durations, safe exception stack frame *locations*, and a read-only loopback-only **Execution Logs** UI. See `docs/11_Logging_Observability.md`. This shows harness operations for the local demo but does **not** replace LangSmith execution traces.
