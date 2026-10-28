@@ -4,7 +4,12 @@ A skipped test means LangGraph was NOT verified; CI installs the dependency.
 """
 import pytest
 
-langgraph = pytest.importorskip('langgraph')
+import importlib.util
+import os
+if os.getenv('RETAILIQ_REQUIRE_LANGGRAPH') == 'true':
+    assert importlib.util.find_spec('langgraph') is not None, 'CI must install LangGraph; missing package is a failure'
+else:
+    pytest.importorskip('langgraph')
 
 
 def test_compiled_graph_routes_and_handoff(monkeypatch):
@@ -35,6 +40,7 @@ def test_compiled_graph_routes_and_handoff(monkeypatch):
 
 
 def test_compiled_supervisor_invokes_actual_subagents(monkeypatch):
+    monkeypatch.setenv('RETAILIQ_SUPERVISOR_MODE', 'deterministic')
     from retailiq.orchestration import week1_graph as g
     class Model:
         def with_structured_output(self, schema):return self
