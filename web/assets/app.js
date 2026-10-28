@@ -135,6 +135,77 @@ function sample(question) {
   ask();
 }
 
+// Render only allowlisted event metadata. Never HTML-inject agent/model output.
+function resetLiveTrace() {
+  byId('live-trace-list').replaceChildren();
+  byId('live-trace-count').textContent = '0 events';
+  byId('live-trace-request').textContent = '—';
+  byId('live-trace-state').textContent = 'CONNECTING';
+  byId('live-indicator').className = 'live-indicator live-indicator-running';
+  byId('live-trace-panel').classList.add('trace-is-live');
+}
+
+function setLiveTraceState(status) {
+  byId('live-trace-state').textContent = status;
+  byId('live-indicator').className = 'live-indicator' +
+    (status === 'RUNNING' || status === 'CONNECTING' ? ' live-indicator-running' :
+    status === 'ERROR' ? ' live-indicator-error' : ' live-indicator-complete');
+  byId('live-trace-panel').classList.toggle('trace-is-live', status === 'RUNNING' || status === 'CONNECTING');
+}
+
+function appendLiveEvent(event) {
+  const list = byId('live-trace-list');
+  if (list.children.length >= 70) list.firstElementChild.remove();
+  const entry = document.createElement('li');
+  const level = String(event.level || 'INFO').toLowerCase();
+  entry.className = 'live-trace-event level-' + (['info', 'warning', 'error'].includes(level) ? level : 'info');
+  const details = [];
+  for (const key of ['agent', 'previous_agent', 'target_agent', 'subagent', 'tool', 'intent', 'skill', 'execution_mode', 'error_type']) {
+    if (event[key] !== null && event[key] !== undefined) {
+      details.push(String(event[key]).replaceAll('_', ' '));
+    }
+  }
+  const dot = document.createElement('span'); dot.className = 'trace-node'; dot.setAttribute('aria-hidden', 'true');
+  const content = document.createElement('div'); content.className = 'trace-node-content';
+  const title = document.createElement('strong'); title.textContent = String(event.event || 'execution event').replaceAll('.', ' / ').replaceAll('_', ' ');
+  const sub = document.createElement('span'); sub.className = 'trace-node-meta';
+  sub.textContent = details.join(' · ') || String(event.status || 'Agent execution');
+  const time = document.createElement('span'); time.className = 'trace-node-duration';
+  time.textContent = typeof event.duration_ms === 'number' ? event.duration_ms.toFixed(0) + ' ms'
+    : (event.timestamp ? new Date(event.timestamp).toLocaleTimeString() : '');
+  content.append(title, sub); entry.append(dot, content, time); list.appendChild(entry);
+  byId('live-trace-count').textContent = String(Number(byId('live-trace-count').textContent.split(' ')[0]) + 1) + ' events';
+  list.scrollTop = list.scrollHeight;
+}
+
+// fetch(POST) streaming: EventSource cannot send the chat body/session id.
+async function consumeChatSSE(response, onEvent) {
+  if (!response.body || !response.body.getReader) throw new Error('This browser does not support streaming responses.');
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  function parseFrame(frame) {
+    const lines = frame.split('\n');
+    const type = (lines.find(line => line.startsWith('event:')) || 'event: message').slice(6).trim();
+    const data = lines.filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
+    if (data) onEvent(type, JSON.parse(data));
+  }
+  try {
+    while (true) {
+      const {value, done} = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, {stream:true}).replaceAll('\r\n', '\n');
+      let index;
+      while ((index = buffer.indexOf('\n\n')) !== -1) {
+        parseFrame(buffer.slice(0, index));
+        buffer = buffer.slice(index + 2);
+      }
+    }
+    buffer += decoder.decode();
+    if (buffer.trim()) parseFrame(buffer);
+  } finally { reader.releaseLock(); }
+}
+
 async function ask() {
   if (askInProgress) return;
   const question = byId('q').value.trim();
@@ -142,41 +213,69 @@ async function ask() {
   askInProgress = true;
   const button = byId('ask-submit');
   const answer = byId('answer');
+  const sessionPicker = byId('chat-session-picker');
   button.disabled = true;
+  for (const element of [byId('chat-new'), byId('chat-delete'), sessionPicker]) element.disabled = true;
   answer.classList.remove('is-placeholder', 'is-error');
-  answer.textContent = 'Looking through your retail data…';
+  answer.textContent = 'Waiting for agent result — follow the live execution on the right…';
   byId('response-state').textContent = 'WORKING';
+  resetLiveTrace();
+  let result = null;
+  let streamError = '';
+  let streamDone = false;
   try {
     const sessionId = await ensureSession();
-    const response = await fetch('/ask', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
+    const response = await fetch('/ask/stream', {
+      method: 'POST', headers: {'Content-Type':'application/json', 'Accept':'text/event-stream'},
       body: JSON.stringify({question, session_id: sessionId})
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Request failed (' + response.status + ')');
-    lastRequestId = data.request_id || response.headers.get('X-Request-ID') || '';
-    answer.textContent = data.answer || 'No answer available for this question.';
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(typeof body.detail === 'string' ? body.detail : 'Request failed (' + response.status + ')');
+    }
+    await consumeChatSSE(response, (type, data) => {
+      if (type === 'started') {
+        lastRequestId = data.request_id || response.headers.get('X-Request-ID') || '';
+        byId('live-trace-request').textContent = lastRequestId ? lastRequestId.slice(0, 10) + '…' : '—';
+        setLiveTraceState('RUNNING');
+      } else if (type === 'log') {
+        appendLiveEvent(data);
+      } else if (type === 'result') {
+        result = data;
+      } else if (type === 'error') {
+        streamError = data.message || 'Agent execution failed.';
+      } else if (type === 'done') {
+        streamDone = true;
+      }
+    });
+    if (streamError) throw new Error(streamError);
+    if (!streamDone || !result) throw new Error('The connection ended before an agent result was received.');
+    lastRequestId = result.request_id || lastRequestId;
+    answer.textContent = result.answer || 'No answer available for this question.';
     await refreshSessions();
     await selectSession(sessionId);
-    showAgentEvidence(data);
-    const records = Array.isArray(data.records) ? data.records : [];
-    const contexts = Array.isArray(data.contexts) ? data.contexts : [];
-    byId('meta').textContent = 'Intent: ' + (data.intent || 'unknown') + '\n' +
-      'Execution: ' + (data.mode || 'unknown') + '\n' +
-      'Data period: ' + (data.as_of || 'unspecified') + '\n' +
+    showAgentEvidence(result);
+    const records = Array.isArray(result.records) ? result.records : [];
+    const contexts = Array.isArray(result.contexts) ? result.contexts : [];
+    byId('meta').textContent = 'Intent: ' + (result.intent || 'unknown') + '\n' +
+      'Execution: ' + (result.mode || 'unknown') + '\n' +
+      'Data period: ' + (result.as_of || 'unspecified') + '\n' +
       'SQL records: ' + records.length + '\n' +
       'Retrieved docs: ' + contexts.length + '\n' +
-      'Active agent: ' + (data.active_agent || 'unknown') + '\n' +
-      'LLM router fallback: ' + (data.route_fallback === true ? 'yes' : 'no');
+      'Active agent: ' + (result.active_agent || 'unknown') + '\n' +
+      'LLM router fallback: ' + (result.route_fallback === true ? 'yes' : 'no');
     byId('raw').textContent = JSON.stringify({records, contexts: contexts.map(x => x.source)}, null, 2);
     byId('response-state').innerHTML = '<span class="status-dot" aria-hidden="true"></span> COMPLETE';
+    setLiveTraceState('COMPLETE');
   } catch (error) {
     answer.classList.add('is-error');
     answer.textContent = 'Unable to retrieve an answer. ' + error.message;
     byId('response-state').textContent = 'ERROR';
+    setLiveTraceState('ERROR');
   } finally {
     askInProgress = false;
     button.disabled = false;
+    for (const element of [byId('chat-new'), byId('chat-delete'), sessionPicker]) element.disabled = false;
   }
 }
 
