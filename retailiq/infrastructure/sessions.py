@@ -8,13 +8,21 @@ from pathlib import Path
 import sqlite3
 import threading
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from uuid import uuid4
 
 DEFAULT_DB = Path(__file__).resolve().parents[2] / 'data' / 'chat_sessions.sqlite3'
 
 # Local single-process demo: prevent overlapping writes to the same conversation.
 # Production multi-worker locking/authorization is deliberately deferred.
-_SESSION_LOCKS: dict[str, threading.Lock] = {}
+@dataclass
+class _SessionGate:
+    """Reference count prevents premature cleanup during competing requests."""
+    lock: threading.Lock = field(default_factory=threading.Lock)
+    references: int = 0
+
+
+_SESSION_LOCKS: dict[str, _SessionGate] = {}
 _LOCK_GUARD = threading.Lock()
 
 
@@ -24,14 +32,27 @@ class SessionBusyError(RuntimeError):
 
 @contextmanager
 def session_mutation(session_id: str):
+    """Serialize writes to a chat without retaining one lock per past session.
+
+    The registry is single-process only (Week 1 local demo). The guard covers
+    both admitted calls and a racing caller that must receive SessionBusyError.
+    """
     with _LOCK_GUARD:
-        lock = _SESSION_LOCKS.setdefault(session_id, threading.Lock())
-    if not lock.acquire(blocking=False):
-        raise SessionBusyError('Session already processing a request')
+        gate = _SESSION_LOCKS.setdefault(session_id, _SessionGate())
+        gate.references += 1
+    acquired = False
     try:
+        acquired = gate.lock.acquire(blocking=False)
+        if not acquired:
+            raise SessionBusyError('Session already processing a request')
         yield
     finally:
-        lock.release()
+        if acquired:
+            gate.lock.release()
+        with _LOCK_GUARD:
+            gate.references -= 1
+            if gate.references == 0 and _SESSION_LOCKS.get(session_id) is gate:
+                del _SESSION_LOCKS[session_id]
 
 
 
