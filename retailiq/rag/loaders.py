@@ -165,13 +165,13 @@ def _table_sections(rows: Iterable[tuple[str, int, list[str]]], label: str) -> l
 def _json_sections(path: Path) -> list[TextSection]:
     data = json.loads(path.read_text(encoding='utf-8-sig'))
     if isinstance(data, list):
-        entries = list(enumerate(data))
+        entries = enumerate(data[:MAX_ROWS_PER_TABLE])
     elif isinstance(data, dict) and isinstance(data.get('items'), list):
-        entries = list(enumerate(data['items']))
+        entries = enumerate(data['items'][:MAX_ROWS_PER_TABLE])
     else:
-        entries = [(0, data)]
+        entries = enumerate([data])
     return [TextSection(json.dumps(value, ensure_ascii=False, sort_keys=True), {'item': index+1})
-            for index, value in entries[:MAX_ROWS_PER_TABLE] if value not in (None, '', {}, [])]
+            for index, value in entries if value not in (None, '', {}, [])]
 
 
 def load_file(path: Path, *, max_bytes: int = DEFAULT_MAX_FILE_BYTES) -> list[TextSection]:
