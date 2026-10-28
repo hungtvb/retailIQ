@@ -11,7 +11,12 @@ def test_no_landing_hero_and_data_grid_is_primary():
     assert 'Better retail answers.' not in html
     assert 'Ask RetailIQ anything.' not in html
     assert 'class="site-footer"' not in html
-    assert html.index('id="ask-form"') < html.index('id="answer"') < html.index('id="records-table"')
+    assert html.index('id="chat-history"') < html.index('id="answer"') < html.index('id="ask-form"')
+    assert html.index('id="ask-form"') < html.index('id="records-table"')
+    assert 'role="log"' in html
+    assert 'Run query' not in html
+    assert 'Conversation history</summary>' not in html
+    assert 'Follow up: stock' in html
     for marker in ('id="records-table-wrap"', 'id="data-count"', 'id="source-list"',
                    'id="export-csv"', 'id="summary-agent"', 'id="summary-period"',
                    'id="summary-mode"', 'id="live-trace-list"', 'id="chat-history"'):
@@ -44,3 +49,17 @@ def test_core_ui_and_tabs_remain_accessible():
     assert 'illustrative' in html.lower()
     assert 'OPENAI_API_KEY' not in html
     assert 'LANGSMITH_API_KEY' not in html
+
+
+def test_conversation_persists_messages_without_duplicate_latest_answer():
+    html = client.get('/').text
+    assert 'class="conversation-workspace"' in html
+    assert 'id="chat-thread"' in html
+    assert 'id="active-response"' in html
+    js = client.get('/assets/app.js').text
+    assert 'function appendChatMessage(' in js
+    assert "if (i === final) continue;" in js
+    assert 'currentAnswerIsPersisted' in js
+    assert 'await selectSession(sessionId, true)' in js
+    assert "appendChatMessage('user', question)" in js
+    assert "scrollChatToBottom()" in js
