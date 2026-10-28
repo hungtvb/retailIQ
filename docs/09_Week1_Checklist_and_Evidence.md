@@ -45,7 +45,7 @@ A local **Cost & ROI** tab now calculates business benefits, estimated LLM and e
 - [x] Tests ensure prompt text and secrets are not written to log file.
 - [ ] LangSmith live trace + model usage; still requires real API credentials.
 
-Evidence: `tests/test_observability.py`, `docs/11_Logging_Observability.md`.\n
+Evidence: `tests/test_observability.py`, `docs/11_Logging_Observability.md`.
 
 ## Course reading baseline and strict lesson audit (2026-10-28)
 
