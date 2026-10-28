@@ -10,6 +10,8 @@
 
 **Important:** Requirements are not completion claims. Real LangGraph/LLM, Chroma, RAGAS, and LangSmith evidence must be verified before reporting full Week 1 acceptance.
 
+**Week 1 scope:** read-only domain assistant, agent patterns, basic SQLite session/checkpoint state, per-provider timeout and minimal read-only retry, tracing/evaluation evidence, and illustrative ROI. **Deferred:** resilience/customer memory/MCP (Week 2), approval/security/cost governance (Week 3), and write-side pricing/orders/fulfilment (Week 4). See [project phase boundaries](docs/00_PROJECT_REQUIREMENTS.md).
+
 
 **Project:** RetailIQ Copilot – Omnichannel Inventory Intelligence & Conversational Analytics  
 **Week 1:** Local Inventory & Sales SQL assistant, Product RAG with Chroma, LangGraph routing, RAGAS evaluation, optional LangSmith tracing.  
@@ -24,7 +26,7 @@
 - **Session persistence:** full-mode graph runs with local SQLite checkpoints (`thread_id=session_id`), plus existing UI chat history. This is not multi-user production persistence.
 - **RAG grounding:** `RETAILIQ_RAG_MIN_RELEVANCE` defaults to `0.45` (uncalibrated). Weak vector contexts are rejected. Product answer requires a retrieved source citation; live faithfulness assessment remains pending.
 - **Observability:** run metadata includes request/session correlation IDs; optional `RETAILIQ_NATIVE_GRAPH_EVENTS=true` forwards LangGraph node updates into the in-chat SSE timeline. This is event streaming, not token streaming.
-- **Testing:** offline regression **84 PASS, 1 SKIP** in the local environment; CI sets `RETAILIQ_REQUIRE_LANGGRAPH=true`, so missing LangGraph must fail instead of silently skipping. External LangSmith/LLM/Chroma/RAGAS E2E evidence remains outstanding.
+- **Testing:** offline regression **89 PASS, 1 SKIP** in the local environment; CI sets `RETAILIQ_REQUIRE_LANGGRAPH=true`, so missing LangGraph must fail instead of silently skipping. External LangSmith/LLM/Chroma/RAGAS E2E evidence remains outstanding.
 
 ## Minimal configuration
 
