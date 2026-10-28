@@ -136,4 +136,5 @@ Keep these as small test-only fixtures, not a second large dataset or a new inte
 - [Four-week course requirements](00_PROJECT_REQUIREMENTS.md)
 - [Four-week implementation roadmap](16_Roadmap_and_Timeline.md)
 - [Business Golden Scenarios — synthetic acceptance register](22_BUSINESS_GOLDEN_SCENARIOS.md)
+- [Internal synthetic-data usability pilot — data, counterbalanced task sheet and non-fabricated analysis](23_INTERNAL_SYNTHETIC_BUSINESS_PILOT.md)
 - [Local E2E and benchmark](20_LOCAL_E2E_BENCHMARK_EVIDENCE.md)

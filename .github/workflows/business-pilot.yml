@@ -1,0 +1,58 @@
+name: RetailIQ synthetic business pilot pack
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - 'feature/synthetic-business-pilot-*'
+    paths:
+      - 'scripts/business_pilot_*.py'
+      - 'tests/test_business_pilot.py'
+      - '.github/workflows/business-pilot.yml'
+  pull_request:
+    paths:
+      - 'scripts/business_pilot_*.py'
+      - 'tests/test_business_pilot.py'
+      - '.github/workflows/business-pilot.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  pilot-pack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install test runner
+        run: python -m pip install 'pytest>=8,<10'
+      - name: Unit/instrument tests (all measurements are artificial)
+        run: python -m pytest -q tests/test_business_pilot.py
+      - name: Seed separate synthetic fixture and generate pilot pack
+        run: |
+          python -c "from pathlib import Path; from datetime import date; from scripts.seed import seed; seed(Path('data/pilot_ci_seed.sqlite3'), write_support_files=False, reference_date=date(2026,10,28))"
+          python -m scripts.business_pilot_export --db data/pilot_ci_seed.sqlite3 --output data/business_pilot_ci --as-of 2026-10-28
+          python -m scripts.business_pilot_analyze --folder data/business_pilot_ci --output data/business_pilot_ci/NOT_MEASURED_summary.json
+      - name: Participant pack (without answer key)
+        uses: actions/upload-artifact@v4
+        with:
+          name: business-pilot-participant-pack
+          path: |
+            data/business_pilot_ci/products.csv
+            data/business_pilot_ci/sales.csv
+            data/business_pilot_ci/inventory.csv
+            data/business_pilot_ci/assignments_and_results.csv
+            data/business_pilot_ci/manifest.json
+          retention-days: 14
+          if-no-files-found: error
+      - name: Facilitator answer key (do not distribute before pilot)
+        uses: actions/upload-artifact@v4
+        with:
+          name: business-pilot-facilitator-key
+          path: data/business_pilot_ci/FACILITATOR_ONLY_answer_key.csv
+          retention-days: 14
+          if-no-files-found: error
