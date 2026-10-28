@@ -24,7 +24,7 @@
 
 ## Cost & ROI dashboard update
 
-A local **Cost & ROI** tab now calculates business benefits, estimated LLM and embedding token costs, payback, and sensitivity. It is an **illustrative financial model**, not a measured agent-operation cost report. Evidence: `retailiq/api/roi.py`, `retailiq/domain/economics.py`, `web/index.html`, `tests/test_roi_dashboard.py`, `docs/retailiq_cost_roi_ui_preview.png`. Actual LangSmith token measurements remain outstanding.
+A local **Cost & ROI** tab now calculates business benefits, estimated LLM and embedding token costs, payback, and sensitivity. It is an **illustrative financial model**, not a measured agent-operation cost report. Evidence: `retailiq/api/roi.py`, `retailiq/domain/economics.py`, `web/index.html`, `tests/test_roi_dashboard.py`, [`docs/ui_previews/roi_desktop.png`](ui_previews/roi_desktop.png). Actual LangSmith token measurements remain outstanding.
 
 ## Week 1 FDE multi-agent extension (post-checklist update)
 

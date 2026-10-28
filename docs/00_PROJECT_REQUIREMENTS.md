@@ -98,6 +98,10 @@ Build and orchestrate five required specialist agents:
 
 ## Traceability
 
+- [Product brief and prioritized Week 1 stories](12_Product_Brief_and_PRD.md)
+- [Data dictionary, KPI and API contract](13_Data_and_API_Contract.md)
+- [Requirements-to-code/test/evidence matrix and live acceptance gates](14_Requirements_Traceability.md)
+- [Risk register, roles and document governance](15_Risk_Register_and_Document_Governance.md)
 - [Week 1 official presentation and demo checklist](00_WEEK1_OFFICIAL_CHECKLIST.md)
 - [Week 1 evidence matrix and acceptance gates](09_Week1_Checklist_and_Evidence.md)
 - [FDE / Harness Architecture / Agent Patterns](07_FDE_Harness_and_Patterns.md)
