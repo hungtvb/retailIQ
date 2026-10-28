@@ -4,6 +4,8 @@
 
 - **[Project requirements: Weeks 1–4](docs/00_PROJECT_REQUIREMENTS.md)** — mandatory scope, deliverables, and the local-demo working agreement.
 - **[Week 1 presentation & demo checklist](docs/00_WEEK1_OFFICIAL_CHECKLIST.md)** — evaluation criteria, including FDE, Harness Architecture, Chain/Agent patterns, LangSmith, Cost/ROI, demo, testing and risks.
+- **[Week 1 Lesson 02–05 learning references](docs/00_WEEK1_LESSON_REFERENCES.md)** — the exact 23 course-reading entries supplied by the team.
+- **[Week 1 official-source architecture & pattern audit](docs/13_WEEK1_LESSON_COMPLIANCE_AUDIT.md)** — detailed code alignment, gaps and follow-up acceptance tests.
 - **[Week 1 checklist evidence matrix](docs/09_Week1_Checklist_and_Evidence.md)** — implementation references and unfinished verification gates.
 
 **Important:** Requirements are not completion claims. Real LangGraph/LLM, Chroma, RAGAS, and LangSmith evidence must be verified before reporting full Week 1 acceptance.
