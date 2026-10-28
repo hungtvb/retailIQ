@@ -31,6 +31,16 @@
 - **Local smoke result:** 80 PASS / 1 SKIP on a reconstructed project snapshot with the Chat/Sessions patches applied, including six new hardening integration tests. This is not a verified CI run of the GitHub HEAD.
 - Real LangGraph + provider E2E, load/soak and production security remain unverified.
 
+## SQL Data Access — second hardened slice
+
+- **Leak prevention:** SQLite connections are explicitly closed on both successful and failing queries; Python's connection context manager alone does not close the handle.
+- **Least privilege:** existing reviewed SELECT calls are retained, opened with SQLite mode=ro and PRAGMA query_only; caller-supplied values must use bound parameters.
+- **Resource bounds:** return at most 10,000 rows; SQLite busy timeout 3s and progress-handler-based execution deadline 4s for long queries; values are defaults to benchmark with the fixture.
+- **Failure handling:** invalid SQL/argument shape rejects immediately; missing or locked database remains a typed SQLite error; no automatic retry here to avoid stacked retries with LangGraph.
+- **Tests:** tests/test_sql_adapter_hardening.py covers exact results, parameter binding/injection, denied writes, row limit, timeout, missing table/DB and connection close on success/failure.
+- **Local regression on representative reconstructed code:** 85 PASS / 1 SKIP including 6 Chat hardening cases and 5 SQL hardening cases; main branch CI has not been verified.
+- **Limitations:** this is a read-only query adapter, not a production SQL firewall; reviewed query ownership stays in Sales/Inventory. Performance benchmarks, SQLite write-load contention and distributed DB access are not yet validated.
+
 ## Next modules to harden, in dependency order
 
 | Module | Critical contract / failure modes | Tests before acceptance |
