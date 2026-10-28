@@ -135,3 +135,29 @@ def test_supervisor_selects_scoped_subagents_and_ignores_model_numbers(monkeypat
     assert result['subagents']==['sales_agent','inventory_agent']
     assert '5 units' in result['answer'] and '99999' not in result['answer']
     assert len(tool_outputs)==2 and all('instruction' in x for x in tool_outputs)
+
+
+def test_product_agent_abstains_without_source_citation(monkeypatch,tmp_path):
+    from retailiq.orchestration import agents
+    monkeypatch.setenv('RETAILIQ_LOG_FILE',str(tmp_path/'product.jsonl'))
+    monkeypatch.setattr(agents,'do',lambda *args,**kwargs:{
+        'answer':'excerpt','contexts':[{'source':'EL-001.md','text':'Document claim'}],
+        'records':[]})
+    class Model:
+        def invoke(self,prompt):
+            return SimpleNamespace(content='Unsupported model claim.',usage_metadata={})
+    monkeypatch.setattr('retailiq.core.config.chat_model',lambda:Model())
+    assert 'could not verify' in agents.product_analysis('tell me about product')['answer'].lower()
+
+
+def test_product_agent_accepts_exact_source_cited_answer(monkeypatch,tmp_path):
+    from retailiq.orchestration import agents
+    monkeypatch.setenv('RETAILIQ_LOG_FILE',str(tmp_path/'cited.jsonl'))
+    monkeypatch.setattr(agents,'do',lambda *args,**kwargs:{
+        'answer':'excerpt','contexts':[{'source':'EL-001.md','text':'Document claim'}],
+        'records':[]})
+    class Model:
+        def invoke(self,prompt):
+            return SimpleNamespace(content='Document claim (EL-001.md).',usage_metadata={})
+    monkeypatch.setattr('retailiq.core.config.chat_model',lambda:Model())
+    assert agents.product_analysis('product')['answer']=='Document claim (EL-001.md).'
