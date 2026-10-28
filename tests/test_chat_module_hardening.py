@@ -1,6 +1,7 @@
 """Chat & Sessions hardening: bounded resources, concurrency, security and cleanup."""
 import threading
 import sqlite3
+from contextlib import closing
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 
@@ -116,7 +117,7 @@ def test_local_only_guard_rejects_untrusted_host(client):
 def test_long_session_returns_bounded_latest_history_in_order(client):
     sid = client.post('/api/sessions', json={}).json()['id']
     db = sessions._path()
-    with sqlite3.connect(db) as connection:
+    with closing(sqlite3.connect(db)) as connection, connection:
         connection.executemany(
             'INSERT INTO messages (session_id,role,content) VALUES (?,?,?)',
             [(sid, 'user', f'message-{i}') for i in range(260)]
@@ -128,7 +129,7 @@ def test_long_session_returns_bounded_latest_history_in_order(client):
     assert messages[0]['content'] == 'message-60'
     assert messages[-1]['content'] == 'message-259'
     # Data is retained in SQLite even when the API response is bounded.
-    with sqlite3.connect(db) as connection:
+    with closing(sqlite3.connect(db)) as connection, connection:
         count = connection.execute('SELECT COUNT(*) FROM messages WHERE session_id=?', (sid,)).fetchone()[0]
     assert count == 260
 
