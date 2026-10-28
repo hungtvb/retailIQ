@@ -128,3 +128,15 @@ The **Execution Logs** tab next to **AI Assistant** and **Cost & ROI** reads saf
 **Security limitation:** this is for `uvicorn retailiq.api:app --host 127.0.0.1 --port 8000`, without multi-tenant auth. Do not publish `/api/logs` through a reverse proxy. Production requires authenticated RBAC/tenant scoped audit events, centralized log collection and retention controls.
 
 Run: `python -m pytest -q`, `python -m scripts.seed`, `uvicorn retailiq.api:app --host 127.0.0.1 --port 8000`, open the third tab and try an Assistant question.
+
+## Week 1 — Local Structured Logging and Agent Observability
+
+The **Execution Logs** tab on the same web UI lets you inspect local HTTP, agent routing, handoff, skill selection, SQL/vector tool timing, errors, and chat session events. Filter by current chat, last request, and severity.
+
+- Every `/ask` response includes `request_id` and the `X-Request-ID` header.
+- Backend logs rotate at `data/logs/retailiq.jsonl` (2 MB per file, 3 backups); files are gitignored. Override via `RETAILIQ_LOG_FILE`.
+- `GET /api/logs?limit=80&session_id=<UUID>` shows recent allowlisted events, loopback only with `Cache-Control: no-store`; no prompts, answer bodies, keys or stack traces in the browser.
+- The logs API is local-demo diagnostics, **not authenticated production audit logging**. Bind Uvicorn to `127.0.0.1`, do not expose through a public tunnel or reverse proxy.
+- **LangSmith remains separate** and requires a valid key and live full-mode run. Offline JSONL logs do not count as LangSmith traces.
+
+See `docs/11_Logging_Observability.md`.
