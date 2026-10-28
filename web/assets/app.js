@@ -340,27 +340,61 @@ async function consumeChatSSE(response, onEvent) {
   if (!response.body || !response.body.getReader) throw new Error('This browser does not support streaming responses.');
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
+  const MAX_STREAM_CHARS = 2_000_000;
+  const MAX_FRAME_CHARS = 65_536;
+  const MAX_EVENTS = 512;
   let buffer = '';
+  let pendingCR = '';
+  let received = 0;
+  let events = 0;
+  let completed = false;
+  function normalized(chunk) {
+    let text = pendingCR + chunk;
+    pendingCR = '';
+    if (text.endsWith('\r')) {
+      pendingCR = '\r';
+      text = text.slice(0, -1);
+    }
+    return text.replace(/\r\n?/g, '\n');
+  }
   function parseFrame(frame) {
+    if (frame.length > MAX_FRAME_CHARS) throw new Error('Agent event is too large.');
     const lines = frame.split('\n');
     const type = (lines.find(line => line.startsWith('event:')) || 'event: message').slice(6).trim();
     const data = lines.filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
-    if (data) onEvent(type, JSON.parse(data));
+    if (data) {
+      if (++events > MAX_EVENTS) throw new Error('Agent event limit exceeded.');
+      onEvent(type, JSON.parse(data));
+    }
+  }
+  function appendChunk(chunk) {
+    received += chunk.length;
+    if (received > MAX_STREAM_CHARS) throw new Error('Agent response stream limit exceeded.');
+    buffer += normalized(chunk);
+    let index;
+    while ((index = buffer.indexOf('\n\n')) !== -1) {
+      parseFrame(buffer.slice(0, index));
+      buffer = buffer.slice(index + 2);
+    }
+    if (buffer.length > MAX_FRAME_CHARS) throw new Error('Agent event is too large.');
   }
   try {
     while (true) {
       const {value, done} = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, {stream:true}).replaceAll('\r\n', '\n');
-      let index;
-      while ((index = buffer.indexOf('\n\n')) !== -1) {
-        parseFrame(buffer.slice(0, index));
-        buffer = buffer.slice(index + 2);
-      }
+      if (done) { completed = true; break; }
+      appendChunk(decoder.decode(value, {stream:true}));
     }
-    buffer += decoder.decode();
+    appendChunk(decoder.decode());
+    if (pendingCR) { buffer += '\n'; pendingCR = ''; }
     if (buffer.trim()) parseFrame(buffer);
-  } finally { reader.releaseLock(); }
+  } finally {
+    // Cancel when malformed or oversized data interrupts the read; disconnect
+    // is best-effort and does not claim to cancel synchronous provider calls.
+    if (!completed) {
+      try { await reader.cancel(); } catch (_) { /* reader already closed */ }
+    }
+    reader.releaseLock();
+  }
 }
 
 async function ask() {
@@ -443,7 +477,11 @@ async function ask() {
     byId('summary-agent').textContent = (result.active_agent || '—').replaceAll('_', ' ');
     byId('summary-period').textContent = result.as_of || '—';
     byId('summary-mode').textContent = result.mode && result.mode.toLowerCase().includes('offline') ? 'Offline demo' : 'Full agent';
-    byId('response-state').innerHTML = '<span class="status-dot" aria-hidden="true"></span> COMPLETE';
+    const completedState = byId('response-state');
+    const dot = document.createElement('span');
+    dot.className = 'status-dot';
+    dot.setAttribute('aria-hidden', 'true');
+    completedState.replaceChildren(dot, document.createTextNode(' COMPLETE'));
     setLiveTraceState('COMPLETE');
     scrollChatToBottom();
     byId('q').focus();
