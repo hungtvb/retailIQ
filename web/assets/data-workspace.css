@@ -256,6 +256,7 @@ legend{font-size:10px;letter-spacing:.05em;margin-bottom:12px;color:#667085}
 .agent-badge { background:var(--agent-bg,#edf2f8); color:var(--agent-color,#26415e); border:1px solid var(--agent-stroke,#d9e3ee); border-radius:5px; padding:3px 7px; font-size:10px; font-weight:700; white-space:nowrap; }
 .agent-chip { display:inline-flex; align-items:center; gap:5px; background:var(--agent-bg,#f7f9fb); color:var(--agent-color,#435066); border:1px solid var(--agent-stroke,#dfe6ed); border-radius:6px; }
 .agent-chip svg { height:14px;width:14px;flex:0 0 14px; }
+.live-trace-event { grid-template-columns:10px 16px minmax(0,1fr) auto; gap:7px; }
 .live-trace-event .trace-node { background:var(--agent-color,#77869b); border-color:var(--agent-bg,#eef2f6); }
 .live-trace-event>svg { width:15px; height:15px;flex:0 0 15px; color:var(--agent-color,#667085); margin:2px 6px 0 0; }
 .live-trace-event .trace-node-content strong { color:var(--agent-color,#475467); }
@@ -271,7 +272,7 @@ legend{font-size:10px;letter-spacing:.05em;margin-bottom:12px;color:#667085}
 .rich-inline-code { font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace; padding:1px 4px;background:#e9eef5;border-radius:4px; }
 .rich-code-block { overflow:hidden;background:#10253b;color:#e5edf7;border-radius:8px;border:1px solid #243e59;margin:10px 0; }
 .rich-code-head { display:flex;justify-content:space-between;align-items:center;background:#1b344f;color:#c8d4e2;padding:6px 10px;font:11px/1.3 ui-monospace,monospace; }
-.rich-copy { border:1px solid #557088;border-radius:4px;background:#2c465e;color:#fff;padding:3px 7px;font:11px/1.3 inherit; }
+.rich-copy { border:1px solid #557088;border-radius:4px;background:#2c465e;color:#fff;padding:3px 7px;font-family:inherit;font-size:11px;line-height:1.3; }
 .rich-code-block pre { margin:0;padding:11px 12px;overflow-x:auto;white-space:pre;font:12px/1.5 ui-monospace,monospace; }
 .rich-table-scroll { max-width:100%;overflow-x:auto;margin:9px 0; }
 .rich-md-table { width:100%;border-collapse:collapse;min-width:350px;font-size:11px; }
