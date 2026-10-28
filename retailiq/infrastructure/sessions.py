@@ -12,6 +12,9 @@ from dataclasses import dataclass, field
 from uuid import uuid4
 
 DEFAULT_DB = Path(__file__).resolve().parents[2] / 'data' / 'chat_sessions.sqlite3'
+MAX_SESSION_MESSAGES = 200  # Bounded API response; older messages stay in SQLite.
+MAX_STORED_ANSWER_CHARS = 100_000  # Explicit guard against oversized model output.
+
 
 # Local single-process demo: prevent overlapping writes to the same conversation.
 # Production multi-worker locking/authorization is deliberately deferred.
@@ -105,9 +108,13 @@ def get_session(sid: str, *, include_messages: bool = True) -> dict | None:
             return None
         result = dict(row)
         if include_messages:
-            result['messages'] = [dict(m) for m in c.execute(
-                'SELECT id, role, content, intent, agent, created_at FROM messages WHERE session_id=? ORDER BY id', (sid,)
-            )]
+            # Pull the newest bounded window rather than allocating all messages
+            # for a long-running session. Preserve ascending presentation order.
+            rows = c.execute('''SELECT id, role, content, intent, agent, created_at
+                FROM messages WHERE session_id=? ORDER BY id DESC LIMIT ?''',
+                (sid, MAX_SESSION_MESSAGES + 1)).fetchall()
+            result['messages_truncated'] = len(rows) > MAX_SESSION_MESSAGES
+            result['messages'] = [dict(m) for m in reversed(rows[:MAX_SESSION_MESSAGES])]
         return result
 
 
@@ -134,7 +141,11 @@ def add_turn(sid: str, question: str, response: dict) -> None:
         row = c.execute('SELECT title FROM sessions WHERE id=?', (sid,)).fetchone()
         if row is None:
             raise KeyError('Unknown session')
+        if len(question) > 500:
+            raise ValueError('Question is too long for a single chat turn')
         answer = str(response['answer'])
+        if len(answer) > MAX_STORED_ANSWER_CHARS:
+            raise ValueError('Assistant answer exceeds the persistence limit')
         agent = str(response.get('active_agent') or response.get('agent') or '')[:64]
         intent = str(response.get('intent') or '')[:32]
         c.execute('INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)', (sid, 'user', question))
