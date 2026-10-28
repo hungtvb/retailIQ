@@ -62,7 +62,7 @@ async function selectSession(id) {
   byId('chat-session-picker').value = id;
   renderChatMessages(session.messages || []);
   const last = [...(session.messages || [])].reverse().find(x => x.role === 'assistant');
-  byId('answer').textContent = last ? last.content : 'New conversation. Ask your first retail question.';
+  byId('answer').textContent = last ? last.content : 'Run a query to view the result.';
   byId('meta').textContent = last ? 'Last agent: ' + (session.active_agent || 'unknown') : 'No execution yet.';
   byId('agent-trace').replaceChildren();
   renderRecords();
@@ -124,7 +124,8 @@ function renderRecords(result = {}) {
   wrapper.hidden = records.length === 0;
   const empty = byId('records-empty');
   empty.hidden = records.length > 0;
-  empty.textContent = contexts.length ? 'Product evidence is listed below; no SQL records for this query.' : 'No structured records for this query.';
+  empty.textContent = !('records' in result || 'contexts' in result) ? 'Run a query to populate this table.' :
+    contexts.length ? 'Product evidence is listed below; no SQL records for this query.' : 'No structured records for this query.';
   if (records.length) {
     const cols = [...new Set(records.flatMap(row => Object.keys(row)))].slice(0, 18);
     const thead = document.createElement('thead'), header = document.createElement('tr');
