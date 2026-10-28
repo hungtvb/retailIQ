@@ -29,10 +29,16 @@ def do(q,category):
   total=sum(r['available'] for r in rows)
   return {'answer':f"{rows[0]['name']} ({sku}): {total} available units across locations. "+'; '.join(f"{r['location']}: {r['available']} available (on hand {r['on_hand']}, reserved {r['reserved']})" for r in rows)+'.','records':rows,'contexts':[]}
  if category=='revenue':
-  rows=revenue(); total=sum(r['net_revenue_vnd'] for r in rows)
+  rows=revenue()
+  if not rows:
+   return {'answer':f'No completed-order sales records for {month()}.', 'records':[], 'contexts':[]}
+  total=sum(r['net_revenue_vnd'] for r in rows)
   return {'answer':f'Net sales revenue in {month()}: {total:,} VND (completed orders, after line discounts, before returns). '+'; '.join(f"{r['channel']}: {r['net_revenue_vnd']:,} VND" for r in rows)+'.','records':rows,'contexts':[]}
  if category=='top':
-  rows=top();return {'answer':f'Top sellers by units in {month()} (completed orders): '+ '; '.join(f"{i+1}. {r['name']} ({r['sku']}): {r['units_sold']} units" for i,r in enumerate(rows))+'.','records':rows,'contexts':[]}
+  rows=top()
+  if not rows:
+   return {'answer':f'No completed-order top sellers for {month()}.','records':[],'contexts':[]}
+  return {'answer':f'Top sellers by units in {month()} (completed orders): '+ '; '.join(f"{i+1}. {r['name']} ({r['sku']}): {r['units_sold']} units" for i,r in enumerate(rows))+'.','records':rows,'contexts':[]}
  docs=retrieve(q)
  return {'answer':f"Source: {docs[0]['source']}\n{docs[0]['text']}" if docs else 'No matching product documentation.','records':[],'contexts':docs}
 def offline(q, *, history=None, active_agent=''):
@@ -65,6 +71,8 @@ def replenish_review_offline():
  if not rows:return {'answer':'No completed-order data','records':[],'contexts':[]}
  leader=rows[0]
  stocks=inventory(leader['sku'])
+ if not stocks:
+  return {'answer':f"Cannot assess replenishment for {leader['sku']}: inventory evidence is missing. No purchasing recommendation is made.",'records':rows[:1],'contexts':[]}
  available=sum(x['available'] for x in stocks)
  priority='REVIEW replenishment priority' if available<leader['units_sold'] else 'No immediate priority under this heuristic'
  return {'answer':f"Synthetic {month()} decision review: {leader['name']} sold {leader['units_sold']} units; {available} available. {priority}. Not a forecast or purchase order.",
