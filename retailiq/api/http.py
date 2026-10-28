@@ -19,6 +19,11 @@ from retailiq.api.sessions import router as sessions_router
 from retailiq.api.logs import router as logs_router
 from fastapi import Request
 
+# Bound streaming capacity: prevent slow providers or disconnected clients
+# from spawning an unlimited number of background execution threads.
+_STREAM_WORKER_SLOTS = threading.BoundedSemaphore(value=8)
+_STREAM_QUEUE_LIMIT = 128
+
 app = FastAPI(title='RetailIQ Copilot - Week 1 Multi-Agent')
 app.include_router(roi_router)
 app.include_router(sessions_router)
@@ -130,10 +135,17 @@ def stream_answer(data: AskBody, request: Request):
     """
     if data.session_id and get_session(data.session_id, include_messages=False) is None:
         raise HTTPException(status_code=404, detail='Session not found')
+    if not _STREAM_WORKER_SLOTS.acquire(blocking=False):
+        raise HTTPException(status_code=503, detail='Chat streaming capacity reached; retry later',
+                            headers={'Retry-After': '1'})
     rid = getattr(request.state, 'request_id', None) or new_request_id()
-    events: queue.Queue = queue.Queue(maxsize=512)
+    events: queue.Queue = queue.Queue(maxsize=_STREAM_QUEUE_LIMIT)
+    disconnected = threading.Event()
 
     def enqueue_final(kind, payload):
+        # Model/tool may finish after the client disconnected.
+        if disconnected.is_set():
+            return
         # No blocked worker when a browser stops draining its event queue.
         while True:
             try:
@@ -147,44 +159,65 @@ def stream_answer(data: AskBody, request: Request):
 
     def run_agent():
         def push_log(payload: dict):
+            if disconnected.is_set():
+                return
             try:
                 events.put_nowait(('log', payload))
             except queue.Full:
                 # Agent execution continues even when the UI cannot keep up.
                 pass
 
-        with bind_context(request=rid, session=data.session_id), bind_event_sink(push_log):
-            try:
-                result = _perform_turn(data)
-                enqueue_final('result', result)
-            except SessionBusyError:
-                enqueue_final('error', {'code': 'session_busy',
-                                       'message': 'This chat is already processing another request.',
-                                       'request_id': rid})
-            except Exception as error:
-                log_exception('chat.execution_failed', error)
-                enqueue_final('error', {'code': 'execution_failed',
-                                      'message': 'Agent execution failed; check local diagnostics.',
-                                      'request_id': rid}))
-            finally:
-                enqueue_final('done', {'request_id': rid})
+        try:
+            with bind_context(request=rid, session=data.session_id), bind_event_sink(push_log):
+                try:
+                    result = _perform_turn(data)
+                    enqueue_final('result', result)
+                except SessionBusyError:
+                    enqueue_final('error', {'code': 'session_busy',
+                                           'message': 'This chat is already processing another request.',
+                                           'request_id': rid})
+                except Exception as error:
+                    log_exception('chat.execution_failed', error)
+                    enqueue_final('error', {'code': 'execution_failed',
+                                           'message': 'Agent execution failed; check local diagnostics.',
+                                           'request_id': rid})
+                finally:
+                    enqueue_final('done', {'request_id': rid})
+        finally:
+            # A completed worker frees capacity, regardless of browser state.
+            _STREAM_WORKER_SLOTS.release()
+
+    # Own the resource slot from worker start until completion even if
+    # StreamingResponse is never consumed by the caller.
+    worker = threading.Thread(target=run_agent, name='retailiq-chat-stream', daemon=True)
+    try:
+        worker.start()
+    except BaseException:
+        _STREAM_WORKER_SLOTS.release()
+        raise
 
     def live_events():
-        # Worker begins as soon as the response body is consumed; no precomputed logs.
-        thread = threading.Thread(target=run_agent, name='retailiq-chat-stream', daemon=True)
-        thread.start()
-        yield _sse('started', {'request_id': rid, 'session_id': data.session_id,
-                               'transport': 'sse', 'stream_kind': 'execution_events'})
-        while True:
-            try:
-                kind, payload = events.get(timeout=10)
-            except queue.Empty:
-                yield ': heartbeat\n\n'
-                continue
-            if kind == 'done':
-                yield _sse('done', payload)
-                break
-            yield _sse(kind, payload)
+        try:
+            yield _sse('started', {'request_id': rid, 'session_id': data.session_id,
+                                   'transport': 'sse', 'stream_kind': 'execution_events'})
+            while True:
+                try:
+                    kind, payload = events.get(timeout=10)
+                except queue.Empty:
+                    if not worker.is_alive() and events.empty():
+                        yield _sse('error', {'code': 'worker_exited', 'request_id': rid,
+                                            'message': 'Stream worker stopped unexpectedly'})
+                        yield _sse('done', {'request_id': rid})
+                        break
+                    yield ': heartbeat\n\n'
+                    continue
+                if kind == 'done':
+                    yield _sse('done', payload)
+                    break
+                yield _sse(kind, payload)
+        finally:
+            # Stops queueing events, not an already-running synchronous LLM.
+            disconnected.set()
 
     return StreamingResponse(live_events(), media_type='text/event-stream', headers={
         'Cache-Control': 'no-cache, no-store',
