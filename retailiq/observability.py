@@ -177,7 +177,10 @@ def _safe_fields(fields: dict, *, private: bool) -> dict:
                 out[key] = _safe_stack(value)
         elif type(value) is bool:
             out[key] = value
-        elif type(value) in (int, float):
+        elif type(value) is int:
+            if 0 <= value <= 1_000_000_000_000_000:
+                out[key] = value
+        elif type(value) is float:
             if math.isfinite(value) and 0 <= value <= 1e15:
                 out[key] = value
         else:
