@@ -165,3 +165,11 @@ def test_sqlite_connection_is_closed_when_initialization_raises(tmp_path, monkey
         with sessions._connect():
             pytest.fail('Initialization must not succeed')
     assert closed == [True]
+
+
+def test_chat_ui_discloses_history_window_limit(client):
+    html = client.get('/').text
+    js = client.get('/assets/app.js').text
+    assert 'id="chat-history-limit"' in html
+    assert 'Showing the 200 most recent messages' in html
+    assert "session.messages_truncated !== true" in js
