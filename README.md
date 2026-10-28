@@ -140,3 +140,15 @@ The **Execution Logs** tab on the same web UI lets you inspect local HTTP, agent
 - **LangSmith remains separate** and requires a valid key and live full-mode run. Offline JSONL logs do not count as LangSmith traces.
 
 See `docs/11_Logging_Observability.md`.
+
+## Live agent execution inside the AI chat (SSE)
+
+The AI Assistant now displays a **LIVE AGENT ACTIVITY** timeline next to each answer. It calls `POST /ask/stream` over `fetch()` with a streaming reader, not polling `GET /api/logs` and not simulating progress.
+
+Protocol: `started` → zero or more `log` (Router, Agent, Skill, Tool, Handoff, timing) → `result` with the final answer → `done`. On failure, `error` replaces `result`. Each request has its own queue and context-scoped logger sink. A single request/session ID correlates the on-screen events with the local rotating JSONL history. Chat sessions still persist completed turns exactly once.
+
+Logs expose **redacted metadata only**; no prompts, API keys, answer text, or private exception stack traces are sent as log events. The final answer is separately delivered as `result`, because it is explicitly meant for the requesting user.
+
+The previous `POST /ask` endpoint remains supported; the Execution Logs tab still shows historic events. This enhancement streams **execution events, not individual LLM tokens**, and remains a local training demo without production authentication. Azure full-mode RAG and LangSmith traces still require live evidence.
+
+Review `docs/11_Live_Chat_Agent_Trace.md` and `tests/test_chat_stream.py`. To demo: ask which products are top sellers, then ask about the top seller's stock; the in-chat stream shows the Sales → Inventory handoff before the final answer.
