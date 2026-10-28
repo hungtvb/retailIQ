@@ -5,11 +5,15 @@ fallback and never reported as evidence of full LangGraph execution.
 """
 from __future__ import annotations
 from typing import Literal, TypedDict
+import os
+from functools import lru_cache
+from pathlib import Path
+import sqlite3
 from retailiq.assistant import intent, do
 from retailiq.domain.analytics import month, products, top
 from retailiq.core.config import chat_model, configure_langsmith
 from retailiq.skills import skill_for, load_skill
-from retailiq.observability import log_event, observed
+from retailiq.observability import log_event, observed, request_id, session_id
 from retailiq.orchestration.agents import sales_analysis, inventory_analysis, product_analysis, replenish_review
 
 AGENT_FOR_INTENT = {
@@ -58,16 +62,19 @@ def resolve_followup(question: str, history: list[dict] | None = None) -> str:
     if 'top seller' in q or 'best seller' in q or 'bán chạy' in q:
         rows = top()
         return question + (' ' + rows[0]['sku'] if rows else '')
-    # The latest explicit user mention outranks incidental names in generated answers.
-    messages = list(reversed(history or []))
+    # Only use a unique product reference from recent history; ambiguity
+    # must not silently turn into the first SKU in a generated sales answer.
+    from retailiq.assistant import product_sku
     for role in ('user', 'assistant'):
-        for message in messages:
+        for message in reversed(history or []):
             if message.get('role') != role:
                 continue
-            content = message.get('content', '').casefold()
-            for product in products():
-                if product['name'].casefold() in content or product['sku'].casefold() in content:
-                    return question + ' ' + product['sku']
+            sku = product_sku(message.get('content', ''))
+            if sku:
+                return question + ' ' + sku
+            if role == 'user' and any(p['name'].casefold() in
+                   message.get('content', '').casefold() for p in products()):
+                return question
     return question
 
 
@@ -114,8 +121,7 @@ def sales_agent(state: State):
         return Command(update={'handoff': {'from': 'sales_agent', 'to': 'inventory_agent',
                                            'reason': 'Follow-up inventory question'},
                                'active_agent': 'inventory_agent'}, goto='inventory_agent')
-    # Explicitly loading a skill makes this more than a directory of Markdown docs.
-    load_skill('sales_kpi')
+    # SQL KPI policy is enforced in reviewed functions, not an unused prompt.
     with observed('agent.sales', agent='sales_agent', execution_mode='full'):
         result = sales_analysis(state['effective_question'], state['intent'])
     return Command(update={**result, 'active_agent': 'sales_agent'}, goto='__end__')
@@ -123,7 +129,7 @@ def sales_agent(state: State):
 
 def inventory_agent(state: State):
     from langgraph.types import Command
-    load_skill('inventory_availability')
+    # Inventory arithmetic is enforced by read-only SQL.
     with observed('agent.inventory', agent='inventory_agent', execution_mode='full'):
         result = inventory_analysis(state['effective_question'])
     return Command(update={**result, 'active_agent': 'inventory_agent'}, goto='__end__')
@@ -138,13 +144,12 @@ def product_agent(state: State):
 
 def retail_supervisor(state: State):
     from langgraph.types import Command
-    load_skill('replenishment_review')
     with observed('agent.supervisor', agent='retail_supervisor', execution_mode='full'):
-        result = replenish_review()
+        result = replenish_review(state['effective_question'])
     return Command(update={**result, 'active_agent': 'retail_supervisor'}, goto='__end__')
 
 
-def build_graph():
+def build_graph(*, checkpointer=None):
     from langgraph.graph import StateGraph, START, END
     from langgraph.types import Command
     # Typed Command destinations make all dynamic routes visible to LangGraph's
@@ -163,16 +168,51 @@ def build_graph():
     graph.add_node('retail_supervisor', retail_supervisor)
     graph.add_edge(START, 'router')
     # Control routing is Command-only: no accidental double-execution by static edges.
-    return graph.compile()
+    return graph.compile(checkpointer=checkpointer)
+
+
+@lru_cache(maxsize=1)
+def _session_graph():
+    """Reuse a durable SQLite checkpointer for one-process local demos."""
+    from langgraph.checkpoint.sqlite import SqliteSaver
+    path = Path(os.getenv('RETAILIQ_CHECKPOINT_DB') or
+                Path(__file__).resolve().parents[2] / 'data' / 'agent_checkpoints.sqlite3')
+    path.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(str(path), check_same_thread=False)
+    return build_graph(checkpointer=SqliteSaver(connection))
 
 
 def run(q: str, *, history: list[dict] | None = None, active_agent: str = '') -> dict:
     configure_langsmith()
-    result = build_graph().invoke(
-        {'question': q, 'history': (history or [])[-12:], 'previous_agent': active_agent},
-        config={'run_name': 'RetailIQ-Week1-MultiAgent',
-                'tags': ['retailiq', 'flezi-week1', 'multi-agent']},
-    )
+    sid = session_id()
+    rid = request_id()
+    config = {
+        'run_name': 'RetailIQ-Week1-MultiAgent',
+        'tags': ['retailiq', 'flezi-week1', 'multi-agent'],
+        'metadata': {'request_id': rid or 'stateless',
+                     'retailiq_session_id': sid or 'stateless'},
+        'recursion_limit': 12,
+    }
+    if sid:
+        config['configurable'] = {'thread_id': sid}
+    inputs = {
+        'question': q, 'history': (history or [])[-12:],
+        'previous_agent': active_agent,
+        'answer': '', 'records': [], 'contexts': [],
+        'handoff': None, 'subagents': [], 'route_fallback': False,
+    }
+    graph = _session_graph() if sid else build_graph()
+    if os.getenv('RETAILIQ_NATIVE_GRAPH_EVENTS', 'false').lower() in ('1', 'true', 'yes'):
+        result = dict(inputs)
+        for update in graph.stream(inputs, config=config, stream_mode='updates'):
+            for node, values in update.items():
+                if isinstance(values, dict):
+                    result.update(values)
+                log_event('graph.node_updated', agent=node, execution_mode='full')
+        if not result.get('answer'):
+            raise ValueError('Graph stream completed without a verified answer')
+    else:
+        result = graph.invoke(inputs, config=config)
     return {'question': q, 'intent': result['intent'],
             'mode': 'LangGraph Multi-Agent + SQL / Chroma RAG',
             'as_of': month(), 'answer': result['answer'],
