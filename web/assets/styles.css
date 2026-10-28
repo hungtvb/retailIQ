@@ -119,3 +119,23 @@ legend{font-size:11px;letter-spacing:.19em;font-weight:500;margin-bottom:18px}
 @media(max-width:720px){.shell{padding:0 20px}.site-header{min-height:82px}.hero{padding:54px 0 44px}.workspace-tabs{margin-bottom:36px}h1{font-size:clamp(42px,9vw,60px)}.hero-subhead{font-size:16px}.response-grid,.roi-output-column{grid-template-columns:1fr}.results-card{grid-column:auto}.section-heading{align-items:start}.subtle-suffix{display:none}.query-form{flex-direction:column;border-radius:18px}.query-field{padding:3px 10px}.query-form .sunshine-button{width:100%}.paper-card{padding:24px}.answer-card,.evidence-card{min-height:240px}.site-footer{font-size:10px;flex-wrap:wrap}.header-right{gap:8px}}
 @media(max-width:460px){.brand-name{font-size:19px}.environment-pill{font-size:9px;padding:7px 9px}.brand-symbol{width:38px;height:38px}.step-badge{font-size:9px}.workspace-tabs button{padding:12px 14px;font-size:13px}.tab-hint{display:none}.roi-fields{grid-template-columns:1fr}.roi-cardgrid{grid-template-columns:1fr}.roi-card:nth-child(even){border-left:0;padding-left:0}.roi-card:nth-child(n+2){border-top:1px solid #aaa69d;padding-top:20px}.token-values{grid-template-columns:1fr}.token-values>div+div{border-left:0;border-top:1px solid #aaa69d;padding:14px 0 0}.roi-chartrow{grid-template-columns:72px minmax(0,1fr) 68px;gap:7px;font-size:11px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+
+/* Week 1 FDE extension: persistent chat sessions + transparent agent traces. */
+.chat-workspace-tools{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+.session-controls{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}
+#chat-session-picker{min-width:180px;max-width:320px;height:42px;background:var(--color-cream-paper);border:1px solid var(--color-ink);border-radius:10px;color:var(--color-ink);padding:8px 10px;font:inherit;font-size:13px}
+.chat-action-button{padding:10px 13px;border:1px solid var(--color-ink);border-radius:24px;background:transparent;color:var(--color-ink);font:inherit;font-size:12px;cursor:pointer;min-height:42px}
+.chat-action-button:hover{background:var(--color-mint,#6ece9d)}
+.chat-delete-button:hover{background:#f5caca}
+.chat-session-note{font-size:10px;letter-spacing:.12em;color:var(--color-graphite)}
+.chat-history{display:grid;gap:10px;margin:8px 0 20px;max-height:280px;overflow:auto}
+.chat-history:empty{display:none}
+.chat-message{border:1px solid #b8b2a8;border-radius:15px;padding:12px 16px;max-width:95%;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.6}
+.chat-message-user{justify-self:end;background:#ffefd2}
+.chat-message-assistant{justify-self:start;background:#f0ede4}
+.chat-message-label{display:block;font-size:10px;font-weight:600;letter-spacing:.12em;margin-bottom:6px}
+.agent-trace{display:flex;gap:7px;flex-wrap:wrap;margin-top:22px}
+.agent-chip{border:1px solid #aaa69d;border-radius:9999px;padding:6px 10px;font-size:11px;font-weight:500}
+.agent-chip-skill{background:#ffda6e}
+.agent-chip-handoff{background:#6ece9d}
+@media(max-width:720px){.chat-workspace-tools{align-items:flex-start}.chat-session-note{width:100%}#chat-session-picker{flex:1;min-width:160px;max-width:100%}}
