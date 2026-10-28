@@ -170,7 +170,10 @@ def exercise_e2e(http, report):
         answer = next(value for kind, value in events if kind == "result")
         check(answer["intent"] == "top" and answer["mode"].startswith("OFFLINE"),
               "Top agent routing mismatch")
-        check(started["request_id"] == answer["request_id"] == headers["X-Request-ID"],
+        http_request_id = next((value for key, value in headers.items()
+                                if key.casefold() == "x-request-id"), None)
+        check(http_request_id is not None and
+              started["request_id"] == answer["request_id"] == http_request_id,
               "SSE request ID correlation failed")
         followup, _, _ = http.json(
             "/ask", method="POST",
