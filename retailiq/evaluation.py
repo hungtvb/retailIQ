@@ -145,3 +145,27 @@ def save_report_atomic(target: Path, report: dict) -> None:
     finally:
         if candidate is not None:
             candidate.unlink(missing_ok=True)
+
+
+async def evaluate_questions(questions: list[str], *, ask_fn,
+                             faithfulness_metric, relevancy_metric) -> dict:
+    """Execute all cases before producing any report; propagate evaluator errors.
+
+    The caller supplies provider-backed evaluators. This function intentionally
+    does not catch remote timeouts or synthesize replacement scores.
+    """
+    if not isinstance(questions, list) or len(questions) < MIN_CASES:
+        raise EvaluationDataError('Evaluation dataset is too small')
+    measurements = []
+    for question in questions:
+        output = ask_fn(question)
+        descriptor = checked_case(question, output)
+        contexts = [item['text'] for item in output['contexts']]
+        faithfulness = await faithfulness_metric.ascore(
+            user_input=question, response=output['answer'], retrieved_contexts=contexts)
+        relevancy = await relevancy_metric.ascore(
+            user_input=question, response=output['answer'])
+        measurements.append(checked_measurement(
+            descriptor, getattr(faithfulness, 'value', None),
+            getattr(relevancy, 'value', None)))
+    return build_report(measurements, evaluator='ragas', execution_mode='full')
