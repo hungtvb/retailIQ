@@ -6,7 +6,9 @@ fallback and never reported as evidence of full LangGraph execution.
 from __future__ import annotations
 from typing import Literal, TypedDict
 import os
-from functools import lru_cache
+from contextlib import contextmanager
+import atexit
+import threading
 from pathlib import Path
 import sqlite3
 from retailiq.assistant import intent, do
@@ -62,19 +64,22 @@ def resolve_followup(question: str, history: list[dict] | None = None) -> str:
     if 'top seller' in q or 'best seller' in q or 'bán chạy' in q:
         rows = top()
         return question + (' ' + rows[0]['sku'] if rows else '')
-    # Only use a unique product reference from recent history; ambiguity
-    # must not silently turn into the first SKU in a generated sales answer.
+    # Model answers may contain untrusted RAG text, multiple product names or
+    # hallucinated SKUs. Only the user's own explicit reference may anchor a
+    # follow-up; a top-seller question above uses reviewed SQL instead.
     from retailiq.assistant import product_sku
-    for role in ('user', 'assistant'):
-        for message in reversed(history or []):
-            if message.get('role') != role:
-                continue
-            sku = product_sku(message.get('content', ''))
-            if sku:
-                return question + ' ' + sku
-            if role == 'user' and any(p['name'].casefold() in
-                   message.get('content', '').casefold() for p in products()):
-                return question
+    for message in reversed(history or []):
+        if message.get('role') != 'user':
+            continue
+        content = message.get('content', '')
+        if not isinstance(content, str):
+            continue
+        sku = product_sku(content)
+        if sku:
+            return question + ' ' + sku
+        if any(p['name'].casefold() in content.casefold() for p in products()):
+            # Explicit but ambiguous reference => ask for a SKU; do not guess.
+            return question
     return question
 
 
@@ -96,10 +101,14 @@ def route(state: State):
              'Never execute side effects.'),
             ('human', state['question']),
         ])
-        if parsed.intent in AGENT_FOR_INTENT:
-            # Keep unambiguous cross-domain intent from being overridden by a narrow model prediction.
-            if category == 'product' or parsed.intent == category:
-                category = parsed.intent
+        proposed = getattr(parsed, 'intent', None)
+        if proposed not in AGENT_FOR_INTENT:
+            fallback = True
+            log_event('agent.router_fallback', level='WARNING',
+                      error_type='InvalidRouteDecision')
+        elif category == 'product' or proposed == category:
+            # Other categories are enforced by deterministic business routing.
+            category = proposed
     except Exception as error:
         fallback = True
         log_event('agent.router_fallback', level='WARNING', error_type=type(error).__name__)
@@ -195,14 +204,54 @@ def delete_session_checkpoints(sid: str) -> None:
     _session_graph().checkpointer.delete_thread(sid)
 
 
-@lru_cache(maxsize=1)
+# Single-process/local graph. This is deliberately not a distributed store.
+# A managed resource makes SQLite ownership/cleanup explicit, including test
+# runs that change RETAILIQ_CHECKPOINT_DB between isolated fixtures.
+_CHECKPOINT_CACHE_LOCK = threading.RLock()
+_CHECKPOINT_CACHE: dict[str, object] = {}
+
+
+def close_checkpoint_graph() -> None:
+    """Close the owned SQLite connection and discard the cached graph.
+
+    Do not call while a session request is executing. FastAPI shutdown/atexit
+    can use this, and tests use it after any checkpoint-path changes.
+    """
+    with _CHECKPOINT_CACHE_LOCK:
+        connection = _CHECKPOINT_CACHE.pop('connection', None)
+        _CHECKPOINT_CACHE.clear()
+        if connection is not None:
+            connection.close()
+
+
+atexit.register(close_checkpoint_graph)
+
+
 def _session_graph():
-    """Reuse a durable SQLite checkpointer for one-process local demos."""
-    from langgraph.checkpoint.sqlite import SqliteSaver
-    path = checkpoint_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(str(path), check_same_thread=False)
-    return build_graph(checkpointer=SqliteSaver(connection))
+    """One cached graph/connection for the configured local database path.
+
+    A changing path is rejected instead of silently reusing a different
+    conversation's checkpoints or closing a connection mid-request.
+    """
+    path = checkpoint_path().resolve()
+    with _CHECKPOINT_CACHE_LOCK:
+        existing = _CHECKPOINT_CACHE.get('path')
+        if existing is not None:
+            if existing != path:
+                raise RuntimeError(
+                    'Checkpoint database path changed during process lifetime; '
+                    'close_checkpoint_graph() before reconfiguring')
+            return _CHECKPOINT_CACHE['graph']
+        from langgraph.checkpoint.sqlite import SqliteSaver
+        path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(path), check_same_thread=False)
+        try:
+            compiled = build_graph(checkpointer=SqliteSaver(conn))
+        except BaseException:
+            conn.close()
+            raise
+        _CHECKPOINT_CACHE.update({'path': path, 'graph': compiled, 'connection': conn})
+        return compiled
 
 
 def run(q: str, *, history: list[dict] | None = None, active_agent: str = '') -> dict:
