@@ -24,11 +24,15 @@ def test_context_does_not_guess_from_multi_product_answer():
     assert resolve_followup('What about its stock?', history).endswith('EL-001')
 
 
-def test_scored_rag_filters_weak_context_and_never_syncs_on_query(monkeypatch):
-    matches = [(SimpleNamespace(metadata={'source':'weak.md'}, page_content='weak'), 0.12),
-               (SimpleNamespace(metadata={'source':'strong.md'}, page_content='fact'), 0.93)]
+def test_scored_rag_filters_weak_context_and_never_syncs_on_query(monkeypatch, tmp_path):
+    # Retrieval now requires a committed manifest and matching chunk identity.
+    manifest = tmp_path / 'manifest.json'
+    manifest.write_text('{"weak.md":{"sha256":"test","ids":["w1"]},'
+                        '"strong.md":{"sha256":"test","ids":["s1"]}}')
+    matches = [(SimpleNamespace(metadata={'source':'weak.md','source_id':'w1'}, page_content='weak'), 0.12),
+               (SimpleNamespace(metadata={'source':'strong.md','source_id':'s1'}, page_content='fact'), 0.93)]
     fake = SimpleNamespace(similarity_search_with_relevance_scores=lambda q,k:matches)
-    monkeypatch.setattr(indexing,'_vector_store',lambda:(fake,'unused'))
+    monkeypatch.setattr(indexing,'_vector_store',lambda:(fake,manifest))
     monkeypatch.setattr(indexing,'sync_index',
                         lambda **kwargs:pytest.fail('No indexing on query path'))
     monkeypatch.setenv('RETAILIQ_RAG_MIN_RELEVANCE','0.5')
@@ -158,6 +162,8 @@ def test_product_agent_accepts_exact_source_cited_answer(monkeypatch,tmp_path):
         'records':[]})
     class Model:
         def invoke(self,prompt):
-            return SimpleNamespace(content='Document claim (EL-001.md).',usage_metadata={})
+            return SimpleNamespace(content='Document claim [S1]',usage_metadata={})
     monkeypatch.setattr('retailiq.core.config.chat_model',lambda:Model())
-    assert agents.product_analysis('product')['answer']=='Document claim (EL-001.md).'
+    answer = agents.product_analysis('product')['answer']
+    assert answer.startswith('Document claim [S1]')
+    assert '[S1]: EL-001.md' in answer
