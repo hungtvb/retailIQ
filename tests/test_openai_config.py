@@ -92,17 +92,18 @@ def test_langsmith_with_key_enabled_no_secret_echo(monkeypatch):
 
 
 def test_graph_node_routes_with_dummy_llm(monkeypatch):
+    # Offline test validates business routing and grounded generation only.
+    # A real compiled LangGraph run requires the full optional dependencies.
     from retailiq.orchestration import week1_graph as graph
+    from retailiq.orchestration import agents
     from retailiq import assistant
-    class Structured:
-        def invoke(self,messages):return types.SimpleNamespace(intent='stock')
+    from retailiq.core import config
     class Model:
-        def with_structured_output(self,schema):return Structured()
         def invoke(self,messages):return types.SimpleNamespace(content='Grounded product description [EL-001]')
-    monkeypatch.setattr(graph,'chat_model',lambda:Model())
+    monkeypatch.setattr(config,'chat_model',lambda:Model())
     monkeypatch.setattr(assistant,'retrieve',lambda q:[{'source':'EL-001','text':'EL-001 is a laptop'}])
-    assert graph.route({'question':'How many AlphaBook Pro 14 in stock?'})['intent']=='stock'
-    response=graph.vector_tool({'question':'Tell me about AlphaBook Pro 14'})
+    assert graph.classify('How many AlphaBook Pro 14 in stock?')=='stock'
+    response=agents.product_analysis('Tell me about AlphaBook Pro 14')
     assert response['contexts'][0]['source']=='EL-001'
     assert 'EL-001' in response['answer']
 
