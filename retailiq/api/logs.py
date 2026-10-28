@@ -1,7 +1,7 @@
 """Local-only, read-only event viewer; never returns prompts or exception stacks."""
 from ipaddress import ip_address
 from fastapi import APIRouter, HTTPException, Query, Request, Response
-from retailiq.observability import list_events
+from retailiq.observability import list_events, log_health
 
 router = APIRouter(prefix='/api/logs', tags=['observability'])
 
@@ -27,4 +27,5 @@ def events(request: Request, response: Response,
     response.headers['X-Content-Type-Options'] = 'nosniff'
     return {'events': list_events(limit=limit, level=level,
                                   session_id=session_id, request_id=request_id),
-            'source': 'local_rotating_jsonl', 'note': 'No prompts, keys, or stack traces in UI'}
+            'source': 'local_rotating_jsonl', 'logging_health': log_health(),
+            'note': 'No prompts, keys, or stack traces in UI'}
