@@ -110,6 +110,7 @@ async function selectSession(id, preserveEvidence = false) {
   localStorage.setItem('retailiq-active-session', id);
   byId('chat-session-picker').value = id;
   const messages = session.messages || [];
+  byId('chat-history-limit').hidden = session.messages_truncated !== true;
   renderChatMessages(messages);
   byId('chat-welcome').hidden = messages.length > 0;
   const last = messages.length && messages[messages.length - 1].role === 'assistant' ? messages[messages.length - 1] : null;
