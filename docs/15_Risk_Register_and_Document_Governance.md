@@ -41,6 +41,7 @@ Severity reflects the current local demo context. Status remains open until the 
 | `docs/00_PROJECT_REQUIREMENTS.md` | Four-week baseline and course/project scope | PO | Baseline; changes require explicit scope decision |
 | `docs/00_WEEK1_OFFICIAL_CHECKLIST.md` | Official Week 1 rubric | PO / QA | Reference; preserve rubric meaning |
 | `docs/12_Product_Brief_and_PRD.md` | Product outcome, personas, scope, stories, priority, acceptance | PO | Draft; approval pending |
+| `docs/16_Roadmap_and_Timeline.md` | Target dates, phase outputs, milestones, dependencies, role accountability | PO | Draft estimate; team review pending |
 | `docs/13_Data_and_API_Contract.md` | Current schema, KPI definitions, and HTTP behavior | Tech Lead / BA | Draft; engineering/domain review pending |
 | `docs/14_Requirements_Traceability.md` | Story-to-code/test/evidence map and live gates | QA | Working matrix; clean setup/live gates open |
 | `docs/15_Risk_Register_and_Document_Governance.md` | Risk ownership, document owners, review process | DevOps / Security + PO | Draft; named assignments pending |

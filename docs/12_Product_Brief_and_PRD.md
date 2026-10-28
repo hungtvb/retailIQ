@@ -38,10 +38,13 @@ RetailIQ Copilot is a local demonstration assistant for an omnichannel electroni
 
 | Milestone | Planned scope | Current status |
 |---|---|---|
-| Week 1 | Local Inventory & Sales SQL assistant, Product RAG, LangGraph routing, RAGAS, LangSmith, demo and evidence | Local code/tests and mocked graph evidence exist. Live LLM, Chroma, RAGAS scores, and LangSmith trace remain unverified. |
-| Week 2 | Freshness-aware routing, governed KPI layer, Inventory/Order MCP APIs, customer context, advanced retrieval | Planned; not acceptance for Week 1 |
-| Week 3 | Human approval, access controls, alerts, Langfuse, DeepEval, cost/security/governance reports | Planned; not acceptance for Week 1 |
-| Week 4 | Five specialist agents, A2A-style orchestration, verification loop, decision report, approved order scenario | Planned; not acceptance for Week 1 |
+| Week 1 · 27 Oct–02 Nov | Local Inventory & Sales SQL assistant, Product RAG, LangGraph routing, RAGAS, LangSmith, demo and evidence | Local code/tests and mocked graph evidence exist. Live LLM, Chroma, RAGAS scores, and LangSmith trace remain unverified. |
+| Week 2 · 03–09 Nov | Freshness-aware routing, governed KPI layer, Inventory/Order MCP APIs, customer context, advanced retrieval | Planned; not acceptance for Week 1 |
+| Week 3 · 10–16 Nov | Human approval, access controls, alerts, Langfuse, DeepEval, cost/security/governance reports | Planned; not acceptance for Week 1 |
+| Week 4 · 17–23 Nov | Five specialist agents, A2A-style orchestration, verification loop, decision report, approved order scenario | Planned; not acceptance for Week 1 |
+| Integration buffer · 24–28 Nov | Regression, clean-machine setup, demo rehearsal, evidence and handoff | Target dates and owner assignment pending PO/team review |
+
+See the [Four-Week Roadmap and Timeline](16_Roadmap_and_Timeline.md) for milestone outputs, role responsibilities, and dependencies.
 
 ## Prioritized user stories and acceptance criteria
 

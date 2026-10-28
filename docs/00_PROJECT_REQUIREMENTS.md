@@ -98,6 +98,7 @@ Build and orchestrate five required specialist agents:
 
 ## Traceability
 
+- [Four-week roadmap and target timeline (2026-10-27 to 2026-11-28)](16_Roadmap_and_Timeline.md)
 - [Product brief and prioritized Week 1 stories](12_Product_Brief_and_PRD.md)
 - [Data dictionary, KPI and API contract](13_Data_and_API_Contract.md)
 - [Requirements-to-code/test/evidence matrix and live acceptance gates](14_Requirements_Traceability.md)
