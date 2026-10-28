@@ -4,6 +4,116 @@
 const byId = (id) => document.getElementById(id);
 let roiLoaded = false;
 let askInProgress = false;
+let activeSessionId = '';
+
+async function ensureSession() {
+  if (activeSessionId) return activeSessionId;
+  const response = await fetch('/api/sessions', {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({})
+  });
+  if (!response.ok) throw new Error('Cannot create local chat session');
+  const session = await response.json();
+  activeSessionId = session.id;
+  localStorage.setItem('retailiq-active-session', activeSessionId);
+  await refreshSessions();
+  return activeSessionId;
+}
+
+async function refreshSessions() {
+  const response = await fetch('/api/sessions');
+  if (!response.ok) throw new Error('Unable to read local sessions');
+  const data = await response.json();
+  const picker = byId('chat-session-picker');
+  picker.replaceChildren();
+  for (const s of data.sessions) {
+    const option = document.createElement('option');
+    option.value = s.id;
+    option.textContent = s.title;
+    picker.appendChild(option);
+  }
+  if (data.sessions.some(s => s.id === activeSessionId)) picker.value = activeSessionId;
+}
+
+function renderChatMessages(messages) {
+  const area = byId('chat-history');
+  area.replaceChildren();
+  for (const message of messages) {
+    const item = document.createElement('div');
+    item.className = 'chat-message chat-message-' + message.role;
+    const label = document.createElement('span');
+    label.className = 'chat-message-label';
+    label.textContent = message.role === 'user' ? 'YOU' : (message.agent || 'RETAILIQ').replaceAll('_', ' ').toUpperCase();
+    const content = document.createElement('span');
+    content.textContent = message.content;
+    item.append(label, content);
+    area.appendChild(item);
+  }
+  area.scrollTop = area.scrollHeight;
+}
+
+async function selectSession(id) {
+  const response = await fetch('/api/sessions/' + encodeURIComponent(id));
+  if (!response.ok) throw new Error('Session no longer exists');
+  const session = await response.json();
+  activeSessionId = id;
+  localStorage.setItem('retailiq-active-session', id);
+  byId('chat-session-picker').value = id;
+  renderChatMessages(session.messages || []);
+  const last = [...(session.messages || [])].reverse().find(x => x.role === 'assistant');
+  byId('answer').textContent = last ? last.content : 'New conversation. Ask your first retail question.';
+  byId('meta').textContent = last ? 'Last agent: ' + (session.active_agent || 'unknown') : 'No execution yet.';
+  byId('agent-trace').replaceChildren();
+}
+
+async function createNewChat() {
+  activeSessionId = '';
+  await ensureSession();
+  await selectSession(activeSessionId);
+  byId('q').value = '';
+  byId('q').focus();
+}
+
+async function deleteCurrentChat() {
+  if (!activeSessionId) return;
+  if (!confirm('Delete this local conversation and all messages?')) return;
+  const response = await fetch('/api/sessions/' + encodeURIComponent(activeSessionId), {method: 'DELETE'});
+  if (!response.ok) throw new Error('Unable to delete session');
+  activeSessionId = '';
+  localStorage.removeItem('retailiq-active-session');
+  await refreshSessions();
+  const next = byId('chat-session-picker').value;
+  if (next) await selectSession(next);
+  else await createNewChat();
+}
+
+async function initializeSessions() {
+  try {
+    await refreshSessions();
+    const stored = localStorage.getItem('retailiq-active-session');
+    const options = [...byId('chat-session-picker').options].map(o => o.value);
+    const id = options.includes(stored) ? stored : options[0];
+    if (id) await selectSession(id);
+    else await createNewChat();
+  } catch (err) {
+    byId('meta').textContent = 'Session manager unavailable: ' + err.message;
+  }
+}
+
+function showAgentEvidence(data) {
+  const area = byId('agent-trace');
+  area.replaceChildren();
+  const chips = [];
+  if (data.active_agent) chips.push(['Agent: ' + data.active_agent, '']);
+  if (data.skill) chips.push(['Skill: ' + data.skill, 'agent-chip-skill']);
+  if (data.handoff) chips.push(['Handoff: ' + data.handoff.from + ' → ' + data.handoff.to, 'agent-chip-handoff']);
+  for (const name of data.subagents || []) chips.push(['Subagent: ' + name, '']);
+  for (const [text, type] of chips) {
+    const chip = document.createElement('span');
+    chip.className = 'agent-chip ' + type;
+    chip.textContent = text;
+    area.appendChild(chip);
+  }
+}
 
 function showPanel(name) {
   const roi = name === 'roi';
@@ -32,20 +142,26 @@ async function ask() {
   answer.textContent = 'Looking through your retail data…';
   byId('response-state').textContent = 'WORKING';
   try {
+    const sessionId = await ensureSession();
     const response = await fetch('/ask', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({question})
+      body: JSON.stringify({question, session_id: sessionId})
     });
     const data = await response.json();
     if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Request failed (' + response.status + ')');
     answer.textContent = data.answer || 'No answer available for this question.';
+    await refreshSessions();
+    await selectSession(sessionId);
+    showAgentEvidence(data);
     const records = Array.isArray(data.records) ? data.records : [];
     const contexts = Array.isArray(data.contexts) ? data.contexts : [];
     byId('meta').textContent = 'Intent: ' + (data.intent || 'unknown') + '\n' +
       'Execution: ' + (data.mode || 'unknown') + '\n' +
       'Data period: ' + (data.as_of || 'unspecified') + '\n' +
       'SQL records: ' + records.length + '\n' +
-      'Retrieved docs: ' + contexts.length;
+      'Retrieved docs: ' + contexts.length + '\n' +
+      'Active agent: ' + (data.active_agent || 'unknown') + '\n' +
+      'LLM router fallback: ' + (data.route_fallback === true ? 'yes' : 'no');
     byId('raw').textContent = JSON.stringify({records, contexts: contexts.map(x => x.source)}, null, 2);
     byId('response-state').innerHTML = '<span class="status-dot" aria-hidden="true"></span> COMPLETE';
   } catch (error) {
@@ -126,6 +242,10 @@ function initRetailIQ() {
     const destination = byId(event.target.id === 'tab-roi' ? 'tab-assistant' : 'tab-roi');
     destination.focus(); destination.click(); event.preventDefault();
   });
+  byId('chat-new').addEventListener('click', () => createNewChat().catch(e => alert(e.message)));
+  byId('chat-delete').addEventListener('click', () => deleteCurrentChat().catch(e => alert(e.message)));
+  byId('chat-session-picker').addEventListener('change', e => selectSession(e.target.value).catch(err => alert(err.message)));
+  initializeSessions();
   byId('answer').classList.add('is-placeholder');
 }
 window.addEventListener('DOMContentLoaded', initRetailIQ);
