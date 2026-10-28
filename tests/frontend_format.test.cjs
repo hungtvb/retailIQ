@@ -100,3 +100,92 @@ test('Every supported specialist maps to an allowlisted identity',()=>{
   assert.equal(identity.apply(node,'<script>'),'iq');
   assert.equal(node.dataset.agent,'iq');
 });
+
+test('Link protocol, credentials and oversized URLs are rejected', () => {
+  assert.equal(format.safeLink('javascript:alert(1)'), null);
+  assert.equal(format.safeLink('data:text/html,evil'), null);
+  assert.equal(format.safeLink('https://user:password@example.org/'), null);
+  assert.equal(format.safeLink(' https://example.org/'), null);
+  assert.equal(format.safeLink('https://example.org/' + 'x'.repeat(2049)), null);
+  assert.equal(format.safeLink('https://example.org/a'), 'https://example.org/a');
+});
+
+test('SQL KPI fails closed on malformed, unsafe, overflowing or excessive records', () => {
+  const invalid = [
+    [{available: '10'}],
+    [null],
+    [{available: 1.5}],
+    [{available: Number.MAX_SAFE_INTEGER}, {available: 1}],
+    Array.from({length: 201}, () => ({available: 1})),
+  ];
+  for (const records of invalid) {
+    const root = new Element('div');
+    format.renderEvidence(root, {intent: 'stock', records});
+    assert.equal(tree(root, 'strong').length, 0);
+  }
+  const negative = new Element('div');
+  format.renderEvidence(negative, {intent: 'revenue', records: [
+    {channel: 'Refunds', net_revenue_vnd: -100},
+    {channel: 'Sales', net_revenue_vnd: 200},
+  ]});
+  assert.equal(tree(negative, 'strong')[0].textContent, '100');
+  assert.equal(tree(negative, 'span').filter(el => el.className === 'rich-bar-fill').length, 0);
+});
+
+test('Citations are bounded and never converted to HTML nodes', () => {
+  const root = new Element('div');
+  format.renderEvidence(root, {intent: 'product', contexts: Array.from({length: 1000},
+    (_, i) => ({source: i === 0 ? '<img src=x onerror=alert(1)>' : 'source-' + i}))});
+  assert.equal(tree(root, 'img').length, 0);
+  assert.ok(tree(root, 'span').filter(el => el.className === 'rich-citation').length <= 8);
+});
+
+function loadSseParser() {
+  const scope = vm.createContext({
+    window: {addEventListener() {}}, document: {}, TextDecoder, URL, console
+  });
+  const source = fs.readFileSync(path.join(__dirname, '../web/assets/app.js'), 'utf8');
+  vm.runInContext(source, scope, {filename: 'app.js'});
+  return vm.runInContext('consumeChatSSE', scope);
+}
+function fakeStream(parts) {
+  let index = 0;
+  let cancelled = false;
+  let released = false;
+  return {
+    response: {body: {getReader: () => ({
+      read: async () => index === parts.length ? {done: true} :
+        {done: false, value: Buffer.from(parts[index++])},
+      cancel: async () => { cancelled = true; },
+      releaseLock: () => { released = true; }
+    })}},
+    cancelled: () => cancelled,
+    released: () => released,
+  };
+}
+test('SSE parser handles fragmented CRLF boundaries', async () => {
+  const parser = loadSseParser();
+  const parts = ['event: started\\r', '\\ndata: {"ok":true}\\r', '\\n\\r', '\\n'];
+  const stream = fakeStream(parts.map(part => part.replaceAll('\\r', '\r').replaceAll('\\n', '\n')));
+  const events = [];
+  await parser(stream.response, (type, payload) => events.push({type, payload}));
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, 'started');
+  assert.equal(events[0].payload.ok, true);
+  assert.equal(stream.released(), true);
+  assert.equal(stream.cancelled(), false);
+});
+test('SSE parser rejects oversized frames and cancels reader', async () => {
+  const parser = loadSseParser();
+  const stream = fakeStream(['event: log\\ndata: ' + 'x'.repeat(70_000)]);
+  await assert.rejects(parser(stream.response, () => {}), /too large/);
+  assert.equal(stream.cancelled(), true);
+  assert.equal(stream.released(), true);
+});
+test('SSE parser rejects event floods', async () => {
+  const parser = loadSseParser();
+  const stream = fakeStream([Array.from({length: 513},
+    () => 'event: log\\ndata: {}\\n\\n').join('').replaceAll('\\n', '\n')]);
+  await assert.rejects(parser(stream.response, () => {}), /event limit/);
+  assert.equal(stream.cancelled(), true);
+});
