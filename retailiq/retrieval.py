@@ -8,6 +8,10 @@ def lexical(question: str) -> list[dict]:
     """Offline lexical demo. This is NOT vector retrieval or LangChain RAG."""
     qwords = set(re.findall(r'[\w-]+', question.casefold())) - {'what','is','the','a','about','tell','me','of','product'}
     docs, errors = plan_chunks(strict=False)
+    if errors:
+        # A partial corpus may omit relevant product facts and produce
+        # misleading answers. Do not silently serve incomplete evidence.
+        raise ValueError('Offline knowledge ingestion is incomplete; repair unreadable documents')
     ranked = []
     for chunks in docs.values():
         for chunk in chunks:
