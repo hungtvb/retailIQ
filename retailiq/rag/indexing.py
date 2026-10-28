@@ -23,7 +23,7 @@ KNOWLEDGE = ROOT / 'data' / 'knowledge'
 
 def input_paths(roots: list[Path] | None = None) -> list[Path]:
     """Only documents inside the two configured local knowledge folders."""
-    roots = roots or [DOCS, KNOWLEDGE]
+    roots = [DOCS, KNOWLEDGE] if roots is None else roots
     files = []
     for base in roots:
         if not base.exists():
@@ -42,17 +42,25 @@ def plan_chunks(paths: list[Path] | None = None, *, strict: bool = True) -> tupl
     documents = {}
     errors = {}
     for path in paths if paths is not None else input_paths():
+        path = Path(path)
+        if path.is_symlink() or not path.resolve().is_relative_to(ROOT.resolve()):
+            raise ValueError('Knowledge document path is not permitted')
         relative = path.relative_to(ROOT).as_posix()
         try:
             sections = load_file(path)
             chunks = split_sections(sections, relative)
             if not chunks:
                 raise ValueError('No readable text content')
+            if len(chunks) > 1500:
+                raise ValueError('Document exceeds chunk budget')
             documents[relative] = chunks
         except (OSError, UnicodeError, ValueError, ImportError, KeyError, IndexError, RuntimeError, zipfile.BadZipFile) as exc:
+            # Parser exceptions may contain source snippets; don't expose them
+            # in user-facing/indexing error summaries.
+            reason = type(exc).__name__
             if strict:
-                raise ValueError(f'Unable to ingest {relative}: {type(exc).__name__}: {exc}') from exc
-            errors[relative] = f'{type(exc).__name__}: {exc}'
+                raise ValueError(f'Unable to ingest {relative}: {reason}') from exc
+            errors[relative] = reason
     return documents, errors
 
 
@@ -155,6 +163,8 @@ def sync_index(*, force: bool = False, store=None, manifest_path: Path | None = 
                    name not in old or old[name]['sha256'] != hashes[name]}
         removed = sorted(set(old) - set(current))
         if not changed and not removed and not recovering:
+            if not manifest_path.exists():
+                _atomic_json(manifest_path, {})
             return {'updated': [], 'unchanged': sorted(current),
                     'removed': [], 'files': len(old),
                     'chunks': sum(len(x['ids']) for x in old.values())}
@@ -210,16 +220,55 @@ def sync_index(*, force: bool = False, store=None, manifest_path: Path | None = 
 
 
 def vector_search(question: str, k: int = 3) -> list[dict]:
-    """Reject weak document matches and abstain when evidence is insufficient.
+    """Return verified, source-addressable document chunks or abstain.
 
-    Relevance threshold is an uncalibrated starting point; adjust via evaluation.
-    Product index is built separately with scripts/index_products.py.
+    A matching filename is not sufficient: the source and chunk ID must be in
+    the last committed manifest. A dirty, missing or malformed index cannot
+    be queried; rerun scripts/index_products.py to reconcile it.
     """
-    db, _manifest = _vector_store()
-    threshold = float(os.getenv('RETAILIQ_RAG_MIN_RELEVANCE', '0.45'))
-    if not (0 <= threshold <= 1):
-        raise ValueError('RETAILIQ_RAG_MIN_RELEVANCE must be between 0 and 1')
-    matches = db.similarity_search_with_relevance_scores(question, k=k)
-    return [{'source': d.metadata.get('source', 'unknown'), 'text': d.page_content,
-             'metadata': d.metadata, 'relevance_score': round(float(score), 4)}
-            for d, score in matches if score >= threshold and d.page_content.strip()]
+    if not isinstance(question, str) or not 3 <= len(question.strip()) <= 500:
+        raise ValueError('RAG question must be 3–500 characters')
+    if isinstance(k, bool) or not isinstance(k, int) or not 1 <= k <= 10:
+        raise ValueError('RAG k must be between 1 and 10')
+    raw = os.getenv('RETAILIQ_RAG_MIN_RELEVANCE', '0.45')
+    try:
+        threshold = float(raw)
+    except ValueError as exc:
+        raise ValueError('Invalid RETAILIQ_RAG_MIN_RELEVANCE') from exc
+    if not math.isfinite(threshold) or not 0 <= threshold <= 1:
+        raise ValueError('RETAILIQ_RAG_MIN_RELEVANCE must be finite and between 0 and 1')
+    db, manifest_path = _vector_store()
+    if _recovery_path(manifest_path).exists():
+        raise IndexNotReadyError('Product index recovery is required before querying')
+    if not manifest_path.is_file():
+        raise IndexNotReadyError('Product index missing; run scripts/index_products.py')
+    manifest = _read_manifest(manifest_path)
+    if not manifest:
+        return []  # Successfully indexed empty corpus is not a provider failure.
+    matches = db.similarity_search_with_relevance_scores(question.strip(), k=k)
+    contexts = []
+    seen = set()
+    for doc, value in matches:
+        try:
+            score = float(value)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(score) or not threshold <= score <= 1:
+            continue
+        metadata = getattr(doc, 'metadata', None)
+        if not isinstance(metadata, dict):
+            continue
+        source, chunk_id = metadata.get('source'), metadata.get('source_id')
+        if (not isinstance(source, str) or not isinstance(chunk_id, str)
+                or source not in manifest or chunk_id not in manifest[source]['ids']
+                or chunk_id in seen):
+            continue
+        content = getattr(doc, 'page_content', None)
+        if not isinstance(content, str) or not content.strip():
+            continue
+        seen.add(chunk_id)
+        contexts.append({'source': source, 'text': content[:2400],
+                         'metadata': metadata, 'relevance_score': round(score, 4)})
+        if len(contexts) >= k:
+            break
+    return contexts
