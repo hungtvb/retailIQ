@@ -21,7 +21,7 @@
 
 ## Local test evidence
 
-Offline source regression: **82 passed, 1 skipped** at implementation time. Skip = compiled LangGraph test unavailable because package couldn't be installed in the local tool environment. This does **not** prove real LLM, Chroma, or LangSmith execution.
+Offline source regression: **84 passed, 1 skipped** at implementation time. Skip = compiled LangGraph test unavailable because package couldn't be installed in the local tool environment. This does **not** prove real LLM, Chroma, or LangSmith execution.
 
 ## Real full-mode acceptance runbook
 
