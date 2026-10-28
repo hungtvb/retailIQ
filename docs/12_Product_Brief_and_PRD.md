@@ -8,7 +8,9 @@
 
 RetailIQ Copilot is a local demonstration assistant for an omnichannel electronics retailer. It answers read-only inventory and sales questions from a synthetic SQLite fixture and answers product-detail questions from local product knowledge documents. Week 1 demonstrates the path from natural-language input to a grounded result, while keeping offline simulation distinct from live model, vector-search, evaluation, and tracing evidence.
 
-**Outcome hypothesis:** store and operations staff can find routine inventory, sales, and product facts with fewer manual lookups. This is unvalidated: no user study, time-saving baseline, or production outcome has been measured.
+**Selected business focus:** **Inventory & Sales Decision Support** — help an Inventory / Retail Operations Analyst assess whether a verified top-selling SKU needs **human replenishment review**, based on completed-order sales and available stock across locations. This is a read-only, evidence-backed decision-support workflow, **not** Order Status & Delivery Exception Resolution, an automated purchase order, or a demand forecast. See [Business Problem & Decision Scope](21_INVENTORY_SALES_BUSINESS_SCOPE.md) for the chosen problem, as-is/to-be workflow, user jobs, KPI measurement plan, business acceptance gates and four-week narrative.
+
+**Outcome hypothesis:** store and operations staff can produce a correct, traceable stock-versus-sales review with fewer manual lookups. This remains **unvalidated**: no observation of an actual inventory analyst, time-saving baseline, business threshold or realized outcome has been measured. The business direction has been selected; PO/domain sign-off and KPI validation remain pending.
 
 ### Users and stakeholders
 
