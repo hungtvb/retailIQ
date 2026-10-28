@@ -33,19 +33,36 @@ A local **Cost & ROI** tab now calculates business benefits, estimated LLM and e
 - Handoff: a Sales→Inventory follow-up triggers a graph-level `Command` transfer and auditable metadata.
 - Skill: on-demand allowlisted business instructions; Product Agent injects skill text into its grounding prompt.
 - Chat sessions: local SQLite CRUD and bounded per-conversation context; UI session switching/delete supported.
-- Local regression suite: **84 passed, 1 compiled-graph test module skipped (latest local test run)** because LangGraph is unavailable here. GitHub CI installs it and attempts the compiled graph smoke test.
+- Local regression suite: **89 passed, 1 compiled-graph test module skipped (2026-10-28 local run)** because LangGraph is unavailable here. GitHub CI installs it and attempts the compiled graph smoke test.
 - Local application observability: request/session correlation IDs, safe JSONL events, bounded rotation, agent/tool durations and loopback-only Execution Logs tab. Tests verify privacy and filtering. This is not LangSmith tracing.
 - Remote LLM/Chroma/RAGAS/LangSmith E2E evidence is still outstanding and should not be claimed PASS.
-\n## Execution Logs acceptance (2026-10-28)\n\n- [x] Application-level structured logging; request ID returned in API headers/body.\n- [x] Session-specific agent/tool/handoff events and local-only event viewer.\n- [x] Failure stack frame locations recorded privately, never returned by API.\n- [x] Tests ensure prompt text and secrets are not written to log file.\n- [ ] LangSmith live trace + model usage; still requires real API credentials.\n\nEvidence: `tests/test_observability.py`, `docs/11_Logging_Observability.md`.\n
+
+## Execution Logs acceptance (2026-10-28)
+
+- [x] Application-level structured logging; request ID returned in API headers/body.
+- [x] Session-specific agent/tool/handoff events and local-only event viewer.
+- [x] Failure stack frame locations recorded privately, never returned by API.
+- [x] Tests ensure prompt text and secrets are not written to log file.
+- [ ] LangSmith live trace + model usage; still requires real API credentials.
+
+Evidence: `tests/test_observability.py`, `docs/11_Logging_Observability.md`.\n
 
 ## Course reading baseline and strict lesson audit (2026-10-28)
 
 - [Lesson 02–05 sources supplied by the team](00_WEEK1_LESSON_REFERENCES.md) (23 entries; some repeated across lessons).
 - [Detailed lesson-to-code compliance audit](13_WEEK1_LESSON_COMPLIANCE_AUDIT.md).
 - Core harness layers are **Orchestration, Context Management, Tool Integration, Verification, Operations**; UI is outside the five-layer harness core.
-- **Do not conflate** model-driven LangChain Agent/Subagent with deterministic LangGraph subgraphs; Sales/Inventory/Supervisor are currently fixed scoped analytics paths.
+- **Do not conflate** model-directed LangChain Supervisor (full mode, provider not yet verified) with deterministic LangGraph SQL subgraphs or offline fallback.
 - **Do not conflate** local SSE app events with LangSmith nested run/trace/thread evidence, or ROI estimates with provider-measured costs.
 
+
+## Week 1 runtime hardening and future-week deferrals (2026-10-28)
+
+- [x] Single-process session mutation guard: simultaneous requests to one session return HTTP 409 (or a `session_busy` SSE error); separate sessions remain independent.
+- [x] Session deletion logically removes LangGraph checkpoint state first; failed cleanup keeps the chat session and returns 503.
+- [x] Minimal resilience: provider-call timeout configurable (default 20 s), one provider retry, up to two attempts on transient read-only SQL node errors.
+- [ ] Full-mode compiled graph, LangSmith and RAGAS require real provider/runtime evidence; local tests are not substitutes.
+- **Deferred:** advanced retries, whole-request cancellation, distributed locking, and long-term memory (Week 2); approval/RBAC/advanced cost governance (Week 3); write-side orders/pricing/fulfilment (Week 4).
 
 ## Code hardening completion (2026-10-28)
 
