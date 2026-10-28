@@ -55,7 +55,10 @@ def plan_chunks(paths: list[Path] | None = None, *, strict: bool = True) -> tupl
             if len(chunks) > 1500:
                 raise ValueError('Document exceeds chunk budget')
             documents[relative] = chunks
-        except (OSError, UnicodeError, ValueError, ImportError, KeyError, IndexError, RuntimeError, zipfile.BadZipFile) as exc:
+        except Exception as exc:
+            # Format parsers raise their own exception families (PDF, ZIP, XML).
+            # Strict indexing fails; non-strict lexical mode records the failed
+            # document but never silently treats it as trusted content.
             # Parser exceptions may contain source snippets; don't expose them
             # in user-facing/indexing error summaries.
             reason = type(exc).__name__
