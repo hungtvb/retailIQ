@@ -28,18 +28,20 @@ Different sources define "harness" differently. We use a **clear mapping** to th
 | Agent/tool usage | LangChain `@tool` wraps SQL lookup; LLM classifies the intent, then graph dispatches | This is a **tool-using routed workflow**, not a general autonomous tool-selection loop |
 | Router | **Implemented in source**: route `stock/revenue/top/product` | Predictable routing to authoritative data source |
 | Custom workflow | **Implemented in source**: LangGraph `StateGraph` + conditional edges | Hybrid deterministic business calculations + generative product answer |
-| Subagent | **Not implemented in W1** | Week 4 will introduce domain-specialist agents |
-| Handoff | **Not implemented in W1** | Week 4 agent-to-agent coordination, with defined transfer control |
-| Skill | **Not implemented as an agent skill** | Knowledge documents are not the same as on-demand executable skills |
-| Multi-agent | **Not implemented in W1** | Five mandated agents are a Week 4 deliverable, not required to be faked in W1 |
+| Subagent | **Implemented in W1 FDE extension**: Supervisor delegates to scoped Sales/Inventory LangGraph subgraphs via LangChain tools | Week 4 expands to all mandated specialist agents |
+| Handoff | **Implemented in W1 FDE extension**: Sales Agent → Inventory Agent via LangGraph `Command(goto=...)` | Week 4 extends inter-agent transfers |
+| Skill | **Implemented in W1 FDE extension**: allowlisted, on-demand role policy instructions in `retailiq/skills/` | Skills differ from product RAG documents |
+| Multi-agent | **Implemented as a focused read-only W1 scenario**: Retail Supervisor and three specialists | Week 4 still requires five mandated autonomous retail agents |
 
-**Why not multi-agent now?** Week 1 questions partition into two data sources and only require one router; adding a supervisor or handoffs would add calls, cost and failure points without clear user value. This illustrates selection among learned patterns. See LangChain multi-agent pattern documentation for the same distinctions.
+**FDE-driven choice:** Week 1 still routes simple questions to single specialists; a cross-domain question about bestselling items and available stock now invokes a Retail Supervisor with Sales and Inventory subagents. A follow-up can trigger an actual Sales→Inventory handoff. This makes each pattern demonstrable without implementing Week 4 write-side order/price operations. Details: `docs/10_FDE_MultiAgent_Session_Implementation.md`.
+
+**Chat sessions:** the UI and `/api/sessions` persist local conversations in a separate SQLite DB and pass bounded recent history/active agent into the graph. This is application-level persistence, not a LangGraph checkpointer. No production identity or tenant protection is implied.
 
 ## 4. LangSmith operations
 When `LANGSMITH_TRACING=true` with a valid separate `LANGSMITH_API_KEY`, show a trace containing the graph root run, routing, the executed tool path and LLM calls. Capture execution ID, latency and token usage where available, plus the timestamp and project. Use run metadata and compare 4 sample questions. **No live LangSmith trace is available in this environment.** Offline mode does NOT create a LangGraph trace.
 
 ## 5. Risk and limitations
-Synthetic data are a repeatable test fixture, not representative operational data. Stock and sales snapshots are fixed, so answer freshness does not reflect production inventory. LLM routing may misclassify ambiguous queries; product RAG may retrieve irrelevant text or hallucinate. There is no user authentication, role-based access, query cost enforcement or production-grade controls in Week 1. RAGAS/LangSmith cannot be marked PASS until real runs are captured.
+Synthetic data are a repeatable test fixture, not representative operational data. Stock and sales snapshots are fixed, so answer freshness does not reflect production inventory. LLM routing may misclassify ambiguous queries; product RAG may retrieve irrelevant text or hallucinate. There is no user authentication, tenant segregation, role-based access, query cost enforcement or production-grade controls in Week 1. The local session API must not be exposed publicly. RAGAS/LangSmith cannot be marked PASS until real runs are captured.
 
 ## 6. How to speak about cost/ROI
 Use `scripts/cost_roi.py` and `docs/08_Agent_Cost_ROI.md`. Do not call the scenario's fictional labor rates measured savings, or use sample dollar-per-token rates as a vendor quote. Time-to-payback only exists when verified monthly net benefit is positive.
