@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f7f8fa">
-  <meta name="description" content="RetailIQ: inventory, sales and product analytics workspace.">
-  <title>RetailIQ — Retail analytics</title>
+  <meta name="description" content="RetailIQ conversational retail analytics with evidence and agent execution.">
+  <title>RetailIQ — Conversational Analytics</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -29,13 +29,13 @@
 
       <div class="workspace" id="workspace">
         <nav class="workspace-tabs" aria-label="RetailIQ views" role="tablist">
-          <button id="tab-assistant" type="button" role="tab" aria-selected="true" aria-controls="assistant-panel">Data Query</button>
+          <button id="tab-assistant" type="button" role="tab" aria-selected="true" aria-controls="assistant-panel">Assistant</button>
           <button id="tab-roi" type="button" role="tab" aria-selected="false" aria-controls="roi-panel">Cost &amp; ROI</button>
           <button id="tab-logs" type="button" role="tab" aria-selected="false" aria-controls="logs-panel">Execution Logs</button>
         </nav>
 
         <section id="assistant-panel" class="panel" role="tabpanel" aria-labelledby="tab-assistant">
-          <div class="section-heading"><h1>Query workspace</h1><span class="subtle-suffix">READ ONLY · SQL + PRODUCT RAG</span></div>
+          <div class="section-heading"><h1>Retail assistant</h1><span class="subtle-suffix">MULTI-TURN CHAT · SOURCED DATA</span></div>
           <div class="chat-workspace-tools">
             <div class="session-controls">
               <label for="chat-session-picker" class="sr-only">Conversation</label>
@@ -43,36 +43,50 @@
               <button type="button" id="chat-new" class="chat-action-button">+ New chat</button>
               <button type="button" id="chat-delete" class="chat-action-button chat-delete-button" aria-label="Delete selected chat">Delete</button>
             </div>
-            
           </div>
-          <details class="history-drawer"><summary>Conversation history</summary><div id="chat-history" class="chat-history" aria-label="Conversation history" aria-live="polite"></div></details>
-          <form id="ask-form" class="query-form">
-            <label class="sr-only" for="q">Your retail question</label>
-            <div class="query-field"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><circle cx="10.7" cy="10.7" r="6.9" stroke="currentColor" stroke-width="1.7"/><path d="m16 16 5.3 5.3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
-              <input id="q" type="text" maxlength="500" autocomplete="off" placeholder="Ask about stock, revenue, top sellers or products…" required minlength="3">
-            </div>
-            <button id="ask-submit" class="sunshine-button" type="submit">Run query <span aria-hidden="true">↗</span></button>
-          </form>
-          <div class="suggestions" aria-label="Example retail questions"><span class="suggestions-label">QUICK QUERIES</span>
-            <div class="suggestion-pills">
-              <button type="button" data-question="How many units of AlphaBook Pro 14 are currently in stock?">Stock levels</button>
-              <button type="button" data-question="What is the revenue this month?">Monthly revenue</button>
-              <button type="button" data-question="Which products are top sellers?">Top sellers</button>
-              <button type="button" data-question="Tell me about USB-C GaN Charger 65W">Product knowledge</button>
-              <button type="button" data-question="Which top seller needs a replenishment review based on stock?">Multi-agent review</button>
-            </div>
-          </div>
-          <div class="response-grid">
-            <article class="paper-card answer-card" aria-labelledby="answer-title">
-              <div class="card-topline"><h2 id="answer-title">Answer</h2><span id="response-state" class="small-status"><span class="status-dot"></span> READY</span></div>
-              <div id="answer" class="answer" role="status" aria-live="polite">Run a query to view the result.</div>
-              <div class="answer-metrics" aria-label="Result metadata">
-                <div><span>Agent</span><strong id="summary-agent">—</strong></div>
-                <div><span>Data period</span><strong id="summary-period">—</strong></div>
-                <div><span>Execution</span><strong id="summary-mode">—</strong></div>
+          <div class="conversation-workspace">
+            <article class="paper-card conversation-card" aria-label="RetailIQ conversation">
+              <div class="card-topline conversation-heading"><h2>Conversation</h2><span id="response-state" class="small-status"><span class="status-dot"></span> READY</span></div>
+              <div id="chat-thread" class="chat-thread" aria-label="Chat messages">
+                <div id="chat-history" class="chat-history" role="log" aria-label="Previous messages" aria-live="polite" aria-relevant="additions"></div>
+                <div id="active-response" class="chat-message chat-message-assistant chat-active-answer">
+                  <span class="chat-message-label">RETAILIQ</span>
+                  <div id="answer" class="answer" role="status" aria-live="polite">Ask a retail question, then continue with a follow-up.</div>
+                </div>
+              </div>
+              <div class="chat-composer">
+                <div class="suggestions" aria-label="Suggested questions"><span class="suggestions-label">SUGGESTED</span>
+                  <div class="suggestion-pills">
+                    <button type="button" data-question="How many units of AlphaBook Pro 14 are currently in stock?">Stock levels</button>
+                    <button type="button" data-question="What is the revenue this month?">Revenue</button>
+                    <button type="button" data-question="Which products are top sellers?">Top sellers</button>
+                    <button type="button" data-question="How many units of the top seller are in stock?">Follow up: stock</button>
+                    <button type="button" data-question="Tell me about USB-C GaN Charger 65W">Product details</button>
+                    <button type="button" data-question="Which top seller needs a replenishment review based on stock?">Replenishment</button>
+                  </div>
+                </div>
+                <form id="ask-form" class="query-form">
+                  <label class="sr-only" for="q">Message RetailIQ</label>
+                  <div class="query-field"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="m21 3-8.4 18-2.6-7-7-2.6L21 3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+                    <input id="q" type="text" maxlength="500" autocomplete="off" placeholder="Ask a question or follow up…" required minlength="3">
+                  </div>
+                  <button id="ask-submit" class="sunshine-button" type="submit">Send <span aria-hidden="true">↗</span></button>
+                </form>
               </div>
             </article>
-            <article class="paper-card evidence-card" aria-labelledby="trace-title">
+            <aside class="insights-column" aria-label="Evidence for the latest response">
+              <div class="insight-summary" aria-label="Agent result metadata">
+                <div><span>Agent</span><strong id="summary-agent">—</strong></div>
+                <div><span>Period</span><strong id="summary-period">—</strong></div>
+                <div><span>Mode</span><strong id="summary-mode">—</strong></div>
+              </div>
+              <section class="paper-card data-card" aria-labelledby="data-heading">
+            <div class="card-topline data-topline"><div class="data-title"><h2 id="data-heading">Data records</h2><span id="data-count" class="data-count">0 rows</span></div><button type="button" id="export-csv" class="secondary-button" disabled>Export CSV</button></div>
+            <div id="records-empty" class="records-empty">Query results will appear here as a table.</div>
+            <div id="records-table-wrap" class="table-scroll" hidden><table id="records-table" aria-label="SQL query results"></table></div>
+            <div id="sources-section" class="sources-section" hidden><strong>Product sources</strong><ul id="source-list"></ul></div>
+          </section>
+              <article class="paper-card evidence-card" aria-labelledby="trace-title">
               <div class="card-topline"><h2 id="trace-title">Execution</h2><span id="live-trace-state" class="live-trace-state">IDLE</span></div>
               <div class="live-trace" id="live-trace-panel">
                 <div class="live-trace-heading"><span class="live-trace-title"><span id="live-indicator" class="live-indicator"></span> LIVE AGENT ACTIVITY</span><span id="live-trace-count">0 events</span></div>
@@ -85,13 +99,8 @@
                 <details class="raw-details"><summary>Raw response records</summary><pre id="raw">{}</pre></details>
               </details>
             </article>
+            </aside>
           </div>
-          <section class="paper-card data-card" aria-labelledby="data-heading">
-            <div class="card-topline data-topline"><div class="data-title"><h2 id="data-heading">Data records</h2><span id="data-count" class="data-count">0 rows</span></div><button type="button" id="export-csv" class="secondary-button" disabled>Export CSV</button></div>
-            <div id="records-empty" class="records-empty">Query results will appear here as a table.</div>
-            <div id="records-table-wrap" class="table-scroll" hidden><table id="records-table" aria-label="SQL query results"></table></div>
-            <div id="sources-section" class="sources-section" hidden><strong>Product sources</strong><ul id="source-list"></ul></div>
-          </section>
           <p class="data-disclaimer">Synthetic retail data · Offline mode is not live LangGraph / Chroma execution.</p>
         </section>
 
