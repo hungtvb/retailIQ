@@ -7,8 +7,8 @@ from pptx.enum.shapes import MSO_SHAPE
 import re
 
 ROOT=Path(__file__).resolve().parents[1]
-BASE=ROOT/'slides/RetailIQ_Flezi_Week1_Demo.pptx'
-OUT=ROOT/'slides/RetailIQ_Flezi_Week1_Checklist_Aligned.pptx'
+BASE=ROOT/'docs/slides/RetailIQ_Flezi_Week1_Demo.pptx'
+OUT=ROOT/'docs/slides/RetailIQ_Flezi_Week1_Checklist_Aligned.pptx'
 prs=Presentation(BASE)
 BG='0C1424'; CARD='17253B'; DARK='21344D'; TEXT='EAF2FF'; MUTE='9CADC6'; TEAL='72DED1'; GOLD='F4BF77'; LINE='30425B'
 

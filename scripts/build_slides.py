@@ -86,5 +86,5 @@ s=base(9,'Week 1 demo readiness','Deliver a scoped, reproducible local proof —
 for i,(a,b) in enumerate([('READY','SQLite seed + local API / browser'),('READY','6 deterministic tests passing'),('READY','Four demo question flows'),('TO VERIFY','LangGraph + Chroma full-mode run'),('TO VERIFY','RAGAS scores + LangSmith trace')]):
  y=2.34+i*.74;shape(s,.88,y,11.5,.59,CARD);txt(s,a,1.12,y+.12,2,.3,13,TEAL if a=='READY' else GOLD,True);txt(s,b,3.2,y+.1,8.8,.36,15,TEXT)
 shape(s,.87,6.37,11.55,.43,'#204A55');txt(s,'DEMO GOAL: accurate stock + revenue + bestsellers + sourced product answer.',1.1,6.43,11,.3,12,TEXT,True)
-path=Path(__file__).resolve().parents[1]/'slides'/'RetailIQ_Flezi_Week1_Demo.pptx';path.parent.mkdir(exist_ok=True);R.save(path)
+path=Path(__file__).resolve().parents[1]/'docs'/'slides'/'RetailIQ_Flezi_Week1_Demo.pptx';path.parent.mkdir(parents=True,exist_ok=True);R.save(path)
 print(path,len(R.slides),'slides')

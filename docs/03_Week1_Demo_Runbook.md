@@ -18,16 +18,9 @@ Follow `docs/05_Huong_dan_OpenAI_Compatible_VI.md`: configure the shared OpenAI-
 As-of fixed 2026-10-28 for seed repeatability. Net revenue excludes taxes/shipping/returns. Stock available is on_hand minus reserved, not on_hand alone.
 
 
-## Official checklist presentation (additional slides)
+## Presentation deck
 
-Use `slides/RetailIQ_Flezi_Week1_Checklist_Aligned.pptx` for the graded demo. The additional slides cover:
-- FDE: domain discovery → scoped prototype → feedback, with synthetic-data disclosure
-- 5 harness layers and corresponding RetailIQ modules
-- Router and custom-workflow patterns implemented; chain/agent/subagent/handoff/skill distinctions
-- Token-based cost model and illustrative 3.75-month payback (not real business results)
-- 43 local tests, open full-mode E2E, RAGAS and LangSmith verification gates
-
-Present the pattern comparison and ROI slides quickly; reserve most demo time for the four questions and evidence. If LangSmith/RAGAS traces are unavailable, state they are not yet verified rather than presenting fabricated screenshots or scores.
+Use [`docs/slides/RetailIQ_Flezi_Week1_Checklist_Aligned.pptx`](slides/RetailIQ_Flezi_Week1_Checklist_Aligned.pptx) for the graded demo. Slide contents, build instructions, and speaking notes are in [`docs/slides/README.md`](slides/README.md). Keep live LangSmith/RAGAS gates marked unverified until real evidence is captured.
 
 ## Clean setup, mode selection, reset, and troubleshooting
 
@@ -62,7 +55,8 @@ In full mode, validate credentials with one real chat and one embedding request:
 ```bash
 python -m scripts.check_openai --live
 python -m scripts.index_rag --dry-run
-python -m scripts.index_rag
+python -m scripts.index_products
+python -m scripts.full_e2e
 ```
 
 `--dry-run` parses/chunks local knowledge files without an API call. The non-dry run sends embedding requests and writes the local Chroma index under `.chroma/`; provider usage may incur cost. In offline mode, do not run the network indexing command.
@@ -84,7 +78,7 @@ For Week 1 acceptance, QA must also capture a real LangSmith trace and a real RA
 - To restore the synthetic retail fixture, run `python -m scripts.seed` after backing up any custom `data/retailiq.sqlite3` content.
 - To erase local chat sessions, stop the app and delete `data/chat_sessions.sqlite3` (or the file selected by `RETAILIQ_CHAT_DB`). This permanently deletes saved demo conversations.
 - To clear local diagnostics, stop the app and delete files in `data/logs/` (or the configured `RETAILIQ_LOG_FILE` and rotated backups).
-- To rebuild vector data, stop the app and remove `.chroma/`, then run `python -m scripts.index_rag`. This deletes the local index and requires re-embedding the knowledge files.
+- To rebuild vector data, stop the app and remove `.chroma/`, then run `python -m scripts.index_products`. This deletes the local index and requires re-embedding the knowledge files.
 - Keep `.env` local. Do not include keys in demo artifacts.
 
 ### Troubleshooting
@@ -93,7 +87,7 @@ For Week 1 acceptance, QA must also capture a real LangSmith trace and a real RA
 |---|---|---|
 | Full mode reports missing configuration | `.env` absent/blank or not loaded before startup | Confirm mode and provider variables are set locally; restart Uvicorn. Never paste values into logs/issues. |
 | Provider reports model/deployment not found | Azure deployment or gateway model identifier differs from defaults | Set `CHAT_MODEL` / `EMBEDDING_MODEL` to deployed names; rerun `python -m scripts.check_openai --live`. |
-| Chat works but product search/index fails | Embedding deployment mismatch, provider/network issue, or unreadable source | Run `python -m scripts.index_rag --dry-run`; review parse errors; confirm model and credentials; retry live indexing. |
+| Chat works but product search/index fails | Embedding deployment mismatch, provider/network issue, or unreadable source | Run `python -m scripts.index_rag --dry-run`; review parse errors; confirm model and credentials; retry with `python -m scripts.index_products`. |
 | Product answer is missing or irrelevant | Source outside configured folders, stale index, or weak retrieval | Check dry-run file/chunk counts and source paths; allow full-mode sync or rebuild `.chroma/`; review returned `contexts`. |
 | No LangSmith trace appears | Tracing disabled, key missing/invalid, or request ran offline | Use full mode, set tracing true and the separate local key, restart, issue a real request, and check the configured project. |
 | RAGAS command fails | Full dependencies/provider credentials missing or judge call failed | Install `requirements-full.txt`, run provider live check, rerun `python -m scripts.eval_ragas`, and report failures without inventing a score. |
