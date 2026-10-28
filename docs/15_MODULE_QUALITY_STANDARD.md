@@ -60,6 +60,17 @@
 - **Verified CI baseline:** GitHub Actions run 40708549592 — 200 Python tests + 6 Node tests PASS; commits after that run require their own fresh CI verification.
 - **Not claimed:** RAGAS semantic correctness, prompt-injection immunity, measured live vector relevance, production multi-process indexing or access control.
 
+## Agent Harness / Orchestration — runtime reliability hardening
+
+- **Router:** invalid/missing structured model classification and provider errors use deterministic fallback; cross-domain business intent is not silently overridden.
+- **Context:** bounded user-authored turns only; do not take a SKU from an assistant or untrusted RAG response. Intent and agent must agree at every terminal result.
+- **Graph:** explicit destinations without mutating global function annotations; compiled graph regression covers failure recovery and separate checkpoint thread IDs.
+- **SQL retry:** at most two attempts for transient locked/busy/timeout on idempotent SQL specialist paths; no retry for domain-data errors.
+- **Supervisor:** Sales must run before Inventory, exactly once each; inventory SKU must match verified top seller; no output is accepted from unverified/incomplete delegation.
+- **Checkpoint:** managed owned SQLite connection with explicit close and atexit cleanup; fail safely if database path changes during the process instead of reusing wrong state.
+- **Tests and residual-risk disclosures:** [Agent Harness Hardening](18_AGENT_HARNESS_HARDENING.md) and `tests/test_orchestration_hardening.py`, `tests/test_supervisor_contract.py`.
+- **Not claimed:** distributed checkpoint safety, whole-graph cancellation/deadline, live provider route accuracy or long-term memory.
+
 ## Next modules to harden, in dependency order
 
 | Module | Critical contract / failure modes | Tests before acceptance |
