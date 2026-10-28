@@ -29,11 +29,41 @@ def do(q,category):
   rows=top();return {'answer':f'Top sellers by units in {month()} (completed orders): '+ '; '.join(f"{i+1}. {r['name']} ({r['sku']}): {r['units_sold']} units" for i,r in enumerate(rows))+'.','records':rows,'contexts':[]}
  docs=retrieve(q)
  return {'answer':f"Source: {docs[0]['source']}\n{docs[0]['text']}" if docs else 'No matching product documentation.','records':[],'contexts':docs}
-def offline(q):
- cat=intent(q)
- return {'question':q,'intent':cat,'mode':'OFFLINE deterministic fallback — not LangGraph/VectorDB', 'as_of':month(),**do(q,cat)}
-def ask(q):
+def offline(q, *, history=None, active_agent=''):
+ from .orchestration.week1_graph import classify, resolve_followup, AGENT_FOR_INTENT
+ from .orchestration.agents import replenish_review
+ from .skills import skill_for
+ category=classify(q)
+ effective=resolve_followup(q,history)
+ result=replenish_review_offline() if category=='decision' else do(effective,category)
+ agent=AGENT_FOR_INTENT[category]
+ handoff=({'from':'sales_agent','to':'inventory_agent',
+           'reason':'Follow-up inventory question'}
+          if active_agent=='sales_agent' and category=='stock' else None)
+ return {'question':q,'intent':category,
+         'mode':'OFFLINE deterministic fallback — not LangGraph/VectorDB',
+         'as_of':month(),'active_agent':agent,'handoff':handoff,
+         'subagents':['sales_agent','inventory_agent'] if category=='decision' else [],
+         'skill':skill_for(category), **result}
+
+def replenish_review_offline():
+ # No LangGraph is claimed in offline mode. The same transparent policy is
+ # exercised with local reviewed SQL for stakeholder demonstration.
+ from .domain.analytics import top,inventory
+ rows=top()
+ if not rows:return {'answer':'No completed-order data','records':[],'contexts':[]}
+ leader=rows[0]
+ stocks=inventory(leader['sku'])
+ available=sum(x['available'] for x in stocks)
+ priority='REVIEW replenishment priority' if available<leader['units_sold'] else 'No immediate priority under this heuristic'
+ return {'answer':f"Synthetic {month()} decision review: {leader['name']} sold {leader['units_sold']} units; {available} available. {priority}. Not a forecast or purchase order.",
+         'records':[leader,*stocks],'contexts':[]}
+
+def ask(q, *, history=None, active_agent=''):
  if os.getenv('RETAILIQ_MODE')=='full':
   from .graph import run
+  if history or active_agent:
+   return run(q,history=history or [],active_agent=active_agent)
   return run(q)
- return offline(q)
+ return offline(q,history=history,active_agent=active_agent)
+
