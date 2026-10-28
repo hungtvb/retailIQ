@@ -13,7 +13,7 @@ import pytest
 from retailiq.orchestration import week1_graph as graph
 
 
-def _router_model(intent: str | None = None, error: Exception | None = None):
+def _router_model(intent: str | None = 'AUTO', error: Exception | None = None):
     class RouterModel:
         def with_structured_output(self, schema):
             return self
@@ -21,8 +21,8 @@ def _router_model(intent: str | None = None, error: Exception | None = None):
         def invoke(self, messages):
             if error:
                 raise error
-            return SimpleNamespace(intent=intent if intent is not None
-                                   else graph.classify(messages[-1][1]))
+            return SimpleNamespace(intent=graph.classify(messages[-1][1])
+                                   if intent == 'AUTO' else intent)
     return RouterModel()
 
 
