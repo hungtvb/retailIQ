@@ -4,8 +4,9 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from retailiq.assistant import ask
-from retailiq.infrastructure.sessions import history, add_turn, get_session
+from retailiq.infrastructure.sessions import history, add_turn, get_session, session_mutation, SessionBusyError
 from pathlib import Path
+from contextlib import nullcontext
 import time
 import re
 import json
@@ -77,18 +78,20 @@ def home():
 
 def _perform_turn(data: AskBody) -> dict:
     """One shared execution path for ordinary POST and live streamed POST."""
-    current = None
-    if data.session_id is not None:
-        current = get_session(data.session_id, include_messages=False)
-        if current is None:
-            raise KeyError('Session not found')
-    with observed('chat.turn', execution_mode='full' if os.getenv('RETAILIQ_MODE') == 'full' else 'offline'):
-        if data.session_id is None:
-            result = ask(data.question)
-        else:
-            prior = history(data.session_id, limit=12)
-            result = ask(data.question, history=prior, active_agent=current['active_agent'])
-            add_turn(data.session_id, data.question, result)
+    guard = session_mutation(data.session_id) if data.session_id else nullcontext()
+    with guard:
+        current = None
+        if data.session_id is not None:
+            current = get_session(data.session_id, include_messages=False)
+            if current is None:
+                raise KeyError('Session not found')
+        with observed('chat.turn', execution_mode='full' if os.getenv('RETAILIQ_MODE') == 'full' else 'offline'):
+            if data.session_id is None:
+                result = ask(data.question)
+            else:
+                prior = history(data.session_id, limit=12)
+                result = ask(data.question, history=prior, active_agent=current['active_agent'])
+                add_turn(data.session_id, data.question, result)
     log_event('chat.turn_result', agent=result.get('active_agent'),
               intent=result.get('intent'), skill=result.get('skill'),
               route_fallback=result.get('route_fallback'),
@@ -104,6 +107,8 @@ def answer(data: AskBody):
             return _perform_turn(data)
         except KeyError:
             raise HTTPException(status_code=404, detail='Session not found') from None
+        except SessionBusyError:
+            raise HTTPException(status_code=409, detail='Session is processing another request') from None
         except Exception as error:
             # Stack frame locations (not prompt content) are available in local JSONL.
             log_exception('chat.execution_failed', error)
@@ -152,6 +157,10 @@ def stream_answer(data: AskBody, request: Request):
             try:
                 result = _perform_turn(data)
                 enqueue_final('result', result)
+            except SessionBusyError:
+                enqueue_final('error', {'code': 'session_busy',
+                                       'message': 'This chat is already processing another request.',
+                                       'request_id': rid})
             except Exception as error:
                 log_exception('chat.execution_failed', error)
                 enqueue_final('error', {'code': 'execution_failed',
