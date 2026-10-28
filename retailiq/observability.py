@@ -78,6 +78,10 @@ def request_id() -> str:
     return _REQUEST_ID.get() or ''
 
 
+def session_id() -> str:
+    return _SESSION_ID.get() or ''
+
+
 @contextmanager
 def bind_context(*, request: str | None = None, session: str | None = None):
     tokens = []
