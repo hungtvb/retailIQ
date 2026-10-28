@@ -144,3 +144,24 @@ def test_oversized_answer_rejected_atomically(client):
     with pytest.raises(ValueError, match='too long'):
         sessions.add_turn(sid, 'q' * 501, {'answer': 'OK'})
     assert client.get(f'/api/sessions/{sid}').json()['messages'] == []
+
+
+def test_sqlite_connection_is_closed_when_initialization_raises(tmp_path, monkeypatch):
+    monkeypatch.setenv('RETAILIQ_CHAT_DB', str(tmp_path / 'broken.sqlite3'))
+    closed = []
+
+    class BrokenConnection:
+        row_factory = None
+
+        def execute(self, _sql):
+            raise sqlite3.OperationalError('failed while initializing PRAGMA')
+
+        def close(self):
+            closed.append(True)
+
+    monkeypatch.setattr(sessions.sqlite3, 'connect',
+                        lambda *args, **kwargs: BrokenConnection())
+    with pytest.raises(sqlite3.OperationalError, match='initializing'):
+        with sessions._connect():
+            pytest.fail('Initialization must not succeed')
+    assert closed == [True]
