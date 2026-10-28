@@ -15,6 +15,17 @@
 **Week 1:** Local Inventory & Sales SQL assistant, Product RAG with Chroma, LangGraph routing, RAGAS evaluation, optional LangSmith tracing.  
 **Synthetic data:** 10 products, 3 locations, 30 inventory rows, 120 orders, fixed demo date `2026-10-28`.
 
+## Week 1 hardening — current implementation and gates
+
+- **[Code-fix report](docs/14_WEEK1_CODE_HARDENING.md)** documents the completed patches, caveats and acceptance commands.
+- **Full AI mode:** `pip install -r requirements-full.txt`, configure local `.env`, then `python -m scripts.seed` and **`python -m scripts.index_products`**. Chroma indexing is explicit and no longer performed on every query.
+- **Strict provider E2E:** `python -m scripts.full_e2e` tests five real SQL/RAG/supervisor questions and refuses offline mode. Run `python -m scripts.eval_ragas` and inspect actual LangSmith traces separately.
+- **Multi-agent:** `RETAILIQ_SUPERVISOR_MODE=agentic` is default for full mode; `deterministic` is only for controlled tests. Supervisor uses `create_agent` with scoped Sales and Inventory subagent tools and verifies SQL records before issuing any assessment.
+- **Session persistence:** full-mode graph runs with local SQLite checkpoints (`thread_id=session_id`), plus existing UI chat history. This is not multi-user production persistence.
+- **RAG grounding:** `RETAILIQ_RAG_MIN_RELEVANCE` defaults to `0.45` (uncalibrated). Weak vector contexts are rejected. Product answer requires a retrieved source citation; live faithfulness assessment remains pending.
+- **Observability:** run metadata includes request/session correlation IDs; optional `RETAILIQ_NATIVE_GRAPH_EVENTS=true` forwards LangGraph node updates into the in-chat SSE timeline. This is event streaming, not token streaming.
+- **Testing:** offline regression **82 PASS, 1 SKIP** in the local environment; CI sets `RETAILIQ_REQUIRE_LANGGRAPH=true`, so missing LangGraph must fail instead of silently skipping. External LangSmith/LLM/Chroma/RAGAS E2E evidence remains outstanding.
+
 ## Minimal configuration
 
 For **both chat and embedding**, use the same `OPENAI_BASE_URL` and `OPENAI_API_KEY`. If your gateway recognizes the default model names, these are the only two provider settings you must fill:
