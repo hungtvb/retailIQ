@@ -102,3 +102,11 @@ def test_supervisor_refuses_mismatched_inventory_evidence(monkeypatch):
 def test_supervisor_refuses_incomplete_subagent_delegation(monkeypatch):
     with pytest.raises(ValueError, match='verified sales and inventory'):
         _run(monkeypatch, lambda tools: tools[0].invoke({'query':'top sellers'}))
+
+
+def test_supervisor_rejects_repeated_sales_that_could_overwrite_evidence(monkeypatch):
+    def execute(tools):
+        tools[0].invoke({'query':'top sellers'})
+        tools[0].invoke({'query':'different winner'})
+    with pytest.raises(ValueError, match='already been collected'):
+        _run(monkeypatch, execute)
