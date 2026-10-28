@@ -7,6 +7,7 @@
 - **[Week 1 Lesson 02–05 learning references](docs/00_WEEK1_LESSON_REFERENCES.md)** — the exact 23 course-reading entries supplied by the team.
 - **[Week 1 official-source architecture & pattern audit](docs/13_WEEK1_LESSON_COMPLIANCE_AUDIT.md)** — detailed code alignment, gaps and follow-up acceptance tests.
 - **[Week 1 checklist evidence matrix](docs/09_Week1_Checklist_and_Evidence.md)** — implementation references and unfinished verification gates.
+- **[Module Quality Standard & Chat/Sessions Hardening](docs/15_MODULE_QUALITY_STANDARD.md)** — per-module contracts, failure modes, resource bounds and tests; all provider/live gaps disclosed.
 
 **Important:** Requirements are not completion claims. Real LangGraph/LLM, Chroma, RAGAS, and LangSmith evidence must be verified before reporting full Week 1 acceptance.
 
