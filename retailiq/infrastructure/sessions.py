@@ -13,7 +13,7 @@ from uuid import uuid4
 
 DEFAULT_DB = Path(__file__).resolve().parents[2] / 'data' / 'chat_sessions.sqlite3'
 MAX_SESSION_MESSAGES = 200  # Bounded API response; older messages stay in SQLite.
-MAX_STORED_ANSWER_CHARS = 100_000  # Explicit guard against oversized model output.
+MAX_STORED_ANSWER_CHARS = 20_000  # Explicit guard against oversized model output.
 
 
 # Local single-process demo: prevent overlapping writes to the same conversation.
