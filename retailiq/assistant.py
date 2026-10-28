@@ -16,8 +16,8 @@ def product_sku(q):
  import re
  text=q.casefold()
  matches={p['sku'] for p in products()
-          if re.search(r'(?<![\\w-])'+re.escape(p['sku'].casefold())+r'(?![\\w-])',text)
-          or re.search(r'(?<!\\w)'+re.escape(p['name'].casefold())+r'(?!\\w)',text)}
+          if re.search(r'(?<![\w-])'+re.escape(p['sku'].casefold())+r'(?![\w-])',text)
+          or re.search(r'(?<!\w)'+re.escape(p['name'].casefold())+r'(?!\w)',text)}
  return next(iter(matches)) if len(matches)==1 else None
 def do(q,category):
  if category=='stock':
