@@ -16,17 +16,19 @@
 - **Atomic turn:** one successful request writes one user/assistant pair; failure writes neither.
 - **Same-session concurrency:** reject overlapping local writes; independent sessions operate concurrently.
 - **Memory:** reference-counted session locks disappear after use; session GET returns the latest 200 messages in chronological order and a messages_truncated indicator, without deleting older records in SQLite.
-- **Input limits:** enforce 500-character question and maximum 100,000-character persisted assistant answer.
+- **Input limits:** enforce 500-character question and maximum 20,000-character persisted assistant answer.
 - **Streaming:** maximum 8 active SSE workers; 128 events buffered per stream; fast 503 plus Retry-After on overload; completed worker releases its slot even if response body was never consumed.
 - **Disconnect:** stop enqueueing new events after stream close, but do not claim a synchronous model call can be forcibly cancelled.
 - **Local security:** reject nonlocal peers/Host headers. This is not authentication and is not a safe public deployment.
-- **Regression:** tests/test_chat_module_hardening.py (locks, races, overload, cleanup, host checks, memory bounds, atomic writes).
+- **SQLite lifecycle:** even failure during connection initialization closes the handle; no half-written turns.
+- **Regression:** tests/test_chat_module_hardening.py (locks, races, overload, cleanup, host checks, memory bounds, atomic writes, initialization-failure cleanup).
 
 ### Remaining risks
 
 - Full-request deadline and cancellation are not guaranteed; SDK timeouts bound individual model calls, not an entire workflow.
 - Per-process locking is not a distributed lock; do not claim multi-instance safety.
 - Database retains historical rows by design; retention, pagination and per-tenant quotas remain to design.
+- **Local smoke result:** 80 PASS / 1 SKIP on a reconstructed project snapshot with the Chat/Sessions patches applied, including six new hardening integration tests. This is not a verified CI run of the GitHub HEAD.
 - Real LangGraph + provider E2E, load/soak and production security remain unverified.
 
 ## Next modules to harden, in dependency order
