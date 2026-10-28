@@ -27,22 +27,38 @@ def agentic_replenish_review(question: str) -> dict:
         with observed('agent.subagent', agent='retail_supervisor',
                       subagent='sales_agent', execution_mode='full'):
             result = sales_graph.invoke({'question': query, 'category': 'top'})['result']
+        records = result.get('records')
+        if not isinstance(records, list) or not records:
+            raise ValueError('Sales specialist returned no top-seller evidence')
+        leader = records[0]
+        if not isinstance(leader, dict) or leader.get('sku') not in allowed:
+            raise ValueError('Sales specialist returned an invalid top-selling SKU')
         outputs['sales'] = result
-        return json.dumps({'records': result['records'],
+        return json.dumps({'records': records[:5],
                            'instruction': load_skill('sales_kpi')}, ensure_ascii=False)
 
     @tool
     def inventory_subagent(sku: str) -> str:
         """Delegate an inventory lookup for an explicit product SKU."""
-        if sku not in allowed:
-            raise ValueError('Unknown SKU; use the SKU returned by sales_subagent')
+        if 'sales' not in outputs:
+            raise ValueError('Call sales_subagent before requesting inventory')
+        top_sku = outputs['sales']['records'][0]['sku']
+        if sku != top_sku or sku not in allowed:
+            raise ValueError('Inventory SKU must match the verified top-selling SKU')
+        if 'inventory' in outputs:
+            raise ValueError('Inventory evidence has already been collected')
         with observed('agent.subagent', agent='retail_supervisor',
                       subagent='inventory_agent', execution_mode='full'):
             result = inventory_graph.invoke({
                 'question': f'How many units of {sku} are in stock?'
             })['result']
+        records = result.get('records')
+        if not isinstance(records, list) or not records:
+            raise ValueError('Inventory specialist returned no stock evidence')
+        if any(not isinstance(row, dict) or row.get('sku') != sku for row in records):
+            raise ValueError('Inventory specialist returned a mismatched SKU')
         outputs['inventory'] = result
-        return json.dumps({'records': result['records'],
+        return json.dumps({'records': records[:100],
                            'instruction': load_skill('inventory_availability')},
                           ensure_ascii=False)
 
