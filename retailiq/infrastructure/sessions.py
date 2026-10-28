@@ -68,25 +68,27 @@ def _connect():
     path = _path()
     path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(path, timeout=10)
-    connection.row_factory = sqlite3.Row
-    connection.execute('PRAGMA foreign_keys = ON')
-    connection.execute('PRAGMA busy_timeout = 10000')
-    connection.executescript('''
-    CREATE TABLE IF NOT EXISTS sessions (
-        id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT 'New conversation',
-        active_agent TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS messages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-        role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
-        content TEXT NOT NULL, intent TEXT, agent TEXT,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE INDEX IF NOT EXISTS ix_messages_session ON messages(session_id, id);
-    ''')
     try:
+        # Setup may throw (permission denied / invalid file / busy DB); it must
+        # be inside finally too, or a connection can leak before first yield.
+        connection.row_factory = sqlite3.Row
+        connection.execute('PRAGMA foreign_keys = ON')
+        connection.execute('PRAGMA busy_timeout = 10000')
+        connection.executescript('''
+        CREATE TABLE IF NOT EXISTS sessions (
+            id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT 'New conversation',
+            active_agent TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+            role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+            content TEXT NOT NULL, intent TEXT, agent TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS ix_messages_session ON messages(session_id, id);
+        ''')
         with connection:
             yield connection
     finally:
