@@ -2,7 +2,7 @@
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
 from retailiq.observability import log_event, bind_context
-from retailiq.infrastructure.sessions import create_session, get_session, list_sessions, delete_session
+from retailiq.infrastructure.sessions import create_session, get_session, list_sessions, delete_session, session_mutation, SessionBusyError
 
 router = APIRouter(prefix='/api/sessions', tags=['conversations'])
 
@@ -29,8 +29,21 @@ def session(session_id: str):
 
 @router.delete('/{session_id}', status_code=204)
 def remove_session(session_id: str):
-    if not delete_session(session_id):
-        raise HTTPException(status_code=404, detail='Session not found')
+    try:
+        with session_mutation(session_id):
+            if get_session(session_id, include_messages=False) is None:
+                raise HTTPException(status_code=404, detail='Session not found')
+            # Remove graph state first; if it fails, retain the session for retry.
+            from retailiq.orchestration.week1_graph import delete_session_checkpoints
+            try:
+                delete_session_checkpoints(session_id)
+            except Exception as error:
+                log_event('chat.checkpoint_delete_failed', level='ERROR',
+                          error_type=type(error).__name__)
+                raise HTTPException(status_code=503, detail='Checkpoint cleanup failed') from None
+            delete_session(session_id)
+    except SessionBusyError:
+        raise HTTPException(status_code=409, detail='Session is processing another request') from None
     with bind_context(session=session_id):
         log_event('chat.session_deleted')
     return Response(status_code=204)
