@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 76" role="img" aria-label="RetailIQ logo">
+  <path d="M10 15 31 3a11 11 0 0 1 10 0l21 12a11 11 0 0 1 6 10v27a11 11 0 0 1-6 10L40 74l-10-8-17 2 2-16-6-6V25a11 11 0 0 1 1-10Z" fill="#0b203b"/>
+  <path d="M18 22 34 13a7 7 0 0 1 7 0l16 9v29L39 63l-10-7-9 2 1-9-3-3Z" fill="#fff"/>
+  <path d="M22 42h31" stroke="#0b203b" stroke-width="4" stroke-linecap="round"/>
+  <path d="M23 27 33 22l11 6v11H23Z" fill="#eea13a"/>
+  <path d="M31 27h5" stroke="#0b203b" stroke-width="2.3" stroke-linecap="round"/>
+  <rect x="43" y="27" width="6" height="12" rx="1" fill="#566980"/>
+  <rect x="49" y="31" width="4" height="8" rx="1" fill="#b9c3cf"/>
+  <rect x="23" y="51" width="6" height="7" rx="1.4" fill="#b9c3cf"/>
+  <rect x="31" y="46" width="6" height="13" rx="1.4" fill="#8d9bae"/>
+  <rect x="39" y="48" width="6" height="13" rx="1.4" fill="#526981"/>
+  <rect x="47" y="44" width="6" height="14" rx="1.4" fill="#eea13a"/>
+  <g fill="none" stroke="#eea13a" stroke-width="4" stroke-linecap="round">
+    <path d="M61 3v6M68 11l-4 4M70 24h-5"/>
+  </g>
+</svg>
