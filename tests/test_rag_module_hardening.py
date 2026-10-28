@@ -400,3 +400,41 @@ def test_parser_exception_is_sanitized_in_non_strict_lexical_mode(harness, monke
     with pytest.raises(ValueError, match='RuntimeError') as error:
         indexing.plan_chunks([docs / 'EL-001.md'], strict=True)
     assert 'SECRET' not in str(error.value)
+
+
+def test_global_chunk_limit_blocks_partial_corpus_index(harness, monkeypatch):
+    store, manifest, docs = harness
+    (docs / 'EL-002.md').write_text('NovaPhone 128 GB')
+    monkeypatch.setattr(indexing, 'MAX_TOTAL_CHUNKS', 1)
+    with pytest.raises(ValueError, match='global chunk budget'):
+        indexing.plan_chunks()
+    with pytest.raises(ValueError, match='global chunk budget'):
+        indexing.sync_index(store=store, manifest_path=manifest)
+    assert store.documents == {}
+    assert not indexing._recovery_path(manifest).exists()
+
+
+def test_document_count_limit_prevents_unbounded_folder_indexing(harness, monkeypatch):
+    store, manifest, docs = harness
+    (docs / 'EL-002.md').write_text('NovaPhone X manual')
+    monkeypatch.setattr(indexing, 'MAX_INDEX_FILES', 1)
+    with pytest.raises(ValueError, match='file budget'):
+        indexing.input_paths()
+    with pytest.raises(ValueError, match='file budget'):
+        indexing.sync_index(store=store, manifest_path=manifest)
+
+
+def test_chunk_splitter_rejects_overlong_text_before_accumulating_all_chunks():
+    from retailiq.rag.chunking import split_sections
+    from retailiq.rag.loaders import TextSection
+    with pytest.raises(ValueError, match='chunk budget'):
+        split_sections([TextSection('x' * 151000)], 'data/product_docs/EL-001.md',
+                       chunk_size=100, overlap=0)
+
+
+def test_offline_lexical_retrieval_fails_on_partial_document_ingestion(monkeypatch):
+    from retailiq import retrieval
+    monkeypatch.setattr(retrieval, 'plan_chunks',
+                        lambda **kw: ({}, {'bad.md': 'PdfReadError'}))
+    with pytest.raises(ValueError, match='incomplete'):
+        retrieval.lexical('Tell me about AlphaBook Pro')
