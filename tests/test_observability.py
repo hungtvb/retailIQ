@@ -105,3 +105,13 @@ def test_ui_has_live_observability_filter_and_no_inner_html(client):
     assert 'log-scope' in html and 'log-level' in html
     assert 'loadExecutionLogs' in js and '/api/logs?' in js
     assert 'meta.textContent' in js
+
+def test_dynamic_paths_are_sanitized_and_log_api_is_uncached(client):
+    from retailiq.api.http import _safe_http_path
+    assert _safe_http_path('/api/sessions/' + 'a' * 36) == '/api/sessions/{session_id}'
+    assert _safe_http_path('/api/customer-secret-in-url') == '/api/other'
+    assert _safe_http_path('/api/roi/estimate') == '/api/roi/estimate'
+    response = client.get('/api/logs')
+    assert response.status_code == 200
+    assert response.headers['Cache-Control'] == 'no-store'
+    assert response.headers['X-Content-Type-Options'] == 'nosniff'
