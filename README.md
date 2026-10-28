@@ -50,7 +50,7 @@ The original `python -m scripts.cost_roi` prints an **illustrative estimate to t
 
 For the live presentation, open **Cost & ROI**, modify assisted share from **60%** to **30%**, then click **Calculate estimate**: payback changes from **3.75** to **10.00 months**. At **10%**, the monthly net benefit is negative and payback is **not achieved**.
 
-A visual preview is at `docs/ui_previews/roi_desktop.png`. Browser interactions were checked in Chromium with mock API responses generated from the actual FastAPI calculator; direct loopback browser navigation was restricted in the test container. Unit/API tests are automated and require no external API.
+A visual preview is at `docs/retailiq_cost_roi_ui_preview.png`. Browser interactions were checked in Chromium with mock API responses generated from the actual FastAPI calculator; direct loopback browser navigation was restricted in the test container. Unit/API tests are automated and require no external API.
 
 ## Week 1 demo queries
 
@@ -100,3 +100,17 @@ The `web/` interface follows the supplied **DESIGN 7.md / Pirsch Analytics** sty
 - `GET /assets/styles.css`, `GET /assets/app.js` — served locally by FastAPI.
 
 No backend calculation, SQL query, model setting or ROI business assumption was changed. UI is entirely static and does not read API keys. Run `uvicorn retailiq.api:app --host 127.0.0.1 --port 8000` and open the root URL.
+
+## FDE extension: Multi-Agent + Chat Session Memory
+
+This edition also implements the four Week 1 examples **Router, Subagent, Handoff, Skill** and persists multiple local chat sessions in SQLite. See [`docs/10_FDE_MultiAgent_Session_Implementation.md`](docs/10_FDE_MultiAgent_Session_Implementation.md).
+
+- **Agents:** Retail Supervisor, Sales, Inventory and Product RAG.
+- **Router:** LangGraph conditional `Command` route in full mode.
+- **Subagent:** Supervisor delegates to two scoped LangGraph analyst graphs via LangChain tools for read-only replenishment assessment.
+- **Handoff:** Sales Agent issues `Command(goto='inventory_agent')` on a stock follow-up.
+- **Skills:** four allowlisted business procedures loaded by agent (different from product docs indexed for RAG).
+- **Sessions:** `/api/sessions` CRUD, per-session history, bounded context, browser session picker and delete option.
+- **Data:** chat state stored in `data/chat_sessions.sqlite3`; this local database is ignored by Git and created automatically.
+
+For Week 1 demo, try: `Which top seller needs a replenishment review based on stock?` and then a two-turn sales-to-inventory handoff in the same session. Running with `RETAILIQ_MODE=offline` demonstrates the business logic and session management but **does not execute LangGraph**. Set `RETAILIQ_MODE=full`, install `requirements-full.txt`, configure the provider and LangSmith keys, and run `python -m scripts.eval_ragas` to verify the live AI pipeline.
