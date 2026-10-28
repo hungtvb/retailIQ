@@ -1,5 +1,6 @@
 """SQL adapter invariants: read-only, bounded, correctly closed and predictable failure."""
 import sqlite3
+from contextlib import closing
 
 import pytest
 
@@ -9,7 +10,7 @@ from retailiq.infrastructure import sqlite as adapter
 @pytest.fixture
 def populated_db(tmp_path, monkeypatch):
     path = tmp_path / 'retail.db'
-    with sqlite3.connect(path) as connection:
+    with closing(sqlite3.connect(path)) as connection, connection:
         connection.execute('CREATE TABLE things (id INTEGER PRIMARY KEY, name TEXT)')
         connection.executemany('INSERT INTO things (name) VALUES (?)', [
             ('Product-' + str(i),) for i in range(250)
