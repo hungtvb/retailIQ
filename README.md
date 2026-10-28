@@ -8,6 +8,7 @@
 - **[Week 1 official-source architecture & pattern audit](docs/13_WEEK1_LESSON_COMPLIANCE_AUDIT.md)** — detailed code alignment, gaps and follow-up acceptance tests.
 - **[Week 1 checklist evidence matrix](docs/09_Week1_Checklist_and_Evidence.md)** — implementation references and unfinished verification gates.
 - **[Module Quality Standard & Chat/Sessions Hardening](docs/15_MODULE_QUALITY_STANDARD.md)** — per-module contracts, failure modes, resource bounds and tests; all provider/live gaps disclosed.
+- **[Inventory & Sales Hardening](docs/16_INVENTORY_SALES_HARDENING.md)** — data invariants, reviewed SQL, negative-case coverage and no-evidence behavior.
 
 **Important:** Requirements are not completion claims. Real LangGraph/LLM, Chroma, RAGAS, and LangSmith evidence must be verified before reporting full Week 1 acceptance.
 
