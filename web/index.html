@@ -3,13 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f8f5ed">
-  <meta name="description" content="RetailIQ Copilot: conversational inventory, sales and product intelligence for omnichannel retail.">
-  <title>RetailIQ Copilot — Your retail intelligence workspace</title>
+  <meta name="theme-color" content="#f7f8fa">
+  <meta name="description" content="RetailIQ: inventory, sales and product analytics workspace.">
+  <title>RetailIQ — Retail analytics</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/styles.css">
+  <link rel="stylesheet" href="/assets/data-workspace.css">
   <script defer src="/assets/app.js"></script>
 </head>
 <body>
@@ -21,31 +22,20 @@
         </div>
         <div class="brand-name">RetailIQ <span>Copilot</span></div>
       </div>
-      <div class="header-right">
-        <span class="header-course">FLEZI <span class="header-separator">/</span> DOMAIN 15 <span class="header-separator">/</span> WEEK 01</span>
-        <span class="environment-pill"><span class="status-dot" aria-hidden="true"></span> LOCAL DEMO</span>
-      </div>
+      <div class="header-right"><span class="data-label">ELECTRONICS · SAMPLE DATA</span><span class="environment-pill"><span class="status-dot" aria-hidden="true"></span> LOCAL</span></div>
     </header>
 
     <main>
-      <section class="hero" aria-labelledby="hero-title">
-        <div class="step-badge"><span class="step-number">01</span><span>YOUR RETAIL INTELLIGENCE WORKSPACE</span></div>
-        <h1 id="hero-title">Better retail answers.<br><span class="headline-underlined">Less digging.</span></h1>
-        <p class="hero-subhead">Ask about inventory, revenue, bestsellers, or product knowledge. One clear workspace for your omnichannel data.</p>
-      </section>
 
       <div class="workspace" id="workspace">
         <nav class="workspace-tabs" aria-label="RetailIQ views" role="tablist">
-          <button id="tab-assistant" type="button" role="tab" aria-selected="true" aria-controls="assistant-panel">AI Assistant <span class="tab-hint">/ Query</span></button>
-          <button id="tab-roi" type="button" role="tab" aria-selected="false" aria-controls="roi-panel">Cost &amp; ROI <span class="tab-hint">/ Estimate</span></button>
-          <button id="tab-logs" type="button" role="tab" aria-selected="false" aria-controls="logs-panel">Execution Logs <span class="tab-hint">/ Observe</span></button>
+          <button id="tab-assistant" type="button" role="tab" aria-selected="true" aria-controls="assistant-panel">Data Query</button>
+          <button id="tab-roi" type="button" role="tab" aria-selected="false" aria-controls="roi-panel">Cost &amp; ROI</button>
+          <button id="tab-logs" type="button" role="tab" aria-selected="false" aria-controls="logs-panel">Execution Logs</button>
         </nav>
 
         <section id="assistant-panel" class="panel" role="tabpanel" aria-labelledby="tab-assistant">
-          <div class="section-heading">
-            <div><span class="section-kicker">NATURAL LANGUAGE ANALYTICS</span><h2>Ask RetailIQ anything.</h2></div>
-            <span class="subtle-suffix">SQL + PRODUCT RAG</span>
-          </div>
+          <div class="section-heading"><h1>Query workspace</h1><span class="subtle-suffix">READ ONLY · SQL + PRODUCT RAG</span></div>
           <div class="chat-workspace-tools">
             <div class="session-controls">
               <label for="chat-session-picker" class="sr-only">Conversation</label>
@@ -53,17 +43,17 @@
               <button type="button" id="chat-new" class="chat-action-button">+ New chat</button>
               <button type="button" id="chat-delete" class="chat-action-button chat-delete-button" aria-label="Delete selected chat">Delete</button>
             </div>
-            <span class="chat-session-note">LOCAL SESSION MEMORY · SQLITE</span>
+            
           </div>
-          <div id="chat-history" class="chat-history" aria-label="Conversation history" aria-live="polite"></div>
+          <details class="history-drawer"><summary>Conversation history</summary><div id="chat-history" class="chat-history" aria-label="Conversation history" aria-live="polite"></div></details>
           <form id="ask-form" class="query-form">
             <label class="sr-only" for="q">Your retail question</label>
             <div class="query-field"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><circle cx="10.7" cy="10.7" r="6.9" stroke="currentColor" stroke-width="1.7"/><path d="m16 16 5.3 5.3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
-              <input id="q" type="text" maxlength="500" autocomplete="off" value="How many units of AlphaBook Pro 14 are currently in stock?" placeholder="Ask about stock, sales, or products…" required minlength="3">
+              <input id="q" type="text" maxlength="500" autocomplete="off" placeholder="Ask about stock, revenue, top sellers or products…" required minlength="3">
             </div>
-            <button id="ask-submit" class="sunshine-button" type="submit">Ask RetailIQ <span aria-hidden="true">↗</span></button>
+            <button id="ask-submit" class="sunshine-button" type="submit">Run query <span aria-hidden="true">↗</span></button>
           </form>
-          <div class="suggestions" aria-label="Example retail questions"><span class="suggestions-label">TRY A QUESTION</span>
+          <div class="suggestions" aria-label="Example retail questions"><span class="suggestions-label">QUICK QUERIES</span>
             <div class="suggestion-pills">
               <button type="button" data-question="How many units of AlphaBook Pro 14 are currently in stock?">Stock levels</button>
               <button type="button" data-question="What is the revenue this month?">Monthly revenue</button>
@@ -73,64 +63,60 @@
             </div>
           </div>
           <div class="response-grid">
-            <article class="paper-card answer-card">
-              <div class="card-topline"><span class="micro-label">ASSISTANT RESPONSE</span><span id="response-state" class="small-status"><span class="status-dot"></span> READY</span></div>
-              <div id="answer" class="answer" role="status" aria-live="polite">Your answer will appear here. Choose a sample question or type your own above.</div>
-              <div class="card-bottomline"><span>GROUNDED RETAIL ANSWERS</span><span class="mini-mark" aria-hidden="true">R / IQ</span></div>
-            </article>
-            <article class="paper-card evidence-card">
-              <div class="card-topline"><span class="micro-label">EXECUTION EVIDENCE</span><span class="evidence-icon" aria-hidden="true">↗</span></div>
-              <div class="live-trace" id="live-trace-panel">
-                <div class="live-trace-heading">
-                  <span class="live-trace-title"><span id="live-indicator" class="live-indicator"></span> LIVE AGENT ACTIVITY</span>
-                  <span id="live-trace-state" class="live-trace-state">AWAITING QUESTION</span>
-                </div>
-                <ol id="live-trace-list" class="live-trace-list" aria-label="Live execution events" aria-live="polite" aria-relevant="additions">
-                  <li class="live-trace-empty">Ask a question to watch actual backend events appear.</li>
-                </ol>
-                <div class="live-trace-footer"><span id="live-trace-count">0 events</span><span id="live-trace-request">—</span></div>
+            <article class="paper-card answer-card" aria-labelledby="answer-title">
+              <div class="card-topline"><h2 id="answer-title">Answer</h2><span id="response-state" class="small-status"><span class="status-dot"></span> READY</span></div>
+              <div id="answer" class="answer" role="status" aria-live="polite">Run a query to view the result.</div>
+              <div class="answer-metrics" aria-label="Result metadata">
+                <div><span>Agent</span><strong id="summary-agent">—</strong></div>
+                <div><span>Data period</span><strong id="summary-period">—</strong></div>
+                <div><span>Execution</span><strong id="summary-mode">—</strong></div>
               </div>
-              <details class="trace-details"><summary>Execution summary &amp; sources</summary>
-              <div id="agent-trace" class="agent-trace" aria-label="Agent execution details"></div>
-              <div id="meta" class="execution-meta">Intent, execution mode, query period and source records will appear after a question.</div>
-              <details class="raw-details"><summary>View source records <span aria-hidden="true">+</span></summary><pre id="raw">{}</pre></details>
+            </article>
+            <article class="paper-card evidence-card" aria-labelledby="trace-title">
+              <div class="card-topline"><h2 id="trace-title">Execution</h2><span id="live-trace-state" class="live-trace-state">IDLE</span></div>
+              <div class="live-trace" id="live-trace-panel">
+                <div class="live-trace-heading"><span class="live-trace-title"><span id="live-indicator" class="live-indicator"></span> LIVE AGENT ACTIVITY</span><span id="live-trace-count">0 events</span></div>
+                <ol id="live-trace-list" class="live-trace-list" aria-label="Live execution events" aria-live="polite" aria-relevant="additions"><li class="live-trace-empty">No events yet.</li></ol>
+                <div class="live-trace-footer"><span>Request</span><code id="live-trace-request">—</code></div>
+              </div>
+              <details class="trace-details"><summary>Agent details &amp; raw evidence</summary>
+                <div id="agent-trace" class="agent-trace" aria-label="Agent execution details"></div>
+                <div id="meta" class="execution-meta">No execution yet.</div>
+                <details class="raw-details"><summary>Raw response records</summary><pre id="raw">{}</pre></details>
               </details>
-              <div class="card-bottomline"><span>LIVE EVENTS · REDACTED METADATA ONLY</span></div>
             </article>
           </div>
-          <p class="notice-line"><span class="notice-asterisk">*</span> Synthetic data only. Offline responses do not establish live LangGraph, Chroma, RAGAS or LangSmith execution.</p>
+          <section class="paper-card data-card" aria-labelledby="data-heading">
+            <div class="card-topline data-topline"><div class="data-title"><h2 id="data-heading">Data records</h2><span id="data-count" class="data-count">0 rows</span></div><button type="button" id="export-csv" class="secondary-button" disabled>Export CSV</button></div>
+            <div id="records-empty" class="records-empty">Query results will appear here as a table.</div>
+            <div id="records-table-wrap" class="table-scroll" hidden><table id="records-table" aria-label="SQL query results"></table></div>
+            <div id="sources-section" class="sources-section" hidden><strong>Product sources</strong><ul id="source-list"></ul></div>
+          </section>
+          <p class="data-disclaimer">Synthetic retail data · Offline mode is not live LangGraph / Chroma execution.</p>
         </section>
 
         <section id="logs-panel" class="panel" role="tabpanel" aria-labelledby="tab-logs" hidden>
-          <div class="section-heading">
-            <div><span class="section-kicker">AGENT OBSERVABILITY / LOCAL</span><h2>Every step, in the open.</h2></div>
-            <span class="subtle-suffix">ROTATING JSONL LOGS</span>
-          </div>
-          <div class="illustrative-note"><span class="note-star" aria-hidden="true">✳</span><p><strong>Runtime event logs, not LangSmith traces.</strong> Review routing, handoffs, tool timing and failures without exposing chat content, API keys or stack traces. Full-mode telemetry requires the real LLM pipeline.</p></div>
+          <div class="section-heading"><h1>Execution logs</h1><span class="subtle-suffix">LOCAL JSONL · METADATA ONLY</span></div>
           <article class="paper-card logs-card">
-            <div class="card-topline"><span class="micro-label">01 / EVENT STREAM</span><span class="small-status"><span class="status-dot"></span> LOCAL ONLY</span></div>
+            <div class="card-topline"><span class="micro-label">Events</span><span class="small-status"><span class="status-dot"></span> LOCAL ONLY</span></div>
             <div class="log-controls">
               <label>Scope<select id="log-scope" aria-label="Filter events by chat session"><option value="current">Current chat</option><option value="all">All sessions</option><option value="request">Last request</option></select></label>
               <label>Severity<select id="log-level" aria-label="Filter events by severity"><option value="">All levels</option><option value="INFO">Info</option><option value="WARNING">Warning</option><option value="ERROR">Error</option></select></label>
-              <button id="logs-refresh" type="button" class="sunshine-button log-refresh">Refresh logs <span aria-hidden="true">↻</span></button>
+              <button id="logs-refresh" type="button" class="sunshine-button log-refresh">Refresh <span aria-hidden="true">↻</span></button>
             </div>
             <div class="log-stats"><div><span class="micro-label">EVENTS SHOWN</span><strong id="log-count">—</strong></div><div><span class="micro-label">REQUEST ID</span><code id="log-request-id">—</code></div><div><span class="micro-label">SOURCE</span><strong>LOCAL / JSONL</strong></div></div>
-            <p id="logs-status" class="form-feedback" role="status" aria-live="polite">Select a scope and refresh to inspect execution events.</p>
+            <p id="logs-status" class="form-feedback" role="status" aria-live="polite">Choose filters to inspect events.</p>
             <div id="logs-list" class="logs-list" aria-label="Execution event log" aria-live="polite"><div class="log-empty">No events loaded yet.</div></div>
-            <p class="chart-note">Diagnostics are restricted to local requests. They are not a production audit log. Stack frame locations remain on disk only.</p>
+            <p class="chart-note">Local diagnostics only; not LangSmith traces or a production audit log.</p>
           </article>
         </section>
 
         <section id="roi-panel" class="panel" role="tabpanel" aria-labelledby="tab-roi" hidden>
-          <div class="section-heading">
-            <div><span class="section-kicker">AGENT ECONOMICS</span><h2>Measure the business case.</h2></div>
-            <span class="subtle-suffix">LOCAL SIMULATION</span>
-          </div>
-          <div class="illustrative-note"><span class="note-star" aria-hidden="true">✳</span><p><strong>An illustrative estimate, not measured ROI.</strong> Adjust the assumptions to see what the potential value looks like. Token prices are examples — not live Azure pricing. No external model call is made.</p></div>
+          <div class="section-heading"><h1>Cost &amp; ROI model</h1><span class="subtle-suffix">ILLUSTRATIVE · NOT MEASURED</span></div>
           <div class="roi-layout">
             <article class="paper-card assumptions-card">
-              <div class="card-topline"><span class="micro-label">01 / THE ASSUMPTIONS</span><span class="small-caption">EDITABLE INPUTS</span></div>
-              <h3>Start with your numbers.</h3>
+              <div class="card-topline"><span class="micro-label">Assumptions</span><span class="small-caption">EDITABLE INPUTS</span></div>
+              <h3>Business &amp; model inputs</h3>
               <form id="roi-form">
                 <fieldset><legend>BUSINESS OPERATIONS</legend>
                   <div class="roi-fields">
@@ -152,14 +138,14 @@
                     <label>Embedding USD / 1M<input name="embedding_usd_per_1m" type="number" min="0" step="0.01" required value="0.1"></label>
                   </div>
                 </fieldset>
-                <button id="roi-run" class="sunshine-button roi-button" type="submit">Recalculate estimate <span aria-hidden="true">↗</span></button>
-                <p id="roi-status" class="form-feedback" role="status" aria-live="polite">Use the example data or enter your own assumptions.</p>
+                <button id="roi-run" class="sunshine-button roi-button" type="submit">Recalculate <span aria-hidden="true">↗</span></button>
+                <p id="roi-status" class="form-feedback" role="status" aria-live="polite">Edit inputs to recalculate.</p>
               </form>
             </article>
             <div class="roi-output-column">
               <article class="paper-card results-card">
-                <div class="card-topline"><span class="micro-label">02 / THE OUTCOME</span><span class="small-status"><span class="status-dot"></span> ESTIMATE</span></div>
-                <h3>The numbers at a glance.</h3>
+                <div class="card-topline"><span class="micro-label">Estimated outcomes</span><span class="small-status"><span class="status-dot"></span> ESTIMATE</span></div>
+                
                 <div class="roi-cardgrid">
                   <div class="roi-card"><small>Gross monthly benefit</small><span id="roi-gross" class="roi-value">—</span></div>
                   <div class="roi-card"><small>Net monthly benefit</small><span id="roi-net" class="roi-value">—</span></div>
@@ -168,23 +154,22 @@
                 </div>
               </article>
               <article class="paper-card token-card">
-                <div class="card-topline"><span class="micro-label">03 / AGENT ECONOMICS</span><span class="small-caption">USD / ESTIMATE</span></div>
+                <div class="card-topline"><span class="micro-label">Token costs</span><span class="small-caption">USD / ESTIMATE</span></div>
                 <div class="token-values"><div><small>Monthly token spend</small><span id="roi-token-cost" class="roi-value">—</span></div><div><small>Token spend per request</small><span id="roi-per-request" class="roi-value">—</span></div></div>
                 <p id="roi-cost-breakdown" class="roi-output">Token spending is already included in the operating-budget assumption; it is not deducted twice.</p>
               </article>
               <article class="paper-card sensitivity-card">
-                <div class="card-topline"><span class="micro-label">04 / WHAT IF?</span><span class="small-caption">SENSITIVITY</span></div>
-                <h3>Payback by assisted share.</h3>
+                <div class="card-topline"><span class="micro-label">Sensitivity</span><span class="small-caption">SENSITIVITY</span></div>
+                
                 <div id="roi-sensitivity" class="roi-chart" aria-label="Payback sensitivity chart"></div>
-                <p class="chart-note">Longer bars mean more months to recoup the investment. Zero bars indicate no payback.</p>
+                <p class="chart-note">Payback time by assisted inquiry share.</p>
               </article>
             </div>
           </div>
-          <p class="notice-line"><span class="notice-asterisk">*</span> Synthetic assumptions, not measured LangSmith usage. Replace example token pricing and verify operational baselines before making financial claims.</p>
+          <p class="data-disclaimer">Illustrative assumptions · Token prices and savings are not measured provider or business data.</p>
         </section>
       </div>
     </main>
-    <footer class="site-footer"><span>RetailIQ Copilot <span class="footer-light">/ A domain-first AI study project</span></span><span>FLEZI · WEEK ONE DEMO</span></footer>
   </div>
 </body>
 </html>
