@@ -33,7 +33,15 @@ A local **Cost & ROI** tab now calculates business benefits, estimated LLM and e
 - Handoff: a Sales→Inventory follow-up triggers a graph-level `Command` transfer and auditable metadata.
 - Skill: on-demand allowlisted business instructions; Product Agent injects skill text into its grounding prompt.
 - Chat sessions: local SQLite CRUD and bounded per-conversation context; UI session switching/delete supported.
-- Local regression suite: **67 passed, 1 compiled-graph test module skipped** because LangGraph is unavailable here. GitHub CI installs it and attempts the compiled graph smoke test.
+- Local regression suite: **74 passed, 1 compiled-graph test module skipped (latest local test run)** because LangGraph is unavailable here. GitHub CI installs it and attempts the compiled graph smoke test.
 - Local application observability: request/session correlation IDs, safe JSONL events, bounded rotation, agent/tool durations and loopback-only Execution Logs tab. Tests verify privacy and filtering. This is not LangSmith tracing.
 - Remote LLM/Chroma/RAGAS/LangSmith E2E evidence is still outstanding and should not be claimed PASS.
 \n## Execution Logs acceptance (2026-10-28)\n\n- [x] Application-level structured logging; request ID returned in API headers/body.\n- [x] Session-specific agent/tool/handoff events and local-only event viewer.\n- [x] Failure stack frame locations recorded privately, never returned by API.\n- [x] Tests ensure prompt text and secrets are not written to log file.\n- [ ] LangSmith live trace + model usage; still requires real API credentials.\n\nEvidence: `tests/test_observability.py`, `docs/11_Logging_Observability.md`.\n
+
+## Course reading baseline and strict lesson audit (2026-10-28)
+
+- [Lesson 02–05 sources supplied by the team](00_WEEK1_LESSON_REFERENCES.md) (23 entries; some repeated across lessons).
+- [Detailed lesson-to-code compliance audit](13_WEEK1_LESSON_COMPLIANCE_AUDIT.md).
+- Core harness layers are **Orchestration, Context Management, Tool Integration, Verification, Operations**; UI is outside the five-layer harness core.
+- **Do not conflate** model-driven LangChain Agent/Subagent with deterministic LangGraph subgraphs; Sales/Inventory/Supervisor are currently fixed scoped analytics paths.
+- **Do not conflate** local SSE app events with LangSmith nested run/trace/thread evidence, or ROI estimates with provider-measured costs.
