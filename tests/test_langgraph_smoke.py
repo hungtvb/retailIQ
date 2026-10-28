@@ -55,3 +55,30 @@ def test_compiled_supervisor_invokes_actual_subagents(monkeypatch):
     assert output['subagents'] == ['sales_agent','inventory_agent']
     assert output['skill'] == 'replenishment_review'
     assert 'Not a forecast' in output['answer']
+
+
+def test_sqlite_checkpointer_persists_graph_state_across_calls(monkeypatch, tmp_path):
+    from langgraph.checkpoint.sqlite import SqliteSaver
+    from retailiq.orchestration import week1_graph as g
+
+    class Model:
+        def with_structured_output(self, schema):return self
+        def invoke(self, messages):
+            from types import SimpleNamespace
+            return SimpleNamespace(intent=g.classify(messages[-1][1]))
+
+    monkeypatch.setattr(g,'chat_model',lambda:Model())
+    monkeypatch.setenv('RETAILIQ_SUPERVISOR_MODE','deterministic')
+    config={'configurable':{'thread_id':'retailiq-acceptance-001'}}
+    with SqliteSaver.from_conn_string(str(tmp_path/'checkpoints.sqlite3')) as saver:
+        graph=g.build_graph(checkpointer=saver)
+        sales=graph.invoke({'question':'Which products are top sellers?'},config=config)
+        assert sales['active_agent']=='sales_agent'
+        stock=graph.invoke({
+            'question':'How many units of the top seller are in stock?',
+            'history':[{'role':'user','content':'Which products are top sellers?'}],
+            'previous_agent':'sales_agent','handoff':None
+        },config=config)
+        assert stock['active_agent']=='inventory_agent'
+        assert stock['handoff']['from']=='sales_agent'
+        assert graph.get_state(config).values['active_agent']=='inventory_agent'
