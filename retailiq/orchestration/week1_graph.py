@@ -57,11 +57,16 @@ def resolve_followup(question: str, history: list[dict] | None = None) -> str:
     if 'top seller' in q or 'best seller' in q or 'bán chạy' in q:
         rows = top()
         return question + (' ' + rows[0]['sku'] if rows else '')
-    for message in reversed(history or []):
-        content = message.get('content', '').casefold()
-        for product in products():
-            if product['name'].casefold() in content or product['sku'].casefold() in content:
-                return question + ' ' + product['sku']
+    # The latest explicit user mention outranks incidental names in generated answers.
+    messages = list(reversed(history or []))
+    for role in ('user', 'assistant'):
+        for message in messages:
+            if message.get('role') != role:
+                continue
+            content = message.get('content', '').casefold()
+            for product in products():
+                if product['name'].casefold() in content or product['sku'].casefold() in content:
+                    return question + ' ' + product['sku']
     return question
 
 
