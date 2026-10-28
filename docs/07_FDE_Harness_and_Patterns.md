@@ -16,7 +16,7 @@ Different sources define "harness" differently. We use a **clear mapping** to th
 | Context | Question, typed state, relevant documents and trusted data | `State` in `orchestration/week1_graph.py`; RAG chunks with source metadata; KPI definitions |
 | Execution / Orchestration | Decision and control flow | LangGraph `StateGraph`, router + conditional edges |
 | Tools & Data | Domain access and business operations | Vetted read-only SQL analytics over SQLite; product retrieval via Chroma |
-| Verification / Operations | Evidence, testing, diagnostics, cost controls | pytest; planned/live RAGAS; LangSmith tracing when key is enabled; token/ROI model |
+| Verification / Operations | Evidence, testing, diagnostics, cost controls | pytest; local rotating JSONL events with request/session correlation; planned/live RAGAS; LangSmith tracing when key is enabled; token/ROI model |
 
 **Control boundaries:** SQL must remain read-only and parameterized; untrusted product documents are data not instructions; answer should cite product sources and never invent stock. Do not infer deployed authentication from these local controls.
 
@@ -37,7 +37,10 @@ Different sources define "harness" differently. We use a **clear mapping** to th
 
 **Chat sessions:** the UI and `/api/sessions` persist local conversations in a separate SQLite DB and pass bounded recent history/active agent into the graph. This is application-level persistence, not a LangGraph checkpointer. No production identity or tenant protection is implied.
 
-## 4. LangSmith operations
+## 4. Structured local logging and LangSmith operations
+Local application logging is now implemented in `retailiq/observability.py`: JSONL events, rotating files, per-request IDs, session context, agent and tool durations, safe exception stack frame *locations*, and a read-only loopback-only **Execution Logs** UI. See `docs/11_Logging_Observability.md`. This shows harness operations for the local demo but does **not** replace LangSmith execution traces.
+
+### LangSmith remote traces
 When `LANGSMITH_TRACING=true` with a valid separate `LANGSMITH_API_KEY`, show a trace containing the graph root run, routing, the executed tool path and LLM calls. Capture execution ID, latency and token usage where available, plus the timestamp and project. Use run metadata and compare 4 sample questions. **No live LangSmith trace is available in this environment.** Offline mode does NOT create a LangGraph trace.
 
 ## 5. Risk and limitations
