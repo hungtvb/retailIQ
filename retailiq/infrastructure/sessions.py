@@ -6,10 +6,33 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import sqlite3
+import threading
 from contextlib import contextmanager
 from uuid import uuid4
 
 DEFAULT_DB = Path(__file__).resolve().parents[2] / 'data' / 'chat_sessions.sqlite3'
+
+# Local single-process demo: prevent overlapping writes to the same conversation.
+# Production multi-worker locking/authorization is deliberately deferred.
+_SESSION_LOCKS: dict[str, threading.Lock] = {}
+_LOCK_GUARD = threading.Lock()
+
+
+class SessionBusyError(RuntimeError):
+    """Another request is currently updating this conversation."""
+
+
+@contextmanager
+def session_mutation(session_id: str):
+    with _LOCK_GUARD:
+        lock = _SESSION_LOCKS.setdefault(session_id, threading.Lock())
+    if not lock.acquire(blocking=False):
+        raise SessionBusyError('Session already processing a request')
+    try:
+        yield
+    finally:
+        lock.release()
+
 
 
 def _path() -> Path:
