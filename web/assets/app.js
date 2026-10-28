@@ -5,6 +5,7 @@ const byId = (id) => document.getElementById(id);
 let roiLoaded = false;
 let askInProgress = false;
 let activeSessionId = '';
+let lastRequestId = '';
 
 async function ensureSession() {
   if (activeSessionId) return activeSessionId;
@@ -117,11 +118,15 @@ function showAgentEvidence(data) {
 
 function showPanel(name) {
   const roi = name === 'roi';
-  byId('assistant-panel').hidden = roi;
+  const logs = name === 'logs';
+  byId('assistant-panel').hidden = name !== 'assistant';
   byId('roi-panel').hidden = !roi;
-  byId('tab-assistant').setAttribute('aria-selected', String(!roi));
-  byId('tab-roi').setAttribute('aria-selected', String(roi));
+  byId('logs-panel').hidden = !logs;
+  for (const key of ['assistant', 'roi', 'logs']) {
+    byId('tab-' + key).setAttribute('aria-selected', String(key === name));
+  }
   if (roi && !roiLoaded) { roiLoaded = true; estimateROI(); }
+  if (logs) loadExecutionLogs();
 }
 
 function sample(question) {
@@ -149,6 +154,7 @@ async function ask() {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Request failed (' + response.status + ')');
+    lastRequestId = data.request_id || response.headers.get('X-Request-ID') || '';
     answer.textContent = data.answer || 'No answer available for this question.';
     await refreshSessions();
     await selectSession(sessionId);
@@ -230,16 +236,87 @@ async function estimateROI() {
   } finally { button.disabled = false; }
 }
 
+async function loadExecutionLogs() {
+  const button = byId('logs-refresh');
+  const status = byId('logs-status');
+  const scope = byId('log-scope').value;
+  const params = new URLSearchParams({limit: '100'});
+  const level = byId('log-level').value;
+  if (level) params.set('level', level);
+  if (scope === 'current' && activeSessionId) params.set('session_id', activeSessionId);
+  if (scope === 'request' && lastRequestId) params.set('request_id', lastRequestId);
+  button.disabled = true;
+  status.textContent = 'Reading structured runtime events…';
+  try {
+    // Avoid accidentally showing global logs when no current session/request exists.
+    if ((scope === 'current' && !activeSessionId) || (scope === 'request' && !lastRequestId)) {
+      renderExecutionLogs([]);
+      status.textContent = scope === 'request' ? 'Ask a question first to get a request ID.' : 'Create a chat session first.';
+      return;
+    }
+    const response = await fetch('/api/logs?' + params.toString(), {cache: 'no-store'});
+    if (!response.ok) throw new Error('Logs unavailable (' + response.status + ')');
+    const data = await response.json();
+    renderExecutionLogs(data.events || []);
+    status.textContent = 'Local events only · No prompts, secrets or raw exception stacks exposed.';
+  } catch (error) {
+    status.textContent = error.message;
+    renderExecutionLogs([]);
+  } finally { button.disabled = false; }
+}
+
+function renderExecutionLogs(events) {
+  const list = byId('logs-list');
+  list.replaceChildren();
+  byId('log-count').textContent = String(events.length);
+  byId('log-request-id').textContent = lastRequestId ? lastRequestId.slice(0, 12) + '…' : '—';
+  if (!events.length) {
+    const empty = document.createElement('div');
+    empty.className = 'log-empty';
+    empty.textContent = 'No matching events. Try a retail question, then refresh.';
+    list.appendChild(empty);
+    return;
+  }
+  for (const event of events) {
+    const row = document.createElement('div'); row.className = 'log-entry';
+    const top = document.createElement('div'); top.className = 'log-entry-top';
+    const severity = document.createElement('span');
+    severity.className = 'log-severity level-' + String(event.level || 'INFO').toLowerCase();
+    severity.textContent = event.level || 'INFO';
+    const stamp = document.createElement('time');
+    stamp.textContent = event.timestamp ? new Date(event.timestamp).toLocaleTimeString() : '—';
+    const name = document.createElement('strong'); name.textContent = event.event || 'unknown';
+    top.append(severity, name, stamp);
+    const meta = document.createElement('div'); meta.className = 'log-entry-meta';
+    const parts = [];
+    for (const key of ['agent', 'tool', 'subagent', 'skill', 'intent', 'target_agent', 'duration_ms', 'status', 'status_code', 'error_type', 'execution_mode', 'input_tokens', 'output_tokens']) {
+      if (event[key] !== undefined && event[key] !== null) {
+        parts.push(key.replaceAll('_', ' ') + ': ' + String(event[key]) + (key === 'duration_ms' ? ' ms' : ''));
+      }
+    }
+    meta.textContent = parts.join(' · ') || 'Request event';
+    row.append(top, meta);
+    list.appendChild(row);
+  }
+}
+
 function initRetailIQ() {
   byId('tab-assistant').addEventListener('click', () => showPanel('assistant'));
   byId('tab-roi').addEventListener('click', () => showPanel('roi'));
+  byId('tab-logs').addEventListener('click', () => showPanel('logs'));
+  byId('logs-refresh').addEventListener('click', loadExecutionLogs);
+  byId('log-scope').addEventListener('change', loadExecutionLogs);
+  byId('log-level').addEventListener('change', loadExecutionLogs);
   byId('ask-form').addEventListener('submit', (event) => { event.preventDefault(); ask(); });
   byId('roi-form').addEventListener('submit', (event) => { event.preventDefault(); estimateROI(); });
   document.querySelectorAll('[data-question]').forEach(btn => btn.addEventListener('click', () => sample(btn.dataset.question)));
   // Accessible left/right navigation inside the tab list.
   document.querySelector('.workspace-tabs').addEventListener('keydown', (event) => {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-    const destination = byId(event.target.id === 'tab-roi' ? 'tab-assistant' : 'tab-roi');
+    const tabs = ['tab-assistant', 'tab-roi', 'tab-logs'];
+    const index = tabs.indexOf(event.target.id);
+    const direction = event.key === 'ArrowRight' ? 1 : -1;
+    const destination = byId(tabs[(index + direction + tabs.length) % tabs.length]);
     destination.focus(); destination.click(); event.preventDefault();
   });
   byId('chat-new').addEventListener('click', () => createNewChat().catch(e => alert(e.message)));
