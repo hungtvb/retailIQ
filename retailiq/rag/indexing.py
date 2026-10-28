@@ -113,8 +113,16 @@ def sync_index(*, force: bool = False, store=None, manifest_path: Path | None = 
 
 
 def vector_search(question: str, k: int = 3) -> list[dict]:
-    db, manifest = _vector_store()
-    sync_index(store=db, manifest_path=manifest)
-    matches = db.similarity_search(question, k=k)
+    """Reject weak document matches and abstain when evidence is insufficient.
+
+    Relevance threshold is an uncalibrated starting point; adjust via evaluation.
+    Product index is built separately with scripts/index_products.py.
+    """
+    db, _manifest = _vector_store()
+    threshold = float(os.getenv('RETAILIQ_RAG_MIN_RELEVANCE', '0.45'))
+    if not (0 <= threshold <= 1):
+        raise ValueError('RETAILIQ_RAG_MIN_RELEVANCE must be between 0 and 1')
+    matches = db.similarity_search_with_relevance_scores(question, k=k)
     return [{'source': d.metadata.get('source', 'unknown'), 'text': d.page_content,
-             'metadata': d.metadata} for d in matches]
+             'metadata': d.metadata, 'relevance_score': round(float(score), 4)}
+            for d, score in matches if score >= threshold and d.page_content.strip()]
