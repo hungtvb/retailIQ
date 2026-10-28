@@ -50,7 +50,7 @@ The original `python -m scripts.cost_roi` prints an **illustrative estimate to t
 
 For the live presentation, open **Cost & ROI**, modify assisted share from **60%** to **30%**, then click **Calculate estimate**: payback changes from **3.75** to **10.00 months**. At **10%**, the monthly net benefit is negative and payback is **not achieved**.
 
-A visual preview is at `docs/retailiq_cost_roi_ui_preview.png`. Browser interactions were checked in Chromium with mock API responses generated from the actual FastAPI calculator; direct loopback browser navigation was restricted in the test container. Unit/API tests are automated and require no external API.
+A visual preview is at `docs/ui_previews/roi_desktop.png`. Browser interactions were checked in Chromium with mock API responses generated from the actual FastAPI calculator; direct loopback browser navigation was restricted in the test container. Unit/API tests are automated and require no external API.
 
 ## Week 1 demo queries
 
