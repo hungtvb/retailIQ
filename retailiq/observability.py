@@ -23,6 +23,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_LOG = ROOT / 'data' / 'logs' / 'retailiq.jsonl'
 _REQUEST_ID: ContextVar[str | None] = ContextVar('retailiq_request_id', default=None)
 _SESSION_ID: ContextVar[str | None] = ContextVar('retailiq_session_id', default=None)
+# A per-request live subscriber, scoped with contextvars; never broadcast to other sessions.
+_EVENT_SINK: ContextVar[object | None] = ContextVar('retailiq_event_sink', default=None)
 _LOCK = threading.RLock()
 _LOGGER = logging.getLogger('retailiq.events')
 _LOGGER.setLevel(logging.INFO)
@@ -90,6 +92,20 @@ def bind_context(*, request: str | None = None, session: str | None = None):
             var.reset(token)
 
 
+@contextmanager
+def bind_event_sink(callback):
+    """Emit the same redacted events to a single in-flight SSE request.
+
+    This is synchronous and scoped to the worker context. Stored logs and the
+    UI always share the same allowlist; no raw prompts or stack frames escape.
+    """
+    token = _EVENT_SINK.set(callback)
+    try:
+        yield
+    finally:
+        _EVENT_SINK.reset(token)
+
+
 def new_request_id() -> str:
     return uuid4().hex
 
@@ -116,6 +132,15 @@ def log_event(event: str, *, level: str = 'INFO', **fields) -> None:
         elif isinstance(value, str):
             payload[key] = value[:160]
     _logger().log(getattr(logging, payload['level']), event, extra={'event_payload': payload})
+    sink = _EVENT_SINK.get()
+    if sink is not None:
+        sanitized = {k: v for k, v in payload.items()
+                     if k in UI_FIELDS or k in ('timestamp', 'level', 'event')}
+        try:
+            sink(sanitized)
+        except Exception:
+            # An interrupted viewer must not crash the agent or its durable log.
+            pass
 
 
 def log_exception(event: str, error: BaseException, **fields) -> None:
