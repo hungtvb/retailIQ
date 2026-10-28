@@ -1,6 +1,7 @@
 """Local-only chat session REST endpoints."""
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
+from retailiq.observability import log_event, bind_context
 from retailiq.infrastructure.sessions import create_session, get_session, list_sessions, delete_session
 
 router = APIRouter(prefix='/api/sessions', tags=['conversations'])
@@ -10,7 +11,10 @@ class NewSession(BaseModel):
 
 @router.post('', status_code=201)
 def new_session(body: NewSession = NewSession()):
-    return create_session(body.title)
+    session = create_session(body.title)
+    with bind_context(session=session['id']):
+        log_event('chat.session_created')
+    return session
 
 @router.get('')
 def sessions():
@@ -27,4 +31,6 @@ def session(session_id: str):
 def remove_session(session_id: str):
     if not delete_session(session_id):
         raise HTTPException(status_code=404, detail='Session not found')
+    with bind_context(session=session_id):
+        log_event('chat.session_deleted')
     return Response(status_code=204)
