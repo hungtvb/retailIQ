@@ -24,6 +24,8 @@ def agentic_replenish_review(question: str) -> dict:
     @tool
     def sales_subagent(query: str) -> str:
         """Delegate a read-only completed-order ranking to the sales specialist."""
+        if 'sales' in outputs:
+            raise ValueError('Sales evidence has already been collected')
         with observed('agent.subagent', agent='retail_supervisor',
                       subagent='sales_agent', execution_mode='full'):
             result = sales_graph.invoke({'question': query, 'category': 'top'})['result']
