@@ -167,24 +167,21 @@ def retryable_read_failure(error: Exception) -> bool:
 
 def build_graph(*, checkpointer=None):
     from langgraph.graph import StateGraph, START, END
-    from langgraph.types import Command, RetryPolicy
-    # Typed Command destinations make all dynamic routes visible to LangGraph's
-    # static graph validation and visualizer without importing LangGraph offline.
-    route.__annotations__['return'] = Command[Literal['sales_agent', 'inventory_agent',
-                                                       'product_agent', 'retail_supervisor']]
-    sales_agent.__annotations__['return'] = Command[Literal['inventory_agent', '__end__']]
-    inventory_agent.__annotations__['return'] = Command[Literal['__end__']]
-    product_agent.__annotations__['return'] = Command[Literal['__end__']]
-    retail_supervisor.__annotations__['return'] = Command[Literal['__end__']]
+    from langgraph.types import RetryPolicy
     graph = StateGraph(State)
-    graph.add_node('router', route)
-    # Minimal Week 1 resilience: retry only transient read failures, at most twice.
+    # Declare Command destinations on the graph nodes, not by mutating shared
+    # Python function annotations on every build (unsafe with concurrent builds).
+    graph.add_node('router', route,
+                   destinations=tuple(dict.fromkeys(AGENT_FOR_INTENT.values())))
+    # Only read-only SQL agents may retry a transient operational failure.
     read_retry = RetryPolicy(max_attempts=2, initial_interval=0.25,
                              jitter=False, retry_on=retryable_read_failure)
-    graph.add_node('sales_agent', sales_agent, retry_policy=read_retry)
-    graph.add_node('inventory_agent', inventory_agent, retry_policy=read_retry)
-    graph.add_node('product_agent', product_agent)
-    graph.add_node('retail_supervisor', retail_supervisor)
+    graph.add_node('sales_agent', sales_agent, retry_policy=read_retry,
+                   destinations=('inventory_agent', END))
+    graph.add_node('inventory_agent', inventory_agent, retry_policy=read_retry,
+                   destinations=(END,))
+    graph.add_node('product_agent', product_agent, destinations=(END,))
+    graph.add_node('retail_supervisor', retail_supervisor, destinations=(END,))
     graph.add_edge(START, 'router')
     # Control routing is Command-only: no accidental double-execution by static edges.
     return graph.compile(checkpointer=checkpointer)
