@@ -7,6 +7,7 @@ from retailiq.assistant import ask
 from retailiq.infrastructure.sessions import history, add_turn, get_session
 from pathlib import Path
 import time
+import re
 from retailiq.observability import bind_context, new_request_id, log_event, log_exception, observed, request_id
 from retailiq.api.roi import router as roi_router
 from retailiq.api.sessions import router as sessions_router
@@ -20,27 +21,39 @@ app.include_router(logs_router)
 app.mount('/assets', StaticFiles(directory=Path(__file__).resolve().parents[2] / 'web' / 'assets'), name='assets')
 
 
+def _safe_http_path(path: str) -> str:
+    """Canonicalize route labels so customer values embedded in URLs are not logged."""
+    if path in ('/ask', '/api/sessions', '/api/roi/defaults', '/api/roi/estimate'):
+        return path
+    if re.fullmatch(r'/api/sessions/[0-9a-fA-F-]{36}', path):
+        return '/api/sessions/{session_id}'
+    if path.startswith('/api/logs'):
+        return '/api/logs'
+    return '/api/other' if path.startswith('/api/') else '/other'
+
+
 @app.middleware('http')
 async def record_http(request: Request, call_next):
     rid = new_request_id()
     path = request.url.path
+    safe_path = _safe_http_path(path)
     is_api = path.startswith('/api/') or path == '/ask'
     # Avoid emitting a new log event for every read of the log viewer itself.
-    is_api = is_api and not path.startswith('/api/logs')
+    is_api = is_api and safe_path != '/api/logs'
     started = time.perf_counter()
     with bind_context(request=rid):
         if is_api:
-            log_event('http.request_started', method=request.method, path=path)
+            log_event('http.request_started', method=request.method, path=safe_path)
         try:
             response = await call_next(request)
         except Exception as error:
             if is_api:
-                log_exception('http.request_failed', error, method=request.method, path=path,
+                log_exception('http.request_failed', error, method=request.method, path=safe_path,
                               duration_ms=round((time.perf_counter()-started)*1000, 2))
             raise
         response.headers['X-Request-ID'] = rid
         if is_api:
-            log_event('http.request_completed', method=request.method, path=path,
+            log_event('http.request_completed', method=request.method, path=safe_path,
                       status_code=response.status_code,
                       duration_ms=round((time.perf_counter()-started)*1000, 2))
         return response
