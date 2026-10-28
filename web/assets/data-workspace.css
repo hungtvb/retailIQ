@@ -190,3 +190,39 @@ legend{font-size:10px;letter-spacing:.05em;margin-bottom:12px;color:#667085}
  .chat-composer .suggestion-pills button{white-space:nowrap;flex-shrink:0}
  .insights-column{gap:10px}
 }
+
+/* RetailIQ brand system: compact product wordmark + robot chat identity. */
+.brand-symbol{border:0;background:transparent;width:39px;height:42px;border-radius:0}
+.brand-symbol img{display:block;width:37px;height:40px;object-fit:contain}
+.brand-lockup{gap:8px}
+.brand-name{display:flex;align-items:baseline;gap:7px;white-space:nowrap;font-weight:700;font-size:17px;line-height:1}
+.brand-name .brand-wordmark{color:#0b203b;font-weight:750;letter-spacing:-.04em}
+.brand-name .brand-iq{color:#e69832;font-weight:750}
+.brand-name .brand-product{color:#63748a;font-size:12px;font-weight:550;letter-spacing:0}
+.chat-message-assistant{display:flex;flex-direction:row;align-items:flex-start;gap:8px;border:0;background:none;border-radius:0;padding:0;max-width:96%;width:fit-content}
+.chat-message-user{display:flex;flex-direction:row;align-items:flex-start;gap:8px;border:0;background:none;border-radius:0;padding:0;max-width:96%;width:fit-content}
+.chat-avatar{width:36px;height:36px;flex:0 0 36px;display:block;object-fit:contain;background:#fff8ed;border:1px solid #e6d9c3;border-radius:12px}
+.chat-avatar-user{display:grid;place-items:center;border-color:#ccd7e4;border-radius:12px;color:#315472;background:#eaf0f8;font-size:13px;font-weight:700}
+.chat-bubble{display:flex;flex-direction:column;gap:4px;min-width:0;max-width:100%;padding:10px 12px;border:1px solid #e2e8ef;border-radius:12px}
+.chat-message-assistant .chat-bubble{background:#f7f9fb;border-bottom-left-radius:3px;color:#243044}
+.chat-message-user .chat-bubble{background:#edf3fb;border-color:#d4e2f2;border-bottom-right-radius:3px;color:#1e293b}
+.chat-active-answer .chat-bubble{flex:1}
+.chat-welcome{display:flex;align-items:center;gap:14px;max-width:390px;margin:auto;padding:8px 14px}
+.chat-welcome img{width:80px;height:96px;flex:0 0 80px;object-fit:contain}
+.chat-welcome>div{display:flex;flex-direction:column;gap:5px;min-width:0}
+.chat-welcome strong{font-size:15px;color:#0b203b;font-weight:750}
+.chat-welcome span{font-size:12px;line-height:1.5;color:#64748b}
+.chat-welcome[hidden],.chat-active-answer[hidden]{display:none!important}
+@media(max-width:520px){
+ .brand-symbol{width:33px;height:36px}
+ .brand-symbol img{width:32px;height:35px}
+ .brand-name{font-size:15px;gap:5px}
+ .brand-name .brand-product{font-size:10px}
+ .chat-message-assistant,.chat-message-user{max-width:100%;gap:6px}
+ .chat-avatar{width:30px;height:30px;flex-basis:30px;border-radius:10px}
+ .chat-bubble{padding:9px 10px}
+ .chat-welcome{gap:8px;padding:7px}
+ .chat-welcome img{width:66px;height:82px;flex-basis:66px}
+ .chat-welcome strong{font-size:14px}
+ .chat-welcome span{font-size:11px}
+}
