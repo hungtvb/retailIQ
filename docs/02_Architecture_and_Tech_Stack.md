@@ -1,5 +1,12 @@
 # Architecture & Tech Stack
 
+**Business goal:** Reduce user interaction complexity and, where supported by measurement, end-to-end task completion time for retail information access, **without sacrificing correctness** (Faster · Easier · Reliable). Inventory/Sales data is the initial domain; Replenishment Review is a multi-source demo case, not the only outcome. This is a **proposed value hypothesis**, not proven ROI.
+
+**Data-source mapping:** In a real retailer, POS/OMS holds sales transactions, ERP/WMS holds stock/reservations, and PIM/product documents hold identity/specifications. The Week 1 local application simulates these using SQLite tables and local product files. No live POS/WMS integration or inventory freshness SLA exists.
+
+**Tool/agent selection rule:** for a simple question route to one trusted domain function; for cross-source questions, orchestrate reviewed sales/inventory tools, preserve SKU identity and verify evidence. A deterministic tool executor is not automatically an autonomous agent; no unchecked LLM-generated SQL.
+
+
 ```mermaid
 flowchart LR
  User[Local Web UI] --> API[FastAPI]
@@ -29,6 +36,14 @@ flowchart LR
 
 ## Contracts
 `stock`: on_hand, reserved, available=on_hand-reserved, updated_at per location. `revenue`: completed orders only, line-level discount applied, before returns. `top`: monthly units sold. `product`: source-addressable multi-format knowledge documents; never use those docs for real-time stock.
+
+## Pattern demonstrations and business UX acceptance
+
+- **Chain:** product retrieval → evidence construction → model answer → citation verification; no separate LCEL RunnableSequence claimed.
+- **Router + Agent:** classify natural-language intent and dispatch a Sales/Inventory/Product specialist (full-mode execution must be verified separately).
+- **Subagent + Custom Workflow + Skill:** Supervisor coordinates Sales and Inventory subagents for a reviewed top-seller replenishment case, using approved business definitions.
+- **Handoff:** Sales → Inventory follow-up; flexible referents like “the first one” / “what about Hanoi?” are **not yet fully implemented or accepted**.
+- **Business measurement:** compare **end-to-end task time**, **interaction steps**, **post-task ease rating** and **answer correctness** against equivalent human-operated tools. Current synthetic pilot lacks a structured ease-of-use measurement, and there is no real retailer baseline.
 
 ## Planned extensions
 **W2** Freshness routing (real time/15min/hourly/daily), governed KPI semantic layer, Inventory/Order MCP, customer memory, hybrid rerank rewrite, per-source answer report. **W3** HITL for pricing, RLS, KPI alerts, LangFuse, DeepEval, cost, PromptOps, governance and security. **W4** Inventory Search, Fulfilment Optimisation, Customer Context, Dynamic Pricing, Order Management, A2A coordinator, verification, deep report and approval workflow.
