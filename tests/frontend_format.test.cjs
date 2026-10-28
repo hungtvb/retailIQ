@@ -46,7 +46,7 @@ const {RetailIQFormat:format,RetailIQIdentity:identity}=context.window;
 
 test('Markdown is rendered as safe DOM nodes and rejects javascript links',()=>{
   const target=new Element('div');
-  format.renderMarkdown(target,'### Sales\\n**Strong** & *italic*\\n[valid](https://example.org) [bad](javascript:alert(1))\\n<img src=x onerror=alert(1)>');
+  format.renderMarkdown(target,'### Sales\n**Strong** & *italic*\n[valid](https://example.org) [bad](javascript:alert(1))\n<img src=x onerror=alert(1)>');
   assert.equal(tree(target,'h5').length,1);
   assert.equal(tree(target,'strong').length,1);
   assert.equal(tree(target,'em').length,1);
@@ -57,7 +57,7 @@ test('Markdown is rendered as safe DOM nodes and rejects javascript links',()=>{
 });
 test('Markdown table, list and code fence use structured elements',()=>{
   const root=new Element('div');
-  format.renderMarkdown(root,'- one\\n- two\\n\\n| Product | Units |\\n| --- | --- |\\n| Laptop | 22 |\\n\\n```sql\\nSELECT * FROM orders;\\n```');
+  format.renderMarkdown(root,'- one\n- two\n\n| Product | Units |\n| --- | --- |\n| Laptop | 22 |\n\n```sql\nSELECT * FROM orders;\n```');
   assert.equal(tree(root,'ul').length,1);
   assert.equal(tree(root,'li').length,2);
   assert.equal(tree(root,'table').length,1);
