@@ -196,6 +196,11 @@ def sync_index(*, force: bool = False, store=None, manifest_path: Path | None = 
         for name in sorted(current if recovering else changed):
             docs, _errors = plan_chunks([current[name]])
             planned[name] = docs[name]
+        total_committed = sum(
+            len(item['ids']) for name, item in old.items()
+            if name in current and name not in planned)
+        if total_committed + sum(len(entries) for entries in planned.values()) > MAX_TOTAL_CHUNKS:
+            raise ValueError('Corpus exceeds global chunk budget')
         changed_ids = [chunk['id'] for entries in planned.values() for chunk in entries]
         affected = sorted(set(prior_ids)
                           | {id_ for name in (old if recovering else changed | set(removed))
