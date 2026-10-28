@@ -108,11 +108,11 @@
     const records = Array.isArray(result?.records) ? result.records : [];
     const intent = String(result?.intent || '');
     let metric = null, caption = '', labels = '';
-    if (intent === 'stock' && records.length && records.every(r => typeof r.available === 'number')) {
+    if (intent === 'stock' && records.length && records.every(r => Number.isFinite(r.available) && r.available >= 0)) {
       metric = 'available';caption = 'Available stock'; labels = 'location';
-    } else if (intent === 'revenue' && records.length && records.every(r => typeof r.net_revenue_vnd === 'number')) {
+    } else if (intent === 'revenue' && records.length && records.every(r => Number.isFinite(r.net_revenue_vnd))) {
       metric = 'net_revenue_vnd';caption = 'Revenue by channel'; labels = 'channel';
-    } else if (intent === 'top' && records.length && records.every(r => typeof r.units_sold === 'number')) {
+    } else if (intent === 'top' && records.length && records.every(r => Number.isFinite(r.units_sold) && r.units_sold >= 0)) {
       metric = 'units_sold';caption = 'Top sellers · units'; labels = 'name';
     }
     if (metric && records.length) {
@@ -148,7 +148,8 @@
       section.append(EL('p','rich-evidence-note','Calculated from returned SQL records · synthetic demo data'));
       target.append(section);
     }
-    const sources = [...new Set((result?.contexts || []).map(v=>v&&v.source).filter(Boolean).map(String))];
+    const contexts = Array.isArray(result?.contexts) ? result.contexts : [];
+    const sources = [...new Set(contexts.map(v=>v&&v.source).filter(Boolean).map(String))];
     if (sources.length) {
       const group=EL('div','rich-citations');
       group.append(EL('span','','Sources'));
