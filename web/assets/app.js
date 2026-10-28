@@ -47,7 +47,24 @@ function appendChatMessage(role, content, agent = '') {
   const body = document.createElement('span');
   body.className = 'chat-message-content';
   body.textContent = String(content);
-  item.append(label, body);
+  const bubble = document.createElement('div');
+  bubble.className = 'chat-bubble';
+  bubble.append(label, body);
+  if (role === 'user') {
+    const avatar = document.createElement('span');
+    avatar.className = 'chat-avatar chat-avatar-user';
+    avatar.textContent = 'U';
+    avatar.setAttribute('aria-hidden', 'true');
+    item.append(bubble, avatar);
+  } else {
+    const avatar = document.createElement('img');
+    avatar.className = 'chat-avatar';
+    avatar.src = '/assets/brand/mascot-avatar.svg';
+    avatar.alt = '';
+    avatar.width = 36;
+    avatar.height = 36;
+    item.append(avatar, bubble);
+  }
   area.appendChild(item);
   return item;
 }
@@ -77,8 +94,10 @@ async function selectSession(id, preserveEvidence = false) {
   byId('chat-session-picker').value = id;
   const messages = session.messages || [];
   renderChatMessages(messages);
+  byId('chat-welcome').hidden = messages.length > 0;
   const last = messages.length && messages[messages.length - 1].role === 'assistant' ? messages[messages.length - 1] : null;
   currentAnswerIsPersisted = Boolean(last);
+  byId('active-response').hidden = !last;
   byId('answer').textContent = last ? last.content : 'Ask a retail question, then continue with a follow-up.';
   byId('answer').classList.remove('is-error');
   byId('meta').textContent = last ? 'Last agent: ' + (session.active_agent || 'unknown') : 'No execution yet.';
@@ -330,6 +349,8 @@ async function ask() {
     appendChatMessage('assistant', answer.textContent, byId('summary-agent').textContent);
   }
   currentAnswerIsPersisted = false;
+  byId('chat-welcome').hidden = true;
+  byId('active-response').hidden = false;
   appendChatMessage('user', question);
   byId('q').value = '';
   scrollChatToBottom();
