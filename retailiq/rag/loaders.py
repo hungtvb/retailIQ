@@ -20,6 +20,28 @@ SUPPORTED_FORMATS = frozenset({'.md', '.txt', '.pdf', '.docx', '.csv', '.xlsx', 
 DEFAULT_MAX_FILE_BYTES = 10 * 1024 * 1024
 MAX_ROWS_PER_TABLE = 2500  # avoid embedding entire, accidentally huge spreadsheets
 MAX_CELLS_PER_ROW = 40
+MAX_ARCHIVE_MEMBERS = 1000
+MAX_ARCHIVE_EXPANDED_BYTES = 40 * 1024 * 1024
+MAX_ARCHIVE_MEMBER_BYTES = 12 * 1024 * 1024
+MAX_PDF_PAGES = 200
+
+
+def _check_archive(path: Path) -> None:
+    """Reject ZIP expansion bombs and path traversal before parsing XLSX/DOCX."""
+    with zipfile.ZipFile(path) as archive:
+        members = archive.infolist()
+        if len(members) > MAX_ARCHIVE_MEMBERS:
+            raise ValueError('Document has too many ZIP members')
+        expanded = 0
+        for member in members:
+            normalized = member.filename.replace('\\', '/')
+            if normalized.startswith('/') or '..' in Path(normalized).parts:
+                raise ValueError('Document has unsafe ZIP member path')
+            if member.file_size > MAX_ARCHIVE_MEMBER_BYTES:
+                raise ValueError('Document ZIP member exceeds size budget')
+            expanded += member.file_size
+            if expanded > MAX_ARCHIVE_EXPANDED_BYTES:
+                raise ValueError('Document expanded ZIP size exceeds budget')
 
 
 @dataclass(frozen=True)
@@ -73,6 +95,7 @@ def _xlsx_rows(path: Path) -> Iterable[tuple[str, int, list[str]]]:
     ns = {'x': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main',
           'r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
           'p': 'http://schemas.openxmlformats.org/package/2006/relationships'}
+    _check_archive(path)
     with zipfile.ZipFile(path) as archive:
         names = set(archive.namelist())
         if 'xl/workbook.xml' not in names or 'xl/_rels/workbook.xml.rels' not in names:
@@ -176,6 +199,7 @@ def load_file(path: Path, *, max_bytes: int = DEFAULT_MAX_FILE_BYTES) -> list[Te
     elif ext == '.xlsx':
         sections = _table_sections(_xlsx_rows(path), 'Sheet')
     elif ext == '.docx':
+        _check_archive(path)
         from docx import Document
         doc = Document(path)
         sections = [TextSection(p.text, {'paragraph': i})
@@ -187,6 +211,8 @@ def load_file(path: Path, *, max_bytes: int = DEFAULT_MAX_FILE_BYTES) -> list[Te
     else:  # PDF
         from pypdf import PdfReader
         pdf = PdfReader(path)
+        if len(pdf.pages) > MAX_PDF_PAGES:
+            raise ValueError('PDF exceeds configured page budget')
         if pdf.is_encrypted:
             raise ValueError('Encrypted PDF is unsupported')
         sections = [TextSection(page.extract_text(extraction_mode='plain') or '', {'page': i})
