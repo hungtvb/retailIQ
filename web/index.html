@@ -80,10 +80,22 @@
             </article>
             <article class="paper-card evidence-card">
               <div class="card-topline"><span class="micro-label">EXECUTION EVIDENCE</span><span class="evidence-icon" aria-hidden="true">↗</span></div>
+              <div class="live-trace" id="live-trace-panel">
+                <div class="live-trace-heading">
+                  <span class="live-trace-title"><span id="live-indicator" class="live-indicator"></span> LIVE AGENT ACTIVITY</span>
+                  <span id="live-trace-state" class="live-trace-state">AWAITING QUESTION</span>
+                </div>
+                <ol id="live-trace-list" class="live-trace-list" aria-label="Live execution events" aria-live="polite" aria-relevant="additions">
+                  <li class="live-trace-empty">Ask a question to watch actual backend events appear.</li>
+                </ol>
+                <div class="live-trace-footer"><span id="live-trace-count">0 events</span><span id="live-trace-request">—</span></div>
+              </div>
+              <details class="trace-details"><summary>Execution summary &amp; sources</summary>
               <div id="agent-trace" class="agent-trace" aria-label="Agent execution details"></div>
               <div id="meta" class="execution-meta">Intent, execution mode, query period and source records will appear after a question.</div>
               <details class="raw-details"><summary>View source records <span aria-hidden="true">+</span></summary><pre id="raw">{}</pre></details>
-              <div class="card-bottomline"><span>TRANSPARENT BY DESIGN</span></div>
+              </details>
+              <div class="card-bottomline"><span>LIVE EVENTS · REDACTED METADATA ONLY</span></div>
             </article>
           </div>
           <p class="notice-line"><span class="notice-asterisk">*</span> Synthetic data only. Offline responses do not establish live LangGraph, Chroma, RAGAS or LangSmith execution.</p>
