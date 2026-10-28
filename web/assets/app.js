@@ -8,6 +8,25 @@ let activeSessionId = '';
 let lastRequestId = '';
 let currentRows = [];
 let currentAnswerIsPersisted = false;
+const AgentID = () => window.RetailIQIdentity;
+const Rich = () => window.RetailIQFormat;
+
+function renderAssistantText(target, value) {
+  Rich().renderMarkdown(target, value);
+}
+function setActiveAgent(agent, intent = '') {
+  const type = AgentID().type(agent, intent);
+  const message = byId('active-response');
+  AgentID().apply(message, type);
+  const avatar = byId('active-agent-avatar');
+  avatar.replaceChildren(AgentID().icon(type));
+  avatar.className = 'agent-avatar agent-avatar-' + type;
+  message.querySelector('.chat-message-label').textContent = AgentID().TYPES[type].name;
+  const badge = byId('evidence-agent');
+  AgentID().apply(badge, type);
+  badge.textContent = AgentID().TYPES[type].short;
+  return type;
+}
 
 async function ensureSession() {
   if (activeSessionId) return activeSessionId;
@@ -43,10 +62,14 @@ function appendChatMessage(role, content, agent = '') {
   item.className = 'chat-message chat-message-' + (role === 'user' ? 'user' : 'assistant');
   const label = document.createElement('span');
   label.className = 'chat-message-label';
-  label.textContent = role === 'user' ? 'YOU' : (agent || 'RETAILIQ').replaceAll('_', ' ').toUpperCase();
+  const agentType = role === 'user' ? 'user' : AgentID().type(agent);
+  AgentID().apply(item, agentType);
+  label.textContent = role === 'user' ? 'You' : AgentID().TYPES[agentType].name;
   const body = document.createElement('span');
   body.className = 'chat-message-content';
-  body.textContent = String(content);
+  if (role === 'user') body.textContent = String(content);
+  else renderAssistantText(body, content);
+  body.classList.toggle('rich-markdown', role !== 'user');
   const bubble = document.createElement('div');
   bubble.className = 'chat-bubble';
   bubble.append(label, body);
@@ -57,13 +80,7 @@ function appendChatMessage(role, content, agent = '') {
     avatar.setAttribute('aria-hidden', 'true');
     item.append(bubble, avatar);
   } else {
-    const avatar = document.createElement('img');
-    avatar.className = 'chat-avatar';
-    avatar.src = '/assets/brand/mascot-avatar.svg';
-    avatar.alt = '';
-    avatar.width = 36;
-    avatar.height = 36;
-    item.append(avatar, bubble);
+    item.append(AgentID().avatar(agentType), bubble);
   }
   area.appendChild(item);
   return item;
@@ -98,7 +115,10 @@ async function selectSession(id, preserveEvidence = false) {
   const last = messages.length && messages[messages.length - 1].role === 'assistant' ? messages[messages.length - 1] : null;
   currentAnswerIsPersisted = Boolean(last);
   byId('active-response').hidden = !last;
-  byId('answer').textContent = last ? last.content : 'Ask a retail question, then continue with a follow-up.';
+  if (last) renderAssistantText(byId('answer'), last.content);
+  else byId('answer').textContent = 'Ask a retail question, then continue with a follow-up.';
+  Rich().renderEvidence(byId('response-visuals'), {});
+  setActiveAgent(session.active_agent || 'iq');
   byId('answer').classList.remove('is-error');
   byId('meta').textContent = last ? 'Last agent: ' + (session.active_agent || 'unknown') : 'No execution yet.';
   if (!preserveEvidence) {
@@ -117,6 +137,7 @@ async function selectSession(id, preserveEvidence = false) {
   byId('summary-period').textContent = preserveEvidence ? byId('summary-period').textContent : '—';
   byId('summary-mode').textContent = preserveEvidence ? byId('summary-mode').textContent : (last ? 'Stored answer' : '—');
   byId('response-state').textContent = last ? 'READY' : 'NEW CHAT';
+  byId('answer').dataset.rawAnswer = last ? last.content : '';
   scrollChatToBottom();
 }
 
@@ -241,7 +262,9 @@ function showAgentEvidence(data) {
   for (const [text, type] of chips) {
     const chip = document.createElement('span');
     chip.className = 'agent-chip ' + type;
-    chip.textContent = text;
+    const known = AgentID().type(text);
+    AgentID().apply(chip, known);
+    chip.append(AgentID().icon(known), document.createTextNode(text));
     area.appendChild(chip);
   }
 }
@@ -290,6 +313,8 @@ function appendLiveEvent(event) {
   const entry = document.createElement('li');
   const level = String(event.level || 'INFO').toLowerCase();
   entry.className = 'live-trace-event level-' + (['info', 'warning', 'error'].includes(level) ? level : 'info');
+  const identity = AgentID().type(event.subagent || event.agent || event.target_agent || event.previous_agent || '',event.intent);
+  AgentID().apply(entry, identity);
   const details = [];
   for (const key of ['agent', 'previous_agent', 'target_agent', 'subagent', 'tool', 'intent', 'skill', 'execution_mode', 'error_type']) {
     if (event[key] !== null && event[key] !== undefined) {
@@ -304,7 +329,7 @@ function appendLiveEvent(event) {
   const time = document.createElement('span'); time.className = 'trace-node-duration';
   time.textContent = typeof event.duration_ms === 'number' ? event.duration_ms.toFixed(0) + ' ms'
     : (event.timestamp ? new Date(event.timestamp).toLocaleTimeString() : '');
-  content.append(title, sub); entry.append(dot, content, time); list.appendChild(entry);
+  content.append(title, sub); entry.append(dot, AgentID().icon(identity), content, time); list.appendChild(entry);
   byId('live-trace-count').textContent = String(Number(byId('live-trace-count').textContent.split(' ')[0]) + 1) + ' events';
   list.scrollTop = list.scrollHeight;
 }
@@ -346,7 +371,7 @@ async function ask() {
   const answer = byId('answer');
   const sessionPicker = byId('chat-session-picker');
   if (currentAnswerIsPersisted) {
-    appendChatMessage('assistant', answer.textContent, byId('summary-agent').textContent);
+    appendChatMessage('assistant', answer.dataset.rawAnswer || answer.textContent, byId('summary-agent').textContent);
   }
   currentAnswerIsPersisted = false;
   byId('chat-welcome').hidden = true;
@@ -359,6 +384,8 @@ async function ask() {
   for (const element of [byId('chat-new'), byId('chat-delete'), sessionPicker]) element.disabled = true;
   answer.classList.remove('is-placeholder', 'is-error');
   answer.textContent = 'Thinking…';
+  Rich().renderEvidence(byId('response-visuals'), {});
+  setActiveAgent('iq');
   byId('response-state').textContent = 'WORKING';
   resetLiveTrace();
   renderRecords();
@@ -394,9 +421,12 @@ async function ask() {
     if (streamError) throw new Error(streamError);
     if (!streamDone || !result) throw new Error('The connection ended before an agent result was received.');
     lastRequestId = result.request_id || lastRequestId;
-    answer.textContent = result.answer || 'No answer available for this question.';
     await refreshSessions();
     await selectSession(sessionId, true);
+    answer.dataset.rawAnswer = result.answer || 'No answer available for this question.';
+    renderAssistantText(answer, answer.dataset.rawAnswer);
+    setActiveAgent(result.active_agent, result.intent);
+    Rich().renderEvidence(byId('response-visuals'), result);
     showAgentEvidence(result);
     const records = Array.isArray(result.records) ? result.records : [];
     const contexts = Array.isArray(result.contexts) ? result.contexts : [];
@@ -419,6 +449,7 @@ async function ask() {
   } catch (error) {
     answer.classList.add('is-error');
     answer.textContent = 'Unable to retrieve an answer (message not saved). ' + error.message;
+    Rich().renderEvidence(byId('response-visuals'), {});
     if (!byId('q').value.trim()) byId('q').value = question;
     scrollChatToBottom();
     byId('response-state').textContent = 'ERROR';
