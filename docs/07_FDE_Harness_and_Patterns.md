@@ -7,18 +7,23 @@ FDE is an iterative delivery approach: work closely with domain users to identif
 
 **AS-IS:** users switch between inventory, sales and product documents and aggregate answers manually. **TO-BE (Week 1):** a local UI routes questions to a vetted SQL analytics function or Product RAG and shows sourced results. Explicit non-goals: execute orders, change prices or access production data.
 
-## 2. Harness architecture — course-aligned interpretation
-Different sources define "harness" differently. We use a **clear mapping** to this team's code rather than claiming one universal set of layer names.
+## 2. Harness architecture — five layers from the Week 1 reading
 
-| Layer | Responsibility | Actual RetailIQ implementation |
+The assigned [Agent Harness Architecture](https://harness-engineering.ai/blog/agent-harness-architecture-how-the-system-works-under-the-hood/) article names exactly **Orchestration, Context Management, Tool Integration, Verification, Operations**. RetailIQ's **web Experience/UI** sits *outside* these five harness layers.
+
+| Harness layer | Responsibility | Actual RetailIQ implementation and current limit |
 |---|---|---|
-| Experience | User request/response | `web/index.html` + `retailiq/api/http.py` (FastAPI) |
-| Context | Question, typed state, relevant documents and trusted data | `State` in `orchestration/week1_graph.py`; RAG chunks with source metadata; KPI definitions |
-| Execution / Orchestration | Decision and control flow | LangGraph `StateGraph`, router + conditional edges |
-| Tools & Data | Domain access and business operations | Vetted read-only SQL analytics over SQLite; product retrieval via Chroma |
-| Verification / Operations | Evidence, testing, diagnostics, cost controls | pytest; local rotating JSONL events with request/session correlation; planned/live RAGAS; LangSmith tracing when key is enabled; token/ROI model |
+| **1. Orchestration** | Route, invoke specialists and control termination | `orchestration/week1_graph.py` uses LangGraph `StateGraph`, `Command` and specialist nodes. Not all specialists are autonomous tool-loop agents. |
+| **2. Context Management** | Select model context, session state and trusted domain knowledge | `State` in `week1_graph.py`; 12-message bounded history in `api/http.py`; product RAG with metadata; business definitions. Missing measured context-token budget and native graph checkpointer. |
+| **3. Tool Integration** | Validate, execute and normalize tool operations | `domain/analytics.py` exposes vetted read-only SQL via `agents.py` wrappers; Chroma Product RAG. Some calls are deterministic, not LLM-selected. |
+| **4. Verification** | Check outputs and tool/answer quality | Parameterized business queries, `tests/`, `scripts/eval_ragas.py` and sourced product answers. LLM/Chroma E2E, RAGAS scores and relevance thresholds still pending. |
+| **5. Operations** | Monitor execution, handle failures and control cost | `observability.py`, `api/logs.py`, SSE streaming, LangSmith configuration and ROI calculator. Live LangSmith traces and real per-request cost telemetry still pending. |
 
-**Control boundaries:** SQL must remain read-only and parameterized; untrusted product documents are data not instructions; answer should cite product sources and never invent stock. Do not infer deployed authentication from these local controls.
+**Outside the harness:** `web/index.html`, `web/assets/` and FastAPI endpoints provide the application-facing Experience layer. These are important components, but not one of the article's five core harness layers.
+
+**Control boundaries:** SQL must remain read-only and parameterized; untrusted product documents are data, not instructions; answers should cite product sources and never invent stock. Do not infer deployed authentication from these local controls.
+
+**Lesson-source audit:** [00_WEEK1_LESSON_REFERENCES.md](00_WEEK1_LESSON_REFERENCES.md), [13_WEEK1_LESSON_COMPLIANCE_AUDIT.md](13_WEEK1_LESSON_COMPLIANCE_AUDIT.md).
 
 ## 3. LangChain / LangGraph concepts and architectural choice
 
