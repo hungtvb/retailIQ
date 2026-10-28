@@ -116,6 +116,8 @@ Start with `docs/09_Week1_Checklist_and_Evidence.md`, `docs/07_FDE_Harness_and_P
 
 ## Week 1 UI — Data-first workspace
 
+RetailIQ branding uses a locally hosted navy/amber shelf-and-analytics logo and a lightweight robot mascot **IQ**. The logo is in the header/favicon; IQ appears beside every assistant message and welcomes new chats. No new user-auth/profile feature was added. Brand assets live in `web/assets/brand/`.
+
 The UI is **conversational analytics**, not a landing page or a one-shot SQL query console. The **Assistant** view shows a persistent multi-turn chat and follow-up prompts. The adjacent evidence pane shows structured SQL records, Product RAG source labels, agent metadata, and execution events for the latest turn. Switching sessions restores message text, but clears historical structured evidence because the session API does not store past tool results. SQL records can be exported to CSV with spreadsheet formula-injection protection.
 
 **Cost & ROI** and **Execution Logs** retain their data-focused tabs. Labels distinguish synthetic data, offline mode, and illustrative (not measured) ROI. The original FastAPI endpoints, SQL semantics, model configuration and session contracts are unchanged.
