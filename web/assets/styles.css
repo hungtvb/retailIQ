@@ -139,3 +139,26 @@ legend{font-size:11px;letter-spacing:.19em;font-weight:500;margin-bottom:18px}
 .agent-chip-skill{background:#ffda6e}
 .agent-chip-handoff{background:#6ece9d}
 @media(max-width:720px){.chat-workspace-tools{align-items:flex-start}.chat-session-note{width:100%}#chat-session-picker{flex:1;min-width:160px;max-width:100%}}
+
+
+/* Observability / paper-based diagnostics, aligned with DESIGN 7. */
+.logs-card{margin-top:24px;min-height:480px}
+.log-controls{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;margin:22px 0 18px}
+.log-controls label{font-size:12px;color:var(--color-graphite);display:flex;flex-direction:column;gap:7px;min-width:160px}
+.log-controls select{font:inherit;font-size:14px;min-height:44px;padding:9px 12px;background:var(--color-cream-paper);border:1px solid var(--color-ink);border-radius:8px;color:var(--color-ink)}
+.log-refresh{min-height:44px;margin-left:auto;font-size:13px}
+.log-stats{display:grid;grid-template-columns:1fr 1.4fr 1fr;gap:14px;border-top:1px solid #aaa69d;border-bottom:1px solid #aaa69d;padding:18px 0}
+.log-stats>div{display:flex;flex-direction:column;gap:8px;min-width:0}
+.log-stats strong,.log-stats code{font-size:16px;font-weight:500;overflow-wrap:anywhere}
+.log-stats code{font-size:13px}
+.logs-list{margin-top:18px;display:grid;gap:10px;max-height:540px;overflow-y:auto;padding-right:4px}
+.log-entry{border:1px solid #aaa69d;border-radius:14px;padding:14px 17px;background:#fdfaf3;min-width:0}
+.log-entry-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.log-entry-top strong{font-size:14px;font-weight:600;letter-spacing:-.01em;overflow-wrap:anywhere}
+.log-entry-top time{font-size:12px;color:var(--color-graphite);margin-left:auto;font-variant-numeric:tabular-nums}
+.log-entry-meta{font-size:12px;line-height:1.65;color:var(--color-graphite);margin-top:8px;overflow-wrap:anywhere}
+.log-severity{font-size:10px;font-weight:700;letter-spacing:.07em;border:1px solid #aaa69d;padding:5px 9px;border-radius:9999px}
+.level-info{background:#eaf5e9}.level-warning{background:#ffda6e}.level-error{background:#f8cccc}
+.log-empty{border:1px dashed #aaa69d;border-radius:15px;text-align:center;padding:42px 18px;font-size:14px;color:var(--color-graphite)}
+@media(max-width:720px){.log-stats{grid-template-columns:1fr 1fr}.log-controls label{flex:1;min-width:120px}.log-refresh{width:100%;margin-left:0}.log-entry-top time{margin-left:0}}
+@media(max-width:460px){.log-stats{grid-template-columns:1fr}.workspace-tabs{gap:2px}.workspace-tabs button{padding:11px 9px;font-size:12px}}
