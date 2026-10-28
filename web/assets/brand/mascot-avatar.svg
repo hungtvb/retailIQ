@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 88 88" role="img" aria-label="IQ, RetailIQ robot assistant">
+  <circle cx="44" cy="44" r="43" fill="#fff8ed"/>
+  <path d="M16 32C16 16 28 9 44 9s28 7 28 23v22c0 14-12 25-28 25S16 68 16 54Z" fill="#0b203b"/>
+  <path d="M18 32C18 18 28 12 44 12s26 6 26 20v21c0 13-11 22-26 22S18 66 18 53Z" fill="#f7f8fb"/>
+  <rect x="9" y="34" width="11" height="25" rx="5" fill="#0b203b"/>
+  <rect x="68" y="34" width="11" height="25" rx="5" fill="#0b203b"/>
+  <rect x="12" y="40" width="5" height="13" rx="2.5" fill="#efa13d"/>
+  <rect x="71" y="40" width="5" height="13" rx="2.5" fill="#efa13d"/>
+  <rect x="24" y="25" width="40" height="42" rx="14" fill="#081d35"/>
+  <path d="M30 45q5-12 10 0M48 45q5-12 10 0" fill="none" stroke="#ffbc53" stroke-width="4.2" stroke-linecap="round"/>
+  <path d="M40 53q4 5 8 0" fill="none" stroke="#ffbc53" stroke-width="3.6" stroke-linecap="round"/>
+  <path d="M66 11v6M74 18l-4 3" stroke="#efa13d" stroke-width="3.2" stroke-linecap="round"/>
+</svg>
