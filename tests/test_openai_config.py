@@ -113,5 +113,15 @@ def test_ragas_uses_one_shared_openai_client(monkeypatch):
     _env(monkeypatch)
     assert config.settings().chat_model != config.settings().embedding_model
     source=(Path(__file__).resolve().parents[1]/'scripts'/'eval_ragas.py').read_text()
-    assert 'AsyncOpenAI(base_url=cfg.base_url,api_key=cfg.api_key)' in source
+    # Inspect the actual call structure, not incidental whitespace in a source string.
+    import ast
+    syntax = ast.parse(source)
+    clients = [node for node in ast.walk(syntax)
+               if isinstance(node, ast.Call)
+               and isinstance(node.func, ast.Name)
+               and node.func.id == 'AsyncOpenAI']
+    assert len(clients) == 1
+    kwargs = {item.arg: ast.unparse(item.value) for item in clients[0].keywords}
+    assert kwargs['base_url'] == 'cfg.base_url'
+    assert kwargs['api_key'] == 'cfg.api_key'
     assert 'model=cfg.embedding_model' in source

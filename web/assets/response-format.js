@@ -8,8 +8,13 @@
     return el;
   };
   const safeLink = url => {
-    try { const parsed = new URL(url); return ['http:', 'https:'].includes(parsed.protocol) ? parsed.href : null; }
-    catch (_) { return null; }
+    try {
+      if (typeof url !== 'string' || url.length > 2048 || url.trim() !== url) return null;
+      const parsed = new URL(url);
+      if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname ||
+          parsed.username || parsed.password) return null;
+      return parsed.href;
+    } catch (_) { return null; }
   };
   function inline(target, input) {
     const text = String(input || '');
@@ -103,23 +108,28 @@
     return target;
   }
   const number = n => Number(n).toLocaleString('en-US', {maximumFractionDigits:2});
+  const validRow = (row, field, nonnegative = false) =>
+    row !== null && typeof row === 'object' && !Array.isArray(row) &&
+    Number.isSafeInteger(row[field]) && (!nonnegative || row[field] >= 0);
   function renderEvidence(target, result) {
     target.replaceChildren();
-    const records = Array.isArray(result?.records) ? result.records : [];
+    // Render bounded, SQL-backed evidence only. Never coerce strings into KPIs.
+    const records = Array.isArray(result?.records) && result.records.length <= 200 ? result.records : [];
     const intent = String(result?.intent || '');
     let metric = null, caption = '', labels = '';
-    if (intent === 'stock' && records.length && records.every(r => Number.isFinite(r.available) && r.available >= 0)) {
+    if (intent === 'stock' && records.length && records.every(r => validRow(r, 'available', true))) {
       metric = 'available';caption = 'Available stock'; labels = 'location';
-    } else if (intent === 'revenue' && records.length && records.every(r => Number.isFinite(r.net_revenue_vnd))) {
+    } else if (intent === 'revenue' && records.length && records.every(r => validRow(r, 'net_revenue_vnd'))) {
       metric = 'net_revenue_vnd';caption = 'Revenue by channel'; labels = 'channel';
-    } else if (intent === 'top' && records.length && records.every(r => Number.isFinite(r.units_sold) && r.units_sold >= 0)) {
+    } else if (intent === 'top' && records.length && records.every(r => validRow(r, 'units_sold', true))) {
       metric = 'units_sold';caption = 'Top sellers · units'; labels = 'name';
     }
-    if (metric && records.length) {
+    const total = metric && records.reduce((sum, row) => sum + row[metric], 0);
+    if (metric && records.length && Number.isSafeInteger(total)) {
       const section=EL('section','rich-evidence');
       const cards=EL('div','rich-metrics');
       const first = intent === 'top';
-      const primary = first ? Number(records[0][metric]) : records.reduce((sum,row) => sum+Number(row[metric]),0);
+      const primary = first ? records[0][metric] : total;
       const primaryLabel = intent === 'top' ? 'Top product units sold' : intent === 'stock' ? 'Total available units' : 'Net revenue · VND';
       const values = [[primaryLabel,number(primary)],['Records',String(records.length)]];
       if(intent==='top' && records[0].name) values.push(['Top product',String(records[0].name)]);
@@ -129,7 +139,9 @@
         cards.append(card);
       }
       section.append(cards);
-      if(records.length>1 && records.length<=12) {
+      // Negative revenue is valid but a zero-based positive bar would mislead.
+      if(records.length>1 && records.length<=12 &&
+         records.every(row => row[metric] >= 0)) {
         const max=Math.max(0,...records.map(r => Number(r[metric])));
         if(max>0) {
           const chart=EL('div','rich-bars');
@@ -148,8 +160,11 @@
       section.append(EL('p','rich-evidence-note','Calculated from returned SQL records · synthetic demo data'));
       target.append(section);
     }
-    const contexts = Array.isArray(result?.contexts) ? result.contexts : [];
-    const sources = [...new Set(contexts.map(v=>v&&v.source).filter(Boolean).map(String))];
+    const contexts = Array.isArray(result?.contexts) ? result.contexts.slice(0, 100) : [];
+    const sources = [...new Set(contexts
+      .map(v => v && v.source)
+      .filter(v => typeof v === 'string' && v.trim())
+      .map(v => v.slice(0, 300)))];
     if (sources.length) {
       const group=EL('div','rich-citations');
       group.append(EL('span','','Sources'));
