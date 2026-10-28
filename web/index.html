@@ -12,6 +12,8 @@
   <link rel="icon" type="image/svg+xml" href="/assets/brand/logo-mark.svg">
   <link rel="stylesheet" href="/assets/styles.css">
   <link rel="stylesheet" href="/assets/data-workspace.css">
+  <script defer src="/assets/agent-identity.js"></script>
+  <script defer src="/assets/response-format.js"></script>
   <script defer src="/assets/app.js"></script>
 </head>
 <body>
@@ -53,9 +55,10 @@
                 </div>
                 <div id="chat-history" class="chat-history" role="log" aria-label="Previous messages" aria-live="polite" aria-relevant="additions"></div>
                 <div id="active-response" class="chat-message chat-message-assistant chat-active-answer" hidden>
-                  <img class="chat-avatar" src="/assets/brand/mascot-avatar.svg" alt="" width="36" height="36">
+                  <span id="active-agent-avatar" class="agent-avatar agent-avatar-iq" aria-hidden="true"><img src="/assets/brand/mascot-avatar.svg" alt="" width="30" height="30"></span>
                   <div class="chat-bubble"><span class="chat-message-label">IQ · RETAILIQ COPILOT</span>
-                    <div id="answer" class="answer" role="status" aria-live="polite">Ask a retail question, then continue with a follow-up.</div>
+                    <div id="answer" class="answer rich-markdown" role="status" aria-live="polite">Ask a retail question, then continue with a follow-up.</div>
+                    <div id="response-visuals" class="rich-response-visuals" aria-label="Data-backed visual summaries"></div>
                   </div>
                 </div>
               </div>
@@ -86,7 +89,7 @@
                 <div><span>Mode</span><strong id="summary-mode">—</strong></div>
               </div>
               <section class="paper-card data-card" aria-labelledby="data-heading">
-            <div class="card-topline data-topline"><div class="data-title"><h2 id="data-heading">Data records</h2><span id="data-count" class="data-count">0 rows</span></div><button type="button" id="export-csv" class="secondary-button" disabled>Export CSV</button></div>
+            <div class="card-topline data-topline"><div class="data-title"><h2 id="data-heading">Data records</h2><span id="evidence-agent" class="agent-badge" data-agent="iq">IQ</span><span id="data-count" class="data-count">0 rows</span></div><button type="button" id="export-csv" class="secondary-button" disabled>Export CSV</button></div>
             <div id="records-empty" class="records-empty">Query results will appear here as a table.</div>
             <div id="records-table-wrap" class="table-scroll" hidden><table id="records-table" aria-label="SQL query results"></table></div>
             <div id="sources-section" class="sources-section" hidden><strong>Product sources</strong><ul id="source-list"></ul></div>
