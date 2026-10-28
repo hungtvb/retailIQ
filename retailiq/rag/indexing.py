@@ -19,6 +19,7 @@ from .chunking import split_sections
 ROOT = Path(__file__).resolve().parents[2]
 DOCS = ROOT / 'data' / 'product_docs'
 KNOWLEDGE = ROOT / 'data' / 'knowledge'
+MAX_INDEX_FILES = 1000
 
 
 def input_paths(roots: list[Path] | None = None) -> list[Path]:
@@ -62,6 +63,17 @@ def plan_chunks(paths: list[Path] | None = None, *, strict: bool = True) -> tupl
                 raise ValueError(f'Unable to ingest {relative}: {reason}') from exc
             errors[relative] = reason
     return documents, errors
+
+
+def _document_sha256(path: Path) -> str:
+    """Hash files in bounded chunks; reject oversized input before reading it."""
+    if path.stat().st_size > DEFAULT_MAX_FILE_BYTES:
+        raise ValueError('Document exceeds configured size limit')
+    digest = hashlib.sha256()
+    with path.open('rb') as handle:
+        for block in iter(lambda: handle.read(64 * 1024), b''):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def _vector_store():
@@ -142,11 +154,12 @@ def sync_index(*, force: bool = False, store=None, manifest_path: Path | None = 
         pending = _recovery_path(manifest_path)
         old = _read_manifest(manifest_path)
         current_paths = input_paths()
+        if len(current_paths) > MAX_INDEX_FILES:
+            raise ValueError('Knowledge corpus exceeds configured file budget')
         current = {p.relative_to(ROOT).as_posix(): p for p in current_paths}
         # Plan all document IDs before any vector write, so the recovery record
         # knows even chunks inserted immediately before an embedding failure.
-        hashes = {name: hashlib.sha256(path.read_bytes()).hexdigest()
-                  for name, path in current.items()}
+        hashes = {name: _document_sha256(path) for name, path in current.items()}
         recovering = pending.exists()
         if recovering:
             try:
@@ -226,49 +239,54 @@ def vector_search(question: str, k: int = 3) -> list[dict]:
     the last committed manifest. A dirty, missing or malformed index cannot
     be queried; rerun scripts/index_products.py to reconcile it.
     """
-    if not isinstance(question, str) or not 3 <= len(question.strip()) <= 500:
-        raise ValueError('RAG question must be 3–500 characters')
-    if isinstance(k, bool) or not isinstance(k, int) or not 1 <= k <= 10:
-        raise ValueError('RAG k must be between 1 and 10')
-    raw = os.getenv('RETAILIQ_RAG_MIN_RELEVANCE', '0.45')
+    if not _INDEX_SYNC_LOCK.acquire(blocking=False):
+        raise IndexNotReadyError('Product index is being updated')
     try:
-        threshold = float(raw)
-    except ValueError as exc:
-        raise ValueError('Invalid RETAILIQ_RAG_MIN_RELEVANCE') from exc
-    if not math.isfinite(threshold) or not 0 <= threshold <= 1:
-        raise ValueError('RETAILIQ_RAG_MIN_RELEVANCE must be finite and between 0 and 1')
-    db, manifest_path = _vector_store()
-    if _recovery_path(manifest_path).exists():
-        raise IndexNotReadyError('Product index recovery is required before querying')
-    if not manifest_path.is_file():
-        raise IndexNotReadyError('Product index missing; run scripts/index_products.py')
-    manifest = _read_manifest(manifest_path)
-    if not manifest:
-        return []  # Successfully indexed empty corpus is not a provider failure.
-    matches = db.similarity_search_with_relevance_scores(question.strip(), k=k)
-    contexts = []
-    seen = set()
-    for doc, value in matches:
+        if not isinstance(question, str) or not 3 <= len(question.strip()) <= 500:
+            raise ValueError('RAG question must be 3–500 characters')
+        if isinstance(k, bool) or not isinstance(k, int) or not 1 <= k <= 10:
+            raise ValueError('RAG k must be between 1 and 10')
+        raw = os.getenv('RETAILIQ_RAG_MIN_RELEVANCE', '0.45')
         try:
-            score = float(value)
-        except (TypeError, ValueError):
-            continue
-        if not math.isfinite(score) or not threshold <= score <= 1:
-            continue
-        metadata = getattr(doc, 'metadata', None)
-        if not isinstance(metadata, dict):
-            continue
-        source, chunk_id = metadata.get('source'), metadata.get('source_id')
-        if (not isinstance(source, str) or not isinstance(chunk_id, str)
-                or source not in manifest or chunk_id not in manifest[source]['ids']
-                or chunk_id in seen):
-            continue
-        content = getattr(doc, 'page_content', None)
-        if not isinstance(content, str) or not content.strip():
-            continue
-        seen.add(chunk_id)
-        contexts.append({'source': source, 'text': content[:2400],
-                         'metadata': metadata, 'relevance_score': round(score, 4)})
-        if len(contexts) >= k:
-            break
-    return contexts
+            threshold = float(raw)
+        except ValueError as exc:
+            raise ValueError('Invalid RETAILIQ_RAG_MIN_RELEVANCE') from exc
+        if not math.isfinite(threshold) or not 0 <= threshold <= 1:
+            raise ValueError('RETAILIQ_RAG_MIN_RELEVANCE must be finite and between 0 and 1')
+        db, manifest_path = _vector_store()
+        if _recovery_path(manifest_path).exists():
+            raise IndexNotReadyError('Product index recovery is required before querying')
+        if not manifest_path.is_file():
+            raise IndexNotReadyError('Product index missing; run scripts/index_products.py')
+        manifest = _read_manifest(manifest_path)
+        if not manifest:
+            return []  # Successfully indexed empty corpus is not a provider failure.
+        matches = db.similarity_search_with_relevance_scores(question.strip(), k=k)
+        contexts = []
+        seen = set()
+        for doc, value in matches:
+            try:
+                score = float(value)
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(score) or not threshold <= score <= 1:
+                continue
+            metadata = getattr(doc, 'metadata', None)
+            if not isinstance(metadata, dict):
+                continue
+            source, chunk_id = metadata.get('source'), metadata.get('source_id')
+            if (not isinstance(source, str) or not isinstance(chunk_id, str)
+                    or source not in manifest or chunk_id not in manifest[source]['ids']
+                    or chunk_id in seen):
+                continue
+            content = getattr(doc, 'page_content', None)
+            if not isinstance(content, str) or not content.strip():
+                continue
+            seen.add(chunk_id)
+            contexts.append({'source': source, 'text': content[:2400],
+                             'metadata': metadata, 'relevance_score': round(score, 4)})
+            if len(contexts) >= k:
+                break
+        return contexts
+    finally:
+        _INDEX_SYNC_LOCK.release()
