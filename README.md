@@ -24,7 +24,7 @@
 - **Session persistence:** full-mode graph runs with local SQLite checkpoints (`thread_id=session_id`), plus existing UI chat history. This is not multi-user production persistence.
 - **RAG grounding:** `RETAILIQ_RAG_MIN_RELEVANCE` defaults to `0.45` (uncalibrated). Weak vector contexts are rejected. Product answer requires a retrieved source citation; live faithfulness assessment remains pending.
 - **Observability:** run metadata includes request/session correlation IDs; optional `RETAILIQ_NATIVE_GRAPH_EVENTS=true` forwards LangGraph node updates into the in-chat SSE timeline. This is event streaming, not token streaming.
-- **Testing:** offline regression **82 PASS, 1 SKIP** in the local environment; CI sets `RETAILIQ_REQUIRE_LANGGRAPH=true`, so missing LangGraph must fail instead of silently skipping. External LangSmith/LLM/Chroma/RAGAS E2E evidence remains outstanding.
+- **Testing:** offline regression **84 PASS, 1 SKIP** in the local environment; CI sets `RETAILIQ_REQUIRE_LANGGRAPH=true`, so missing LangGraph must fail instead of silently skipping. External LangSmith/LLM/Chroma/RAGAS E2E evidence remains outstanding.
 
 ## Minimal configuration
 
