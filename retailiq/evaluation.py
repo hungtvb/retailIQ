@@ -1,0 +1,147 @@
+"""Pure contracts for provider-backed RAG evaluation reporting.
+
+The evaluator is external and may fail. Never turn incomplete, non-finite,
+mock or partially written measurements into a successful RAGAS report.
+"""
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from hashlib import sha256
+import json
+import math
+import os
+from pathlib import Path
+import tempfile
+from uuid import uuid4
+
+EVALUATION_METRICS = ('faithfulness', 'answer_relevancy')
+MIN_CASES = 3
+
+
+class EvaluationDataError(ValueError):
+    """Evaluation evidence is incomplete, inconsistent or not measurable."""
+
+
+def checked_score(value: object, metric: str) -> float:
+    """Scores are probabilities in [0,1]; reject NaN/inf and booleans."""
+    if metric not in EVALUATION_METRICS:
+        raise EvaluationDataError('Unknown evaluation metric')
+    if isinstance(value, bool):
+        raise EvaluationDataError(f'Invalid {metric} score')
+    try:
+        score = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise EvaluationDataError(f'Invalid {metric} score') from exc
+    if not math.isfinite(score) or not 0 <= score <= 1:
+        raise EvaluationDataError(f'Out-of-range {metric} score')
+    return score
+
+
+def checked_case(question: str, output: dict) -> dict:
+    """Validate actual RAG answer/context shape; return no raw text to disk."""
+    if not isinstance(question, str) or not 3 <= len(question.strip()) <= 500:
+        raise EvaluationDataError('Invalid evaluation question')
+    if not isinstance(output, dict):
+        raise EvaluationDataError('Missing agent response')
+    answer = output.get('answer')
+    contexts = output.get('contexts')
+    if not isinstance(answer, str) or not answer.strip():
+        raise EvaluationDataError('Empty answer cannot be evaluated')
+    if not isinstance(contexts, list) or not contexts:
+        raise EvaluationDataError('Missing retrieved contexts')
+    if len(contexts) > 10:
+        raise EvaluationDataError('Unexpected number of retrieved contexts')
+    for context in contexts:
+        if not isinstance(context, dict):
+            raise EvaluationDataError('Malformed context')
+        if (not isinstance(context.get('text'), str) or not context['text'].strip()
+                or not isinstance(context.get('source'), str)
+                or not context['source'].strip()):
+            raise EvaluationDataError('Missing context content or provenance')
+    # Preserve only stable case fingerprint and data counts in the public report.
+    # No raw prompts, generated answers, chunks or source document paths.
+    return {
+        'case_id': sha256(question.strip().encode('utf8')).hexdigest()[:16],
+        'source_count': len(contexts),
+    }
+
+
+def checked_measurement(case: dict, faithfulness: object,
+                        answer_relevancy: object) -> dict:
+    if (not isinstance(case, dict) or
+            not isinstance(case.get('case_id'), str) or
+            not isinstance(case.get('source_count'), int) or
+            case['source_count'] < 1):
+        raise EvaluationDataError('Invalid evaluation case descriptor')
+    return {
+        'case_id': case['case_id'],
+        'source_count': case['source_count'],
+        'faithfulness': checked_score(faithfulness, 'faithfulness'),
+        'answer_relevancy': checked_score(answer_relevancy, 'answer_relevancy'),
+    }
+
+
+def build_report(samples: list[dict], *, evaluator: str, execution_mode: str) -> dict:
+    """No partial, duplicate, simulated or unmeasured run can be accepted."""
+    if execution_mode != 'full' or evaluator != 'ragas':
+        raise EvaluationDataError('This report requires real full-mode RAGAS evaluation')
+    if not isinstance(samples, list) or len(samples) < MIN_CASES:
+        raise EvaluationDataError('Too few evaluated cases for the configured dataset')
+    ids = set()
+    for sample in samples:
+        if not isinstance(sample, dict) or set(sample) != {
+                'case_id', 'source_count', *EVALUATION_METRICS}:
+            raise EvaluationDataError('Malformed evaluation sample')
+        case_id = sample['case_id']
+        if not isinstance(case_id, str) or len(case_id) != 16 or case_id in ids:
+            raise EvaluationDataError('Duplicate or invalid evaluation case ID')
+        ids.add(case_id)
+        if type(sample['source_count']) is not int or sample['source_count'] < 1:
+            raise EvaluationDataError('Invalid retrieved source count')
+        for metric in EVALUATION_METRICS:
+            checked_score(sample[metric], metric)
+    summary = {
+        metric: {
+            'mean': sum(sample[metric] for sample in samples) / len(samples),
+            'min': min(sample[metric] for sample in samples),
+        }
+        for metric in EVALUATION_METRICS
+    }
+    return {
+        'schema_version': 1,
+        'run_id': uuid4().hex,
+        'evaluated_at': datetime.now(timezone.utc).isoformat(),
+        'execution_mode': execution_mode,
+        'evaluator': evaluator,
+        'sample_count': len(samples),
+        'summary': summary,
+        'samples': samples,
+        'note': 'Provider-backed evaluation; scores are not a production quality certification.',
+    }
+
+
+def save_report_atomic(target: Path, report: dict) -> None:
+    """Write only a complete validated report; keep previous result on failure."""
+    if not isinstance(report, dict) or report.get('schema_version') != 1:
+        raise EvaluationDataError('Invalid report schema')
+    # Do not persist NaN/Infinity even if a caller bypasses build_report.
+    raw = json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False)
+    target = Path(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    candidate = None
+    try:
+        with tempfile.NamedTemporaryFile(
+                mode='w', dir=target.parent, prefix=target.name + '.',
+                suffix='.tmp', encoding='utf8', delete=False) as handle:
+            candidate = Path(handle.name)
+            try:
+                os.chmod(candidate, 0o600)
+            except OSError:
+                pass
+            handle.write(raw)
+            handle.flush()
+            os.fsync(handle.fileno())
+        candidate.replace(target)
+    finally:
+        if candidate is not None:
+            candidate.unlink(missing_ok=True)
