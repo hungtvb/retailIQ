@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/svg+xml" href="/assets/brand/logo-mark.svg">
   <link rel="stylesheet" href="/assets/styles.css">
   <link rel="stylesheet" href="/assets/data-workspace.css">
   <script defer src="/assets/app.js"></script>
@@ -17,10 +18,8 @@
   <div class="shell">
     <header class="site-header">
       <div class="brand-lockup" aria-label="RetailIQ Copilot">
-        <div class="brand-symbol" aria-hidden="true">
-          <svg viewBox="0 0 26 26" fill="none"><rect x="2.5" y="2.5" width="9" height="9" rx="2" stroke="currentColor" stroke-width="1.7"/><rect x="14.5" y="2.5" width="9" height="9" rx="2" stroke="currentColor" stroke-width="1.7"/><rect x="2.5" y="14.5" width="9" height="9" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M15 23V15h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </div>
-        <div class="brand-name">RetailIQ <span>Copilot</span></div>
+        <div class="brand-symbol" aria-hidden="true"><img src="/assets/brand/logo-mark.svg" alt="" width="38" height="40"></div>
+        <div class="brand-name"><span class="brand-wordmark">Retail<span class="brand-iq">IQ</span></span><span class="brand-product">Copilot</span></div>
       </div>
       <div class="header-right"><span class="data-label">ELECTRONICS · SAMPLE DATA</span><span class="environment-pill"><span class="status-dot" aria-hidden="true"></span> LOCAL</span></div>
     </header>
@@ -48,10 +47,16 @@
             <article class="paper-card conversation-card" aria-label="RetailIQ conversation">
               <div class="card-topline conversation-heading"><h2>Conversation</h2><span id="response-state" class="small-status"><span class="status-dot"></span> READY</span></div>
               <div id="chat-thread" class="chat-thread" aria-label="Chat messages">
+                <div id="chat-welcome" class="chat-welcome">
+                  <img src="/assets/brand/mascot-guide.svg" alt="" width="84" height="100">
+                  <div><strong>Hi, I'm IQ.</strong><span>Ask about sales, stock or products — you can follow up naturally.</span></div>
+                </div>
                 <div id="chat-history" class="chat-history" role="log" aria-label="Previous messages" aria-live="polite" aria-relevant="additions"></div>
-                <div id="active-response" class="chat-message chat-message-assistant chat-active-answer">
-                  <span class="chat-message-label">RETAILIQ</span>
-                  <div id="answer" class="answer" role="status" aria-live="polite">Ask a retail question, then continue with a follow-up.</div>
+                <div id="active-response" class="chat-message chat-message-assistant chat-active-answer" hidden>
+                  <img class="chat-avatar" src="/assets/brand/mascot-avatar.svg" alt="" width="36" height="36">
+                  <div class="chat-bubble"><span class="chat-message-label">IQ · RETAILIQ COPILOT</span>
+                    <div id="answer" class="answer" role="status" aria-live="polite">Ask a retail question, then continue with a follow-up.</div>
+                  </div>
                 </div>
               </div>
               <div class="chat-composer">
