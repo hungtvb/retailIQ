@@ -9,6 +9,7 @@ from retailiq.assistant import intent, do
 from retailiq.domain.analytics import month, products, top
 from retailiq.core.config import chat_model, configure_langsmith
 from retailiq.skills import skill_for, load_skill
+from retailiq.observability import log_event, observed
 from retailiq.orchestration.agents import sales_analysis, inventory_analysis, product_analysis, replenish_review
 
 AGENT_FOR_INTENT = {
@@ -92,14 +93,16 @@ def route(state: State):
             # Keep unambiguous cross-domain intent from being overridden by a narrow model prediction.
             if category == 'product' or parsed.intent == category:
                 category = parsed.intent
-    except Exception:
+    except Exception as error:
         fallback = True
+        log_event('agent.router_fallback', level='WARNING', error_type=type(error).__name__)
     target = AGENT_FOR_INTENT[category]
     previous = state.get('previous_agent', '')
     # A real agent-to-agent handoff: the former Sales Agent transfers control
     # with a typed Command, rather than merely labeling a router decision.
     if previous == 'sales_agent' and category == 'stock':
         target = 'sales_agent'
+    log_event('agent.routed', agent=target, intent=category, route_fallback=fallback, execution_mode='full')
     return Command(update={'effective_question': effective, 'intent': category,
                            'route_fallback': fallback, 'skill': skill_for(category)}, goto=target)
 
@@ -107,32 +110,37 @@ def route(state: State):
 def sales_agent(state: State):
     from langgraph.types import Command
     if state['intent'] == 'stock':
+        log_event('agent.handoff', previous_agent='sales_agent', target_agent='inventory_agent', execution_mode='full')
         return Command(update={'handoff': {'from': 'sales_agent', 'to': 'inventory_agent',
                                            'reason': 'Follow-up inventory question'},
                                'active_agent': 'inventory_agent'}, goto='inventory_agent')
     # Explicitly loading a skill makes this more than a directory of Markdown docs.
     load_skill('sales_kpi')
-    result = sales_analysis(state['effective_question'], state['intent'])
+    with observed('agent.sales', agent='sales_agent', execution_mode='full'):
+        result = sales_analysis(state['effective_question'], state['intent'])
     return Command(update={**result, 'active_agent': 'sales_agent'}, goto='__end__')
 
 
 def inventory_agent(state: State):
     from langgraph.types import Command
     load_skill('inventory_availability')
-    result = inventory_analysis(state['effective_question'])
+    with observed('agent.inventory', agent='inventory_agent', execution_mode='full'):
+        result = inventory_analysis(state['effective_question'])
     return Command(update={**result, 'active_agent': 'inventory_agent'}, goto='__end__')
 
 
 def product_agent(state: State):
     from langgraph.types import Command
-    result = product_analysis(state['effective_question'])
+    with observed('agent.product', agent='product_agent', execution_mode='full'):
+        result = product_analysis(state['effective_question'])
     return Command(update={**result, 'active_agent': 'product_agent'}, goto='__end__')
 
 
 def retail_supervisor(state: State):
     from langgraph.types import Command
     load_skill('replenishment_review')
-    result = replenish_review()
+    with observed('agent.supervisor', agent='retail_supervisor', execution_mode='full'):
+        result = replenish_review()
     return Command(update={**result, 'active_agent': 'retail_supervisor'}, goto='__end__')
 
 
