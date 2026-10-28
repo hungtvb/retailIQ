@@ -70,6 +70,17 @@ Build and orchestrate five required specialist agents:
 - **Deep agent report generation** for decisions and operational justification.
 - **Full order scenario** demonstrating multi-agent coordination, with **human manager approval** before the sensitive action is finalized.
 
+## Delivery boundaries by week (avoid implementing future scope early)
+
+| Week | In scope | Intentionally deferred |
+|---|---|---|
+| **Week 1** | Read-only Sales/Inventory SQL, Product RAG, LangGraph Router/Specialists/Supervisor, scoped context and SQLite chat sessions/checkpoints, basic provider timeout/read retries, SSE + LangSmith tracing evidence, RAGAS, illustrative Cost/ROI, tests and demo | No approval flow, no live order mutations, no long-term customer memory, no MCP integrations |
+| **Week 2** | Data freshness, semantic layer, MCP inventory/order integration, customer memory, hybrid retrieval, measurable reliability; strengthen retries/timeouts based on measured failures | No price/order write approval yet |
+| **Week 3** | Human-in-the-loop approval, security/RBAC, cost limits/alerts, tracing/evaluation governance | No autonomous order fulfilment yet |
+| **Week 4** | Five domain agents and cross-agent execution for fulfilment/pricing/order workflows, with manager approval for sensitive writes | No unapproved autonomous business mutations |
+
+**Scope rule:** A pattern may be demonstrated read-only in Week 1 without implementing its later operational business feature. Never label future-week requirements as Week 1 acceptance blockers unless the Week 1 rubric explicitly requires them. All Week 1 execution remains local and synthetic.
+
 ## Team delivery constraints (working agreement; not course rubric)
 
 - Team size: **5 people**.
