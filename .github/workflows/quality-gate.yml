@@ -1,0 +1,48 @@
+name: RetailIQ localhost E2E and benchmark
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - 'quality/**'
+    paths:
+      - 'scripts/quality_gate.py'
+      - '.github/workflows/quality-gate.yml'
+      - 'retailiq/**'
+      - 'data/knowledge/**'
+      - 'data/product_docs/**'
+      - 'requirements-offline.txt'
+  pull_request:
+    paths:
+      - 'scripts/quality_gate.py'
+      - '.github/workflows/quality-gate.yml'
+      - 'retailiq/**'
+      - 'data/knowledge/**'
+      - 'data/product_docs/**'
+      - 'requirements-offline.txt'
+
+permissions:
+  contents: read
+
+jobs:
+  localhost-e2e-benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install local server dependencies
+        run: python -m pip install -r requirements-offline.txt
+      - name: Real localhost API/SSE E2E + synthetic throughput/latency
+        run: python -m scripts.quality_gate --samples 50
+      - name: Preserve machine-readable E2E/benchmark evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: retailiq-quality-evidence
+          path: data/quality_reports/e2e_benchmark.json
+          if-no-files-found: warn
+          retention-days: 14
