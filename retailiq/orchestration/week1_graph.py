@@ -252,6 +252,27 @@ def _session_graph():
 
 
 
+def bounded_history(history: list[dict] | None) -> list[dict]:
+    """Persist only user-authored follow-up evidence, not model/HTML output.
+
+    The Week 1 router uses previous user product identifiers only; carrying
+    12 large assistant answers in every checkpoint wastes disk and increases
+    the attack surface without adding useful routing context.
+    """
+    if history is None:
+        return []
+    if not isinstance(history, list):
+        raise ValueError('Chat history must be a list')
+    output = []
+    for item in history[-24:]:
+        if not isinstance(item, dict) or item.get('role') != 'user':
+            continue
+        content = item.get('content')
+        if isinstance(content, str) and content.strip():
+            output.append({'role': 'user', 'content': content[:500]})
+    return output[-12:]
+
+
 class GraphResultError(ValueError):
     """Graph finished without a complete, correctly routed business result."""
 
@@ -293,7 +314,7 @@ def run(q: str, *, history: list[dict] | None = None, active_agent: str = '') ->
     if sid:
         config['configurable'] = {'thread_id': sid}
     inputs = {
-        'question': q, 'history': (history or [])[-12:],
+        'question': q, 'history': bounded_history(history),
         'previous_agent': active_agent,
         'answer': '', 'records': [], 'contexts': [],
         'handoff': None, 'subagents': [], 'route_fallback': False,
