@@ -348,3 +348,55 @@ def test_grounding_enforces_strict_answer_size_and_capped_evidence():
     assert len(parsed) == 3
     assert all(len(x['untrusted_text']) == grounding.MAX_CONTEXT_CHARS for x in parsed)
     assert not grounding.validate_answer('x' * (grounding.MAX_ANSWER_CHARS + 1) + ' [S1]', labels)[0]
+
+
+def test_failed_deletion_keeps_recovery_journal_and_reconciles(harness):
+    store, manifest, docs = harness
+    indexing.sync_index(store=store, manifest_path=manifest)
+    (docs / 'EL-001.md').unlink()
+    original_delete = store.delete
+
+    def fail_delete(ids):
+        raise OSError('Simulated Chroma deletion outage')
+
+    store.delete = fail_delete
+    with pytest.raises(OSError, match='outage'):
+        indexing.sync_index(store=store, manifest_path=manifest)
+    assert indexing._recovery_path(manifest).exists()
+    with pytest.raises(indexing.IndexNotReadyError):
+        indexing.vector_search('AlphaBook Pro specifications')
+    store.delete = original_delete
+    report = indexing.sync_index(store=store, manifest_path=manifest)
+    assert report['files'] == 0
+    assert not store.documents
+    assert not indexing._recovery_path(manifest).exists()
+
+
+def test_failed_vector_query_propagates_and_releases_read_guard(harness):
+    store, manifest, docs = harness
+    indexing.sync_index(store=store, manifest_path=manifest)
+
+    def fail_query(_question, k):
+        raise TimeoutError('Vector database timed out')
+
+    store.similarity_search_with_relevance_scores = fail_query
+    with pytest.raises(TimeoutError, match='timed out'):
+        indexing.vector_search('AlphaBook Pro specifications')
+    assert indexing._INDEX_SYNC_LOCK.acquire(blocking=False)
+    indexing._INDEX_SYNC_LOCK.release()
+
+
+def test_parser_exception_is_sanitized_in_non_strict_lexical_mode(harness, monkeypatch):
+    store, manifest, docs = harness
+
+    def broken_parser(_path):
+        raise RuntimeError('SECRET DOCUMENT BODY in parser error')
+
+    monkeypatch.setattr(indexing, 'load_file', broken_parser)
+    document, errors = indexing.plan_chunks([docs / 'EL-001.md'], strict=False)
+    assert document == {}
+    assert errors == {'data/product_docs/EL-001.md': 'RuntimeError'}
+    assert 'SECRET' not in str(errors)
+    with pytest.raises(ValueError, match='RuntimeError') as error:
+        indexing.plan_chunks([docs / 'EL-001.md'], strict=True)
+    assert 'SECRET' not in str(error.value)
