@@ -114,7 +114,7 @@
   function renderEvidence(target, result) {
     target.replaceChildren();
     // Render bounded, SQL-backed evidence only. Never coerce strings into KPIs.
-    const records = Array.isArray(result?.records) ? result.records.slice(0, 200) : [];
+    const records = Array.isArray(result?.records) && result.records.length <= 200 ? result.records : [];
     const intent = String(result?.intent || '');
     let metric = null, caption = '', labels = '';
     if (intent === 'stock' && records.length && records.every(r => validRow(r, 'available', true))) {
