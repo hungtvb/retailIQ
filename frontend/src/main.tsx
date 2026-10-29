@@ -48,7 +48,8 @@ function AppIcon({name, size=18}: {name:string;size?:number}) {
 }
 
 const formatStatus = (s: string) => s === 'completed' ? 'Done' :
-  s === 'running' ? 'Running' : s === 'failed' ? 'Failed' : 'Pending';
+  s === 'running' ? 'Running' : s === 'failed' ? 'Failed' :
+  s === 'observed' ? 'Observed' : 'Pending';
 
 function arc(from: PositionedNode, to: PositionedNode, kind: string): string {
   const dx=to.x-from.x, dy=to.y-from.y;
