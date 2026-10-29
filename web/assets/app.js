@@ -45,15 +45,31 @@ async function refreshSessions() {
   const response = await fetch('/api/sessions');
   if (!response.ok) throw new Error('Unable to read chat sessions');
   const data = await response.json();
+  const sessions = data.sessions || [];
   const picker = byId('chat-session-picker');
   picker.replaceChildren();
-  for (const s of data.sessions) {
+  if (!activeSessionId) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'New conversation';
+    picker.appendChild(option);
+  }
+  for (const s of sessions) {
     const option = document.createElement('option');
     option.value = s.id;
     option.textContent = s.title;
     picker.appendChild(option);
   }
-  if (data.sessions.some(s => s.id === activeSessionId)) picker.value = activeSessionId;
+  // Never show one selected conversation while API calls target another.
+  // A previously selected chat may fall outside the bounded session listing.
+  if (activeSessionId && !sessions.some(s => s.id === activeSessionId)) {
+    const option = document.createElement('option');
+    option.value = activeSessionId;
+    option.textContent = 'Current conversation';
+    picker.appendChild(option);
+  }
+  picker.value = activeSessionId || '';
+  return sessions;
 }
 
 function appendChatMessage(role, content, agent = '') {
@@ -113,6 +129,7 @@ async function selectSession(id, preserveEvidence = false) {
   byId('chat-history-limit').hidden = session.messages_truncated !== true;
   renderChatMessages(messages);
   byId('chat-welcome').hidden = messages.length > 0;
+  setChatError();
   const last = messages.length && messages[messages.length - 1].role === 'assistant' ? messages[messages.length - 1] : null;
   const storedEvidence = last && last.evidence ? last.evidence : {};
   currentAnswerIsPersisted = Boolean(last);
@@ -143,37 +160,84 @@ async function selectSession(id, preserveEvidence = false) {
   scrollChatToBottom();
 }
 
-async function createNewChat() {
+function setChatError(message = '') {
+  const error = byId('chat-error');
+  error.textContent = message;
+  error.hidden = !message;
+}
+
+function showEmptyChat() {
+  // A new chat is a draft until the first successful turn. Creating an empty
+  // SQLite session on every New/Delete click polluted the history list.
   activeSessionId = '';
-  await ensureSession();
-  await selectSession(activeSessionId);
+  localStorage.removeItem('retailiq-active-session');
+  const picker = byId('chat-session-picker');
+  if ([...picker.options].some(option => option.value === '')) picker.value = '';
+  else picker.selectedIndex = -1;
+  byId('chat-history').replaceChildren();
+  byId('chat-history-limit').hidden = true;
+  byId('chat-welcome').hidden = false;
+  byId('active-response').hidden = true;
+  currentAnswerIsPersisted = false;
+  const answer = byId('answer');
+  answer.textContent = 'Ask a retail question, then continue with a follow-up.';
+  answer.dataset.rawAnswer = '';
+  answer.classList.remove('is-error');
+  Rich().renderEvidence(byId('response-visuals'), {});
+  renderRecords({});
+  setActiveAgent('iq');
+  byId('meta').textContent = 'No execution yet.';
+  byId('agent-trace').replaceChildren();
+  byId('raw').textContent = '{}';
+  byId('live-trace-list').replaceChildren();
+  byId('live-trace-count').textContent = '0 events';
+  byId('live-trace-request').textContent = '—';
+  setLiveTraceState('IDLE');
+  byId('summary-agent').textContent = '—';
+  byId('summary-period').textContent = '—';
+  byId('summary-mode').textContent = '—';
+  byId('response-state').textContent = 'NEW CHAT';
+  lastRequestId = '';
+  setChatError();
+}
+
+async function createNewChat() {
+  if (askInProgress) return;
+  showEmptyChat();
+  await refreshSessions();
   byId('q').value = '';
   byId('q').focus();
 }
 
 async function deleteCurrentChat() {
-  if (!activeSessionId) return;
+  if (askInProgress || !activeSessionId) return;
   if (!confirm('Delete this conversation and all messages?')) return;
-  const response = await fetch('/api/sessions/' + encodeURIComponent(activeSessionId), {method: 'DELETE'});
-  if (!response.ok) throw new Error('Unable to delete session');
+  const sid = activeSessionId;
+  const response = await fetch('/api/sessions/' + encodeURIComponent(sid), {method: 'DELETE'});
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    const reason = typeof payload.detail === 'string' ? payload.detail : 'Request failed';
+    throw new Error('Cannot delete conversation (' + response.status + '): ' + reason);
+  }
   activeSessionId = '';
   localStorage.removeItem('retailiq-active-session');
-  await refreshSessions();
-  const next = byId('chat-session-picker').value;
-  if (next) await selectSession(next);
-  else await createNewChat();
+  const remaining = await refreshSessions();
+  if (remaining.length) await selectSession(remaining[0].id);
+  else showEmptyChat(); // Do not silently replace a deleted chat with a new DB row.
+  setChatError();
 }
 
 async function initializeSessions() {
   try {
-    await refreshSessions();
+    const sessions = await refreshSessions();
     const stored = localStorage.getItem('retailiq-active-session');
-    const options = [...byId('chat-session-picker').options].map(o => o.value);
-    const id = options.includes(stored) ? stored : options[0];
+    const selected = sessions.find(s => s.id === stored);
+    const id = selected ? selected.id : sessions.length ? sessions[0].id : '';
     if (id) await selectSession(id);
-    else await createNewChat();
+    else showEmptyChat();
   } catch (err) {
-    byId('meta').textContent = 'Session manager unavailable: ' + err.message;
+    showEmptyChat();
+    setChatError('Unable to load conversations: ' + err.message);
   }
 }
 
@@ -401,6 +465,7 @@ async function consumeChatSSE(response, onEvent) {
 async function ask() {
   if (askInProgress) return;
   const question = byId('q').value.trim();
+  setChatError();
   if (question.length < 3) { byId('q').reportValidity(); return; }
   askInProgress = true;
   const button = byId('ask-submit');
@@ -429,8 +494,10 @@ async function ask() {
   let result = null;
   let streamError = '';
   let streamDone = false;
+  let sessionId = activeSessionId;
+  setChatError();
   try {
-    const sessionId = await ensureSession();
+    sessionId = await ensureSession();
     const response = await fetch('/ask/stream', {
       method: 'POST', headers: {'Content-Type':'application/json', 'Accept':'text/event-stream'},
       body: JSON.stringify({question, session_id: sessionId})
@@ -487,14 +554,19 @@ async function ask() {
     scrollChatToBottom();
     byId('q').focus();
   } catch (error) {
-    answer.classList.add('is-error');
-    answer.textContent = 'Unable to retrieve an answer (message not saved). ' + error.message;
-    Rich().renderEvidence(byId('response-visuals'), {});
+    // Remove optimistic messages and restore the authoritative saved history.
+    // A stream may fail after the backend saved its turn, so re-read SQLite.
+    try {
+      if (sessionId) await selectSession(sessionId);
+      else showEmptyChat();
+    } catch (_) {
+      showEmptyChat();
+    }
+    setChatError('Unable to complete the request: ' + error.message);
     if (!byId('q').value.trim()) byId('q').value = question;
-    scrollChatToBottom();
     byId('response-state').textContent = 'ERROR';
-    setLiveTraceState('ERROR');
     byId('summary-mode').textContent = 'Error';
+    scrollChatToBottom();
   } finally {
     askInProgress = false;
     button.disabled = false;
@@ -643,9 +715,12 @@ function initRetailIQ() {
     const destination = byId(tabs[(index + direction + tabs.length) % tabs.length]);
     destination.focus(); destination.click(); event.preventDefault();
   });
-  byId('chat-new').addEventListener('click', () => createNewChat().catch(e => alert(e.message)));
-  byId('chat-delete').addEventListener('click', () => deleteCurrentChat().catch(e => alert(e.message)));
-  byId('chat-session-picker').addEventListener('change', e => selectSession(e.target.value).catch(err => alert(err.message)));
+  byId('chat-new').addEventListener('click', () => createNewChat().catch(e => setChatError(e.message)));
+  byId('chat-delete').addEventListener('click', () => deleteCurrentChat().catch(e => setChatError(e.message)));
+  byId('chat-session-picker').addEventListener('change', e => {
+    if (!e.target.value) { showEmptyChat(); return; }
+    selectSession(e.target.value).catch(err => setChatError(err.message));
+  });
   initializeSessions();
   byId('answer').classList.add('is-placeholder');
 }
