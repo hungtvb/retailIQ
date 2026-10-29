@@ -158,6 +158,11 @@ async function selectSession(id, preserveEvidence = false) {
     byId('live-trace-state').textContent = 'IDLE';
     byId('live-indicator').className = 'live-indicator';
     byId('live-trace-panel').classList.remove('trace-is-live');
+    byId('live-trace-state').textContent = last ? 'STORED' : 'IDLE';
+    byId('graph-request-notice').hidden = false;
+    byId('graph-request-notice').textContent = last
+      ? 'This saved answer has no replayable execution trace. Ask a new question to inspect its flow.'
+      : 'Send a question to inspect its execution flow.';
     window.RetailGraph?.chatClear();
     lastRequestId = '';
   }
@@ -203,6 +208,8 @@ function showEmptyChat() {
   byId('live-trace-count').textContent = '0 events';
   byId('live-trace-request').textContent = '—';
   setLiveTraceState('IDLE');
+  byId('graph-request-notice').hidden = false;
+  byId('graph-request-notice').textContent = 'Send a question to inspect its execution flow.';
   byId('summary-agent').textContent = '—';
   byId('summary-period').textContent = '—';
   byId('summary-mode').textContent = '—';
@@ -383,6 +390,7 @@ function resetLiveTrace() {
   byId('live-trace-count').textContent = '0 events';
   byId('live-trace-request').textContent = '—';
   byId('live-trace-state').textContent = 'CONNECTING';
+  byId('graph-request-notice').hidden = true;
   byId('live-indicator').className = 'live-indicator live-indicator-running';
   byId('live-trace-panel').classList.add('trace-is-live');
   window.RetailGraph?.chatReset();
