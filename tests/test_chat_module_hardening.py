@@ -109,7 +109,7 @@ def test_local_only_guard_rejects_untrusted_host(client):
     assert allowed.status_code == 200
     rejected = client.get('/api/sessions', headers={'host': 'outside.example'})
     assert rejected.status_code == 403
-    assert 'local-only' in rejected.json()['detail']
+    assert 'Remote access is unavailable' in rejected.json()['detail']
     assert client.get('/assets/agent-identity.js', headers={'host': 'outside.example'}).status_code == 403
     assert client.get('/api/sessions', headers={'host': 'localhost:8000'}).status_code == 200
 
