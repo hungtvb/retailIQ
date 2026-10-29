@@ -86,3 +86,34 @@ def test_provider_timeout_and_max_one_retry(monkeypatch):
     with pytest.raises(ValueError): config.chat_model()
     monkeypatch.setenv('RETAILIQ_PROVIDER_TIMEOUT_SECONDS', 'abc')
     with pytest.raises(ValueError): config.embeddings_model()
+
+
+def test_missing_full_mode_module_reports_actionable_error_in_chat_and_stream(client, monkeypatch):
+    from retailiq.api import http
+
+    def missing(*_args, **_kwargs):
+        raise ModuleNotFoundError("No module named 'langgraph.checkpoint.sqlite'",
+                                  name='langgraph.checkpoint.sqlite')
+
+    monkeypatch.setattr(http, 'ask', missing)
+    response = client.post('/ask', json={'question': 'What is the revenue this month?'})
+    assert response.status_code == 503
+    detail = response.json()['detail']
+    assert 'langgraph.checkpoint.sqlite' in detail
+    assert 'requirements-full.txt' in detail
+
+    stream = client.post('/ask/stream', json={'question': 'What is the revenue this month?'})
+    assert stream.status_code == 200
+    assert '"code":"dependency_missing"' in stream.text
+    assert 'langgraph.checkpoint.sqlite' in stream.text
+    assert 'requirements-full.txt' in stream.text
+
+
+def test_missing_private_module_never_reflects_untrusted_import_name():
+    from retailiq.api.http import _missing_module_message
+
+    error = ModuleNotFoundError('No module named sensitive_secret_project',
+                                name='sensitive_secret_project')
+    message = _missing_module_message(error)
+    assert 'sensitive_secret_project' not in message
+    assert 'requirements-full.txt' in message
