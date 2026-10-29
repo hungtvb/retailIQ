@@ -140,8 +140,29 @@
             </article>
             <article class="paper-card workflow-card" aria-label="Workflow execution graph">
               <div class="workflow-graph-head"><h2>Execution nodes &amp; handoffs</h2><small id="workflow-run-id">Not run</small></div>
+              <div class="workflow-graph-toolbar" role="group" aria-label="Graph detail level">
+                <button type="button" data-workflow-view="overview" aria-pressed="true">Overview</button>
+                <button type="button" data-workflow-view="detailed" aria-pressed="false">Tools &amp; sources</button>
+                <button type="button" id="workflow-replay" disabled>Replay steps ↻</button>
+              </div>
+              <div class="workflow-graph-legend" aria-label="Execution state legend">
+                <span><i class="workflow-legend-dot legend-done"></i>Done</span>
+                <span><i class="workflow-legend-dot legend-running"></i>Running</span>
+                <span><i class="workflow-legend-dot legend-awaiting"></i>Approval</span>
+                <span><i class="workflow-legend-dot legend-blocked"></i>Blocked</span>
+                <span><i class="workflow-legend-dot legend-idle"></i>Not reached</span>
+              </div>
               <div id="workflow-graph" class="execution-graph" aria-label="Recorded workflow node graph"></div>
-              <div id="workflow-node-detail" class="workflow-node-detail" aria-live="polite">Select a node to inspect its evidence.</div>
+              <div class="workflow-observation-grid">
+                <section class="workflow-inspector-card" aria-label="Selected graph node">
+                  <h3>Node inspector</h3>
+                  <div id="workflow-node-detail" class="workflow-node-detail" aria-live="polite">Select a node to inspect its evidence.</div>
+                </section>
+                <section class="workflow-timeline-card" aria-label="Recorded execution timeline">
+                  <h3>Execution timeline <small>event order · no invented timestamps</small></h3>
+                  <div id="workflow-timeline" class="workflow-timeline" aria-label="Recorded execution steps"></div>
+                </section>
+              </div>
               <h2>Decision report</h2>
               <div id="workflow-report" class="workflow-run-result" role="status">Select a scenario to begin.</div>
               <p class="workflow-help">This graph replays executed backend steps. It is not a live model trace; use the Assistant execution graph for SSE live events.</p>
