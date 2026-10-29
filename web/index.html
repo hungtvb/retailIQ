@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="/assets/styles.css">
   <link rel="stylesheet" href="/assets/data-workspace.css">
   <link rel="stylesheet" href="/assets/workflow-graph.css">
+  <link rel="stylesheet" href="/assets/tool-workspace.css">
   <script defer src="/assets/agent-identity.js"></script>
   <script defer src="/assets/response-format.js"></script>
   <script defer src="/assets/workflow-graph.js"></script>
@@ -22,66 +23,59 @@
 <body>
   <div class="shell">
     <header class="site-header">
-      <div class="brand-lockup" aria-label="RetailIQ Copilot">
-        <div class="brand-symbol" aria-hidden="true"><img src="/assets/brand/logo-mark.svg" alt="" width="38" height="40"></div>
-        <div class="brand-name"><span class="brand-wordmark">Retail<span class="brand-iq">IQ</span></span><span class="brand-product">Copilot</span></div>
+      <div class="brand-lockup" aria-label="RetailIQ">
+        <span class="brand-symbol" aria-hidden="true"><img src="/assets/brand/logo-mark.svg" alt="" width="28" height="28"></span>
+        <span class="brand-wordmark">Retail<span class="brand-iq">IQ</span></span>
       </div>
-      <div class="header-right"><span class="data-label">ELECTRONICS · RETAIL ANALYTICS</span></div>
+      <nav class="workspace-tabs" aria-label="RetailIQ views" role="tablist">
+        <button id="tab-assistant" type="button" role="tab" aria-selected="true" aria-controls="assistant-panel">Chat</button>
+        <button id="tab-workflows" type="button" role="tab" aria-selected="false" aria-controls="workflows-panel">Graph</button>
+        <button id="tab-roi" type="button" role="tab" aria-selected="false" aria-controls="roi-panel">Costs</button>
+        <button id="tab-logs" type="button" role="tab" aria-selected="false" aria-controls="logs-panel">Logs</button>
+      </nav>
     </header>
-
     <main>
-
       <div class="workspace" id="workspace">
-        <nav class="workspace-tabs" aria-label="RetailIQ views" role="tablist">
-          <button id="tab-assistant" type="button" role="tab" aria-selected="true" aria-controls="assistant-panel">Assistant</button>
-          <button id="tab-workflows" type="button" role="tab" aria-selected="false" aria-controls="workflows-panel">Workflow Graph</button>
-          <button id="tab-roi" type="button" role="tab" aria-selected="false" aria-controls="roi-panel">Cost &amp; ROI</button>
-          <button id="tab-logs" type="button" role="tab" aria-selected="false" aria-controls="logs-panel">Execution Logs</button>
-        </nav>
 
         <section id="assistant-panel" class="panel" role="tabpanel" aria-labelledby="tab-assistant">
-          <div class="section-heading"><h1>Retail assistant</h1><span class="subtle-suffix">MULTI-TURN CHAT · SOURCED DATA</span></div>
-          <div class="chat-workspace-tools">
+          <h1 class="sr-only">RetailIQ chat</h1>
+          <div class="conversation-workspace">
+            <article class="paper-card conversation-card" aria-label="RetailIQ conversation">
+              <div class="card-topline conversation-heading"><div class="chat-workspace-tools">
             <div class="session-controls">
               <label for="chat-session-picker" class="sr-only">Conversation</label>
               <select id="chat-session-picker" aria-label="Select chat session"><option value="">Loading conversations…</option></select>
-              <button type="button" id="chat-new" class="chat-action-button">+ New chat</button>
+              <button type="button" id="chat-new" class="chat-action-button">New</button>
               <button type="button" id="chat-delete" class="chat-action-button chat-delete-button" aria-label="Delete selected chat">Delete</button>
             </div>
-          </div>
-          <div class="conversation-workspace">
-            <article class="paper-card conversation-card" aria-label="RetailIQ conversation">
-              <div class="card-topline conversation-heading"><h2>Conversation</h2><span id="response-state" class="small-status"><span class="status-dot"></span> READY</span></div>
+          </div><span id="response-state" class="small-status"><span class="status-dot"></span> READY</span></div>
               <div id="chat-thread" class="chat-thread" aria-label="Chat messages">
                 <div id="chat-welcome" class="chat-welcome">
-                  <img src="/assets/brand/mascot-guide.svg" alt="" width="84" height="100">
-                  <div><strong>Hi, I'm IQ.</strong><span>Ask about sales, stock or products — you can follow up naturally.</span></div>
+                  <div><strong>Ask RetailIQ</strong><span>Sales · inventory · products</span></div>
                 </div>
                 <p id="chat-history-limit" class="chat-history-limit" hidden>Showing the 200 most recent messages. Earlier messages remain stored.</p>
                 <div id="chat-history" class="chat-history" role="log" aria-label="Previous messages" aria-live="polite" aria-relevant="additions"></div>
                 <div id="active-response" class="chat-message chat-message-assistant chat-active-answer" hidden>
                   <span id="active-agent-avatar" class="agent-avatar agent-avatar-iq" aria-hidden="true"><img src="/assets/brand/mascot-avatar.svg" alt="" width="30" height="30"></span>
-                  <div class="chat-bubble"><span class="chat-message-label">IQ · RETAILIQ COPILOT</span>
-                    <div id="answer" class="answer rich-markdown" role="status" aria-live="polite">Ask a retail question, then continue with a follow-up.</div>
+                  <div class="chat-bubble"><span class="chat-message-label">RetailIQ</span>
+                    <div id="answer" class="answer rich-markdown" role="status" aria-live="polite">Ask a question about sales, stock or products.</div>
                     <div id="response-visuals" class="rich-response-visuals" aria-label="Data-backed visual summaries"></div>
                   </div>
                 </div>
               </div>
               <div class="chat-composer">
-                <div class="suggestions" aria-label="Suggested questions"><span class="suggestions-label">SUGGESTED</span>
+                <div class="suggestions" aria-label="Suggested questions">
                   <div class="suggestion-pills">
-                    <button type="button" data-question="How many units of AlphaBook Pro 14 are currently in stock?">Stock levels</button>
+                    <button type="button" data-question="How many units of AlphaBook Pro 14 are currently in stock?">Stock</button>
                     <button type="button" data-question="What is the revenue this month?">Revenue</button>
                     <button type="button" data-question="Which products are top sellers?">Top sellers</button>
-                    <button type="button" data-question="How many units of the top seller are in stock?">Follow up: stock</button>
                     <button type="button" data-question="Tell me about USB-C GaN Charger 65W">Product details</button>
-                    <button type="button" data-question="Which top seller needs a replenishment review based on stock?">Replenishment</button>
                   </div>
                 </div>
                 <form id="ask-form" class="query-form">
                   <label class="sr-only" for="q">Message RetailIQ</label>
                   <div class="query-field"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="m21 3-8.4 18-2.6-7-7-2.6L21 3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
-                    <input id="q" type="text" maxlength="500" autocomplete="off" placeholder="Ask a question or follow up…" required minlength="3">
+                    <input id="q" type="text" maxlength="500" autocomplete="off" placeholder="Ask about sales, stock, products…" required minlength="3">
                   </div>
                   <button id="ask-submit" class="sunshine-button" type="submit">Send <span aria-hidden="true">↗</span></button>
                 </form>
@@ -95,7 +89,7 @@
                 <div><span>Mode</span><strong id="summary-mode">—</strong></div>
               </div>
               <details class="paper-card data-card" aria-labelledby="data-heading">
-            <summary id="data-heading">View data records and sources</summary>
+            <summary id="data-heading">Data &amp; sources</summary>
             <div class="card-topline data-topline"><div class="data-title"><span id="evidence-agent" class="agent-badge" data-agent="iq">IQ</span><span id="data-count" class="data-count">0 rows</span></div><button type="button" id="export-csv" class="secondary-button" disabled>Export CSV</button></div>
             <div id="records-empty" class="records-empty">Query results will appear here as a table.</div>
             <div id="records-table-wrap" class="table-scroll" hidden><table id="records-table" aria-label="SQL query results"></table></div>
@@ -104,15 +98,15 @@
               <article class="paper-card evidence-card" aria-labelledby="trace-title">
               <div class="card-topline"><h2 id="trace-title">Execution</h2><span id="live-trace-state" class="live-trace-state">IDLE</span></div>
               <div class="live-trace" id="live-trace-panel">
-                <div class="live-trace-heading"><span class="live-trace-title"><span id="live-indicator" class="live-indicator"></span> LIVE AGENT ACTIVITY</span><span id="live-trace-count">0 events</span></div>
+                <div class="live-trace-heading"><span class="live-trace-title"><span id="live-indicator" class="live-indicator"></span> Events</span><span id="live-trace-count">0 events</span></div>
                 <div id="execution-graph" class="execution-graph" aria-label="Live node and edge execution graph"></div>
-                <details class="workflow-events"><summary>Event log (details)</summary><ol id="live-trace-list" class="live-trace-list" aria-label="Live execution events" aria-live="polite" aria-relevant="additions"><li class="live-trace-empty">No events yet.</li></ol></details>
+                <details class="workflow-events"><summary>Event log</summary><ol id="live-trace-list" class="live-trace-list" aria-label="Live execution events" aria-live="polite" aria-relevant="additions"><li class="live-trace-empty">No events yet.</li></ol></details>
                 <div class="live-trace-footer"><span>Request</span><code id="live-trace-request">—</code></div>
               </div>
-              <details class="trace-details"><summary>Agent details &amp; raw evidence</summary>
+              <details class="trace-details"><summary>Trace details</summary>
                 <div id="agent-trace" class="agent-trace" aria-label="Agent execution details"></div>
                 <div id="meta" class="execution-meta">No execution yet.</div>
-                <details class="raw-details"><summary>Raw response records</summary><pre id="raw">{}</pre></details>
+                <details class="raw-details"><summary>Raw JSON</summary><pre id="raw">{}</pre></details>
               </details>
             </article>
             </aside>
@@ -120,30 +114,29 @@
         </section>
 
         <section id="workflows-panel" class="panel" role="tabpanel" aria-labelledby="tab-workflows" hidden>
-          <div class="section-heading"><h1>Workflow graph</h1><span class="subtle-suffix">FOUR-WEEK CAPABILITIES · SYNTHETIC SCENARIOS</span></div>
+          <h1 class="sr-only">Workflow graph</h1>
           <div class="workflow-panel-grid">
-            <article class="paper-card workflow-card" aria-label="Workflow controls">
-              <h2>Choose a scenario</h2>
+            <article class="paper-card workflow-card workflow-controls-card" aria-label="Workflow controls">
               <form class="workflow-form" id="workflow-form">
                 <label>Scenario<select id="workflow-scenario" aria-label="Workflow scenario"><option>Loading…</option></select></label>
-                <label>Product SKU<input id="workflow-sku" value="EL-003" maxlength="64" autocomplete="off" aria-label="Product SKU"></label>
-                <label>Quantity<input id="workflow-quantity" type="number" min="1" max="20" step="1" value="2" aria-label="Quantity"></label>
-                <label>Simulated actor<select id="workflow-role" aria-label="Simulated actor"><option value="analyst">Retail analyst</option><option value="manager">Manager</option></select></label>
-                <button id="workflow-run" class="sunshine-button" type="button">Run workflow <span aria-hidden="true">↗</span></button>
+                <label>SKU<input id="workflow-sku" value="EL-003" maxlength="64" autocomplete="off" aria-label="Product SKU"></label>
+                <label>Qty<input id="workflow-quantity" type="number" min="1" max="20" step="1" value="2" aria-label="Quantity"></label>
+                <label>Role<select id="workflow-role" aria-label="Simulated actor"><option value="analyst">Retail analyst</option><option value="manager">Manager</option></select></label>
+                <button id="workflow-run" class="sunshine-button" type="button">Run <span aria-hidden="true">↗</span></button>
               </form>
-              <p class="workflow-notice">Local synthetic execution. The role picker is not user authentication. Approval records a mock decision only; no prices, stock or orders are modified.</p>
+              <p class="workflow-notice">Simulation · role is not authentication · no business writes</p>
               <p id="workflow-status" class="workflow-help" role="status" aria-live="polite">Loading workflow definitions…</p>
               <div id="workflow-review-controls" class="workflow-actions" hidden>
                 <button type="button" id="workflow-approve">Approve</button>
                 <button type="button" id="workflow-reject">Reject</button>
               </div>
             </article>
-            <article class="paper-card workflow-card" aria-label="Workflow execution graph">
-              <div class="workflow-graph-head"><h2>Execution nodes &amp; handoffs</h2><small id="workflow-run-id">Not run</small></div>
+            <article class="paper-card workflow-card workflow-canvas-card" aria-label="Workflow execution graph">
+              <div class="workflow-graph-head"><h2>Execution graph</h2><small id="workflow-run-id">Not run</small></div>
               <div class="workflow-graph-toolbar" role="group" aria-label="Graph detail level">
                 <button type="button" data-workflow-view="overview" aria-pressed="true">Overview</button>
                 <button type="button" data-workflow-view="detailed" aria-pressed="false">Tools &amp; sources</button>
-                <button type="button" id="workflow-replay" disabled>Replay steps ↻</button>
+                <button type="button" id="workflow-replay" disabled>Replay ↻</button>
               </div>
               <div class="workflow-graph-legend" aria-label="Execution state legend">
                 <span><i class="workflow-legend-dot legend-done"></i>Done</span>
@@ -155,17 +148,18 @@
               <div id="workflow-graph" class="execution-graph" aria-label="Recorded workflow node graph"></div>
               <div class="workflow-observation-grid">
                 <section class="workflow-inspector-card" aria-label="Selected graph node">
-                  <h3>Node inspector</h3>
+                  <h3>Inspector</h3>
                   <div id="workflow-node-detail" class="workflow-node-detail" aria-live="polite">Select a node to inspect its evidence.</div>
                 </section>
                 <section class="workflow-timeline-card" aria-label="Recorded execution timeline">
-                  <h3>Execution timeline <small>event order · no invented timestamps</small></h3>
+                  <h3>Timeline <small>recorded events</small></h3>
                   <div id="workflow-timeline" class="workflow-timeline" aria-label="Recorded execution steps"></div>
                 </section>
               </div>
-              <h2>Decision report</h2>
-              <div id="workflow-report" class="workflow-run-result" role="status">Select a scenario to begin.</div>
-              <p class="workflow-help">This graph replays executed backend steps. It is not a live model trace; use the Assistant execution graph for SSE live events.</p>
+              <details class="workflow-report-details" open>
+                <summary>Result</summary>
+                <div id="workflow-report" class="workflow-run-result" role="status">Select a scenario.</div>
+              </details>
             </article>
           </div>
         </section>
