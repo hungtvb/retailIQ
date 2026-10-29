@@ -62,7 +62,16 @@ def newest_products(limit: int = 5) -> list[dict]:
 def catalog_product(sku: str) -> dict | None:
     rows = query('''SELECT sku, name, category, price_vnd, catalog_added_at
                     FROM products WHERE sku = ? LIMIT 1''', (_sku(sku),))
-    return rows[0] if rows else None
+    if not rows:
+        return None
+    item = rows[0]
+    # Never offer a manager an actionable-looking proposal from corrupt
+    # catalog values. Zero may legitimately represent a free item; negative,
+    # null and non-integer prices are invalid input evidence.
+    _nonnegative_int(item.get('price_vnd'), field='catalog price_vnd')
+    if not isinstance(item.get('name'), str) or not item['name'].strip():
+        raise DomainDataError('Catalog product name is missing')
+    return item
 
 
 def _nonnegative_int(value, *, field: str) -> int:
