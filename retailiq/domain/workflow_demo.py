@@ -81,6 +81,134 @@ EDGE_LABELS = {
 }
 
 
+# Tool/data lineage is a reference contract.  A recorded step means the
+# deterministic workflow reached that step; it is NOT evidence of an LLM
+# agent independently invoking a tool.  "preflight" explicitly identifies
+# database reads performed before the simulated specialist steps.
+LINEAGE = {
+    "week1": {
+        "sales_agent": {
+            "tool": "top(period)", "source": "SQLite: orders + order_lines + products",
+            "relation": "workflow SQL read", "evidence": "Completed-order SKU and units sold",
+        },
+        "sql_tool": {
+            "tool": "top(period)", "source": "SQLite: orders + order_lines + products",
+            "relation": "workflow SQL read", "evidence": "Reviewed top-sellers query rows",
+        },
+    },
+    "week2": {
+        "inventory_mcp": {
+            "tool": "inventory(sku) / optional stdio MCP adapter",
+            "source": "SQLite: inventory + products + locations",
+            "relation": "preflight SQLite read; optional real MCP re-read",
+            "evidence": "SKU, location, available units and updated_at",
+        },
+        "semantic_layer": {
+            "tool": "semantic_summary()",
+            "source": "Local semantic definitions",
+            "relation": "deterministic calculation",
+            "evidence": "Metric names and calculation rules",
+        },
+        "freshness_guard": {
+            "tool": "_freshness(stock)",
+            "source": "Inventory updated_at from SQLite snapshot",
+            "relation": "deterministic validation",
+            "evidence": "Timestamp, age and freshness target result",
+        },
+    },
+    "week3": {
+        "scope_guard": {
+            "tool": "Simulated role/location filter",
+            "source": "Preflight SQLite inventory snapshot",
+            "relation": "mock policy, NOT authenticated RBAC",
+            "evidence": "Allowed store rows and visible stock",
+        },
+        "inventory_search_agent": {
+            "tool": "inventory(sku) (preflight)",
+            "source": "SQLite: inventory + products + locations",
+            "relation": "uses preflight data; no agent-owned tool call",
+            "evidence": "Scoped stock by location",
+        },
+        "dynamic_pricing_agent": {
+            "tool": "catalog_product(sku) (preflight) + 5% draft",
+            "source": "SQLite: products",
+            "relation": "deterministic mock proposal; no UPDATE",
+            "evidence": "Catalog list price and draft discounted price",
+        },
+        "verification": {
+            "tool": "Read-only proposal validation",
+            "source": "Catalog price returned from SQLite",
+            "relation": "deterministic validation",
+            "evidence": "Proposal check; no business write",
+        },
+        "manager_approval": {
+            "tool": "POST /api/workflows/runs/{id}/review",
+            "source": "SQLite: workflow_runs (separate demo storage)",
+            "relation": "simulated decision; not identity verification",
+            "evidence": "Recorded approve/reject decision",
+        },
+    },
+    "alerts": {
+        "inventory_search_agent": {
+            "tool": "inventory(sku) (preflight)",
+            "source": "SQLite: inventory + products + locations",
+            "relation": "uses preflight data",
+            "evidence": "Available quantity",
+        },
+        "kpi_alert": {
+            "tool": "Low-stock threshold (< 20)",
+            "source": "Available units from SQLite snapshot",
+            "relation": "read-only calculation; no notification",
+            "evidence": "NORMAL or ALERT based on available quantity",
+        },
+    },
+    "week4": {
+        "inventory_search_agent": {
+            "tool": "inventory(sku) (preflight)",
+            "source": "SQLite: inventory + products + locations",
+            "relation": "uses preflight data; no agent-owned tool call",
+            "evidence": "SKU, location and available units",
+        },
+        "fulfilment_optimisation_agent": {
+            "tool": "Single/split location allocation calculation",
+            "source": "Preflight SQLite inventory rows",
+            "relation": "deterministic computation; bounded replan",
+            "evidence": "Allocation plan and verification feedback",
+        },
+        "customer_context_agent": {
+            "tool": "Synthetic guest context",
+            "source": "Static anonymous mock value (no customer DB)",
+            "relation": "mock only; no external tool call",
+            "evidence": "Anonymous guest, no customer lookup or PII",
+        },
+        "dynamic_pricing_agent": {
+            "tool": "catalog_product(sku) (preflight)",
+            "source": "SQLite: products",
+            "relation": "read-only list price; no price update",
+            "evidence": "Catalog list price",
+        },
+        "order_management_agent": {
+            "tool": "Draft generation / split-plan revision",
+            "source": "Preflight price + allocation inputs",
+            "relation": "deterministic draft; no INSERT",
+            "evidence": "SKU, quantity and draft amount",
+        },
+        "verification": {
+            "tool": "Stock/allocation/price validation",
+            "source": "Stock snapshot + allocation draft",
+            "relation": "bounded verification/replan; no reservation",
+            "evidence": "Accepted / blocked / replan result",
+        },
+        "manager_approval": {
+            "tool": "POST /api/workflows/runs/{id}/review",
+            "source": "SQLite: workflow_runs (separate demo storage)",
+            "relation": "simulated manager decision; not real RBAC",
+            "evidence": "Recorded approve/reject, no business mutation",
+        },
+    },
+}
+
+
 def definitions() -> list[dict]:
     return [{"id": key, "title": DESCRIPTIONS[key],
              "nodes": [{"id": i, "label": title, "kind": kind} for i, title, kind in nodes],
@@ -92,6 +220,7 @@ def definitions() -> list[dict]:
                          {"from": "fulfilment_optimisation_agent",
                           "to": "order_management_agent", "label": "revise"}]
                         if key == "week4" else [])),
+             "lineage": LINEAGE.get(key, {}),
              "execution": "deterministic_local_simulation"} for key, nodes in GRAPH.items()]
 
 
