@@ -31,7 +31,7 @@ def test_definitions_accurate_and_graph_connected(client):
     response = api.get("/api/workflows/definitions")
     assert response.status_code == 200
     scenarios = {item["id"]: item for item in response.json()["scenarios"]}
-    assert set(scenarios) == {"week2", "week3", "alerts", "week4"}
+    assert set(scenarios) == {"week1", "week2", "week3", "alerts", "week4"}
     for scenario in scenarios.values():
         ids = {node["id"] for node in scenario["nodes"]}
         assert scenario["edges"]
