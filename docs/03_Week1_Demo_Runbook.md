@@ -95,7 +95,7 @@ For Week 1 acceptance, QA must also capture a real LangSmith trace and a real RA
 | Chat works but product search/index fails | Embedding deployment mismatch, provider/network issue, or unreadable source | Run `python -m scripts.index_rag --dry-run`; review parse errors; confirm model and credentials; retry with `python -m scripts.index_products`. |
 | Product answer is missing or irrelevant | Source outside configured folders, stale index, or weak retrieval | Check dry-run file/chunk counts and source paths; allow full-mode sync or rebuild `.chroma/`; review returned `contexts`. |
 | No LangSmith trace appears | Tracing disabled, key missing/invalid, or request ran offline | Use full mode, set tracing true and the separate local key, restart, issue a real request, and check the configured project. |
-| RAGAS command fails | Full dependencies/provider credentials missing or judge call failed | Install `requirements-full.txt`, run provider live check, rerun `python -m scripts.eval_ragas`, and report failures without inventing a score. |
+| RAGAS command fails | Evaluation-only dependencies, provider credentials, or judge call failed | Install `requirements-eval.txt` (separate from the chat runtime), run provider live check, rerun `python -m scripts.eval_ragas`, and report failures without inventing a score. |
 | Session not found | Selected session was deleted or its ID is invalid | Create/select a session through the UI; the API returns `404` for a missing session. |
 | Port 8000 is already in use | Another local process owns the port | Stop the other demo process or choose a free local port; keep host bound to `127.0.0.1`. |
 
