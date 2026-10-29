@@ -1,0 +1,5 @@
+# Install only when running provider-backed RAGAS evaluation.
+# Chat, SQL, LangGraph, product RAG and LangSmith do not require scikit-network.
+-r requirements-full.txt
+ragas>=0.4,<0.5
+langchain-community==0.4.1  # RAGAS 0.4.3 compatibility
