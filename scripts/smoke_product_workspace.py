@@ -110,6 +110,10 @@ def run_journey(page):
     page.get_by_role("button", name="Send message").click()
     expect(page.locator(".chat-state")).to_contain_text("Complete", timeout=25000)
     expect(page.locator(".session-row")).to_have_count(old_sessions + 1)
+    inventory_columns = page.locator(".message-assistant").last.locator(".answer-evidence th").all_text_contents()
+    assert len(inventory_columns) > 5, f"Inventory evidence columns unexpectedly dropped: {inventory_columns}"
+    assert any("available" in item.lower() for item in inventory_columns), (
+        f"Inventory availability evidence hidden from table: {inventory_columns}")
 
     # Mobile: no horizontal page overflow; real chat and canvas remain accessible.
     page.set_viewport_size({"width": 390, "height": 844})
