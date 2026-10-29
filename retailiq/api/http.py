@@ -91,6 +91,22 @@ async def record_http(request: Request, call_next):
         return response
 
 
+def _missing_module_message(error: ModuleNotFoundError) -> str:
+    """Expose actionable package guidance without revealing arbitrary import paths."""
+    name = error.name or ''
+    if name.startswith('retailiq'):
+        return ('RetailIQ source modules are out of sync. Update the project files '
+                'and restart the server with the project root as the working directory.')
+    supported = {
+        'langgraph', 'langgraph.checkpoint', 'langgraph.checkpoint.sqlite',
+        'langchain', 'langchain_core', 'langchain_openai', 'langchain_chroma',
+        'chromadb', 'langchain_community', 'openai', 'pydantic', 'dotenv',
+    }
+    label = f"Python module '{name}' is missing. " if name in supported else 'A required Python module is missing. '
+    return (label + 'Run python -m pip install -r requirements-full.txt '
+            'in the same Python environment used to start RetailIQ, then restart the server.')
+
+
 class AskBody(BaseModel):
     question: str = Field(min_length=3, max_length=500)
     session_id: str | None = Field(default=None, min_length=36, max_length=36)
@@ -138,6 +154,9 @@ def answer(data: AskBody):
             log_exception('chat.knowledge_index_unavailable', error)
             raise HTTPException(status_code=503,
                                 detail='Product knowledge index unavailable; run scripts/index_products.py') from None
+        except ModuleNotFoundError as error:
+            log_exception('chat.dependency_missing', error)
+            raise HTTPException(status_code=503, detail=_missing_module_message(error)) from None
         except Exception as error:
             # Stack frame locations (not prompt content) are available in local JSONL.
             log_exception('chat.execution_failed', error)
@@ -204,6 +223,11 @@ def stream_answer(data: AskBody, request: Request):
                     log_exception('chat.knowledge_index_unavailable', error)
                     enqueue_final('error', {'code': 'index_not_ready',
                                            'message': 'Product knowledge index unavailable; run scripts/index_products.py',
+                                           'request_id': rid})
+                except ModuleNotFoundError as error:
+                    log_exception('chat.dependency_missing', error)
+                    enqueue_final('error', {'code': 'dependency_missing',
+                                           'message': _missing_module_message(error),
                                            'request_id': rid})
                 except Exception as error:
                     log_exception('chat.execution_failed', error)
