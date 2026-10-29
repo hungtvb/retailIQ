@@ -27,7 +27,7 @@ Visual identity: off-white canvas, crisp typography, low-contrast boundaries, gr
 ## Validation acceptance
 
 1. Build + TS typecheck.
-2. Session new/switch/delete, SSE streamed answer and evidence, authenticated-to-session trace selection and exact saved trace replay.
+2. Session new/switch/delete, SSE streamed answer and evidence, request-scoped trace selection (no authentication yet) and exact saved trace replay.
 3. Matrix nodes and edge states only from emitted events; no invented MCP/subagent connections or completion states.
 4. Desktop/mobile/handoff screenshots, collision detection and final-result provenance checks on actual Chromium geometry.
 5. Existing Python business/scenario audits remain green.
