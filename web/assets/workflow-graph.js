@@ -135,10 +135,12 @@
     return {update,reset,replay,hasNode:(id)=>lookup.has(id)};
   }
   let chat = null;
+  let chatHasEvidence = false;
   function chatClear() {
     chat = mount('execution-graph',chatDefinition);
   }
   function chatReset() {
+    chatHasEvidence = false;
     chatClear();
     if (chat) chat.update('request','completed','User question submitted');
   }
@@ -154,7 +156,10 @@
       chat.update('agent','completed',detail,'router');
       chat.update('tool',name.endsWith('.started')?'running':
                  name.endsWith('.failed')?'failed':'completed',detail,'agent');
-      if (name.endsWith('.completed')) chat.update('evidence','completed','Tool result received','tool');
+      if (name.endsWith('.completed')) {
+        chatHasEvidence = true;
+        chat.update('evidence','completed','Tool result received','tool');
+      }
     } else if (name.startsWith('agent.handoff') || name.startsWith('agent.subagent')) {
       chat.update('agent','running',detail,'router');
     } else if (name.startsWith('llm.')) {
@@ -166,8 +171,9 @@
     if (ok) {
       chat.update('router','completed','Intent selected','request');
       chat.update('agent','completed','Agent completed','router');
-      chat.update('evidence','completed','Backend result returned');
-      chat.update('answer','completed','Final answer received','evidence');
+      if (chatHasEvidence) chat.update('evidence','completed','Backend evidence collected','tool');
+      chat.update('answer','completed','Final answer received',
+                  chatHasEvidence ? 'evidence' : null);
     } else {
       chat.update('answer','failed','Request failed');
     }
