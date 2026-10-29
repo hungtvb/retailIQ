@@ -17,11 +17,11 @@ flowchart LR
  Router -->|Product Question| RAG[LangChain RAG]
  RAG --> Vec[(Chroma Vector DB)]
  Vec --> Docs[Product Knowledge: MD / PDF / DOCX / TXT / CSV / XLSX / JSON / HTML]
- SQL --> Answer[Grounded answer]
+ SQL --> Answer[RetailIQ reply from verified data]
  RAG --> Answer
+ Answer --> API
  Graph -.-> Trace[LangSmith Tracing]
  RAG -.-> Eval[RAGAS Evaluation]
- Answer --> API
 ```
 
 ## Justifications
@@ -64,4 +64,4 @@ The names below describe **proposed domain contracts**, not newly implemented pu
 **W2** Freshness routing (real time/15min/hourly/daily), governed KPI semantic layer, Inventory/Order MCP, customer memory, hybrid rerank rewrite, per-source answer report. **W3** HITL for pricing, RLS, KPI alerts, LangFuse, DeepEval, cost, PromptOps, governance and security. **W4** Inventory Search, Fulfilment Optimisation, Customer Context, Dynamic Pricing, Order Management, A2A coordinator, verification, deep report and approval workflow.
 
 ## Limitations
-Azure configuration isolation was tested with mocks and deterministic offline business logic was tested; real Azure + full LangGraph/Chroma/RAGAS/LangSmith integration awaits installation and credentials. LangSmith may be disabled until its API key is created. No unverified capability is claimed as PASS. No auth/security yet. No autonomous order/pricing actions Week 1.
+The 2026-10-29 local full-mode run has scripted LangGraph/Chroma evidence, a three-question RAGAS report, and inspected remote LangSmith traces (see `docs/09_Week1_Checklist_and_Evidence.md`). Re-run on the demo machine; this does not establish open-ended question reliability or production readiness. No unverified capability is claimed as PASS. No auth/security yet. No autonomous order/pricing actions Week 1.
