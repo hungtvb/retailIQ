@@ -12,7 +12,8 @@ import atexit
 import threading
 from pathlib import Path
 import sqlite3
-from retailiq.queries import intent, do, product_sku, wants_single_latest_product, retailiq_reply
+from retailiq.queries import intent, do, product_sku, wants_single_latest_product
+from retailiq.reply import retailiq_reply
 from retailiq.domain.analytics import month, products, requested_month, top
 from retailiq.core.config import chat_model, configure_langsmith
 from retailiq.skills import skill_for, load_skill
