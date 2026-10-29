@@ -8,6 +8,7 @@ let activeSessionId = '';
 let lastRequestId = '';
 let currentRows = [];
 let currentAnswerIsPersisted = false;
+let currentAnswerEvidence = {};
 const AgentID = () => window.RetailIQIdentity;
 const Rich = () => window.RetailIQFormat;
 
@@ -72,7 +73,7 @@ async function refreshSessions() {
   return sessions;
 }
 
-function appendChatMessage(role, content, agent = '') {
+function appendChatMessage(role, content, agent = '', evidence = null) {
   const area = byId('chat-history');
   const item = document.createElement('div');
   item.className = 'chat-message chat-message-' + (role === 'user' ? 'user' : 'assistant');
@@ -89,6 +90,12 @@ function appendChatMessage(role, content, agent = '') {
   const bubble = document.createElement('div');
   bubble.className = 'chat-bubble';
   bubble.append(label, body);
+  if (role !== 'user' && evidence) {
+    const visuals = document.createElement('div');
+    visuals.className = 'rich-response-visuals';
+    Rich().renderEvidence(visuals, evidence);
+    if (visuals.children.length) bubble.append(visuals);
+  }
   if (role === 'user') {
     const avatar = document.createElement('span');
     avatar.className = 'chat-avatar chat-avatar-user';
@@ -113,7 +120,7 @@ function renderChatMessages(messages) {
   for (let i = 0; i < messages.length; i++) {
     if (i === final) continue;
     const message = messages[i];
-    appendChatMessage(message.role, message.content, message.agent);
+    appendChatMessage(message.role, message.content, message.agent, message.evidence);
   }
   scrollChatToBottom();
 }
@@ -132,6 +139,7 @@ async function selectSession(id, preserveEvidence = false) {
   setChatError();
   const last = messages.length && messages[messages.length - 1].role === 'assistant' ? messages[messages.length - 1] : null;
   const storedEvidence = last && last.evidence ? last.evidence : {};
+  currentAnswerEvidence = storedEvidence;
   currentAnswerIsPersisted = Boolean(last);
   byId('active-response').hidden = !last;
   if (last) renderAssistantText(byId('answer'), last.content);
@@ -179,6 +187,7 @@ function showEmptyChat() {
   byId('chat-welcome').hidden = false;
   byId('active-response').hidden = true;
   currentAnswerIsPersisted = false;
+  currentAnswerEvidence = {};
   const answer = byId('answer');
   answer.textContent = 'Ask a retail question, then continue with a follow-up.';
   answer.dataset.rawAnswer = '';
@@ -472,7 +481,8 @@ async function ask() {
   const answer = byId('answer');
   const sessionPicker = byId('chat-session-picker');
   if (currentAnswerIsPersisted) {
-    appendChatMessage('assistant', answer.dataset.rawAnswer || answer.textContent, byId('summary-agent').textContent);
+    appendChatMessage('assistant', answer.dataset.rawAnswer || answer.textContent,
+      byId('summary-agent').textContent, currentAnswerEvidence);
   }
   currentAnswerIsPersisted = false;
   byId('chat-welcome').hidden = true;
