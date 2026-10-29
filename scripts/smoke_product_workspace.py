@@ -114,6 +114,8 @@ def run_journey(page):
     assert len(inventory_columns) > 5, f"Inventory evidence columns unexpectedly dropped: {inventory_columns}"
     assert any("available" in item.lower() for item in inventory_columns), (
         f"Inventory availability evidence hidden from table: {inventory_columns}")
+    assert "available" in [x.lower().strip() for x in inventory_columns[:4]], (
+        f"Important quantity cannot be seen without horizontal scrolling: {inventory_columns}")
 
     # Mobile: no horizontal page overflow; real chat and canvas remain accessible.
     page.set_viewport_size({"width": 390, "height": 844})
