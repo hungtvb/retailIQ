@@ -1,0 +1,54 @@
+/* RetailIQ execution graph · evidence-first, local simulation */
+.execution-graph {margin: 12px 0; min-width:0}
+.graph-scroll {position:relative; width:100%; max-width:100%; overflow-x:auto; overflow-y:hidden; border:1px solid #e3e8ef;
+  border-radius:12px; background-color:#fafcff; background-image:radial-gradient(#dfe5ef .8px,transparent .8px);
+  background-size:15px 15px; scrollbar-width:thin}
+.graph-canvas {position:relative; min-height:215px}
+.graph-edges {position:absolute; top:0; left:0; overflow:visible; pointer-events:none}
+.graph-link {fill:none; stroke:#c4d0df; stroke-width:2.5; stroke-dasharray:5 4; transition:stroke .25s,stroke-width .25s}
+.graph-link-active {stroke:#279381; stroke-width:3; stroke-dasharray:none}
+.graph-node {position:absolute; width:142px; min-height:78px; padding:10px 9px; border-radius:12px;
+  border:1px solid #cbd5e1; background:#fff; box-shadow:0 3px 10px rgba(16,35,61,.06);
+  display:flex; flex-direction:column; align-items:flex-start; justify-content:space-between;
+  text-align:left; gap:7px; color:#27364b; cursor:pointer; font:inherit; transition:box-shadow .2s,border-color .2s,background .2s}
+.graph-node:hover,.graph-node:focus-visible,.graph-node-selected {border-color:#4d83b5; box-shadow:0 0 0 3px rgba(69,122,175,.12)}
+.graph-node-name {font-weight:650; font-size:12px; line-height:1.35}
+.graph-node-status {font-size:9px; font-weight:750; letter-spacing:.06em; color:#687a8d}
+.graph-node-agent {border-left:4px solid #6798ca}
+.graph-node-tool {border-left:4px solid #aa8fc8}
+.graph-node-guard {border-left:4px solid #d3aa68}
+.graph-node-human {border-left:4px solid #e5a269}
+.graph-node-output {border-left:4px solid #77b79d}
+.graph-node[data-status="running"] {border-color:#529fc9; background:#edf7ff; animation:graph-pulse 1.8s ease-in-out infinite}
+.graph-node[data-status="completed"] {border-color:#57a78f; background:#f0faf5}
+.graph-node[data-status="completed"] .graph-node-status {color:#217b62}
+.graph-node[data-status="awaiting"] {border-color:#d7a146; background:#fff8e7}
+.graph-node[data-status="awaiting"] .graph-node-status {color:#a36b1c}
+.graph-node[data-status="failed"],.graph-node[data-status="blocked"] {border-color:#df7a73; background:#fff3f1}
+.graph-node[data-status="blocked"] .graph-node-status,.graph-node[data-status="failed"] .graph-node-status {color:#b34242}
+@keyframes graph-pulse {50% {box-shadow:0 0 0 5px rgba(74,155,197,.15)}}
+.workflow-panel-grid {display:grid; grid-template-columns:minmax(250px,320px) minmax(0,1fr); gap:16px}
+.workflow-card {padding:20px; min-width:0}
+.workflow-card h2 {margin:0 0 14px; font-size:17px}
+.workflow-card p {margin:12px 0; line-height:1.55}
+.workflow-form {display:flex; flex-direction:column; gap:13px}
+.workflow-form label {display:flex; flex-direction:column; gap:5px; font-size:12px; color:#4f6377; font-weight:600}
+.workflow-form input,.workflow-form select {width:100%; min-height:40px; border:1px solid #d6e0e9; border-radius:8px; padding:8px 10px; background:#fff;color:#293e51}
+.workflow-form input:focus-visible,.workflow-form select:focus-visible {outline:2px solid #8ab7db;outline-offset:1px}
+.workflow-notice {font-size:12px;color:#7a6b4a;background:#fff9e9;padding:10px 12px;border-radius:8px;border:1px solid #eee0b6}
+.workflow-graph-head {display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; align-items:center}
+.workflow-graph-head h2 {margin:0}
+.workflow-graph-head small {color:#718092}
+.workflow-run-result {white-space:pre-wrap;overflow-wrap:anywhere; line-height:1.65; padding:12px; border-radius:9px; background:#f7f9fc;color:#33475c;font-size:13px;margin:14px 0}
+.workflow-node-detail {padding:9px 0; color:#51667a;font-size:12px;min-height:35px}
+.workflow-actions {display:flex;flex-wrap:wrap;gap:9px;margin-top:12px}
+.workflow-actions button {border-radius:8px;min-height:37px;padding:9px 14px;border:1px solid #d0d9e3;background:#fff;color:#263e57;cursor:pointer;font-weight:600}
+.workflow-actions #workflow-approve {background:#e9f6ee;border-color:#90bfa2}
+.workflow-actions #workflow-reject {background:#fff0ed;border-color:#dbaba4}
+.workflow-actions button:disabled {opacity:.5;cursor:not-allowed}
+.workflow-error {color:#ad4d45}
+.workflow-help {font-size:12px;color:#66778b}
+.workflow-events {margin-top:12px}
+.workflow-events summary {cursor:pointer;font-size:12px;color:#647b8d}
+@media (max-width:890px) {.workflow-panel-grid {grid-template-columns:1fr}.workflow-card {padding:15px}}
+@media (prefers-reduced-motion:reduce) {.graph-node[data-status="running"] {animation:none}}
