@@ -25,6 +25,7 @@ A code path, a UI node, or a passing unit test **does not prove a business scena
 | Workflow behavior | `python -m scripts.audit_workflows --strict` | 19 per-feature scenarios, API + SQLite oracle |
 | Real browser | `python -m scripts.smoke_workflow_browser` | Week 1–4 UI, evidence, approval, retry/blocked and conversation follow-ups |
 | MCP actual stdio | `python -m scripts.smoke_mcp_stdio` | Real subprocess MCP Inventory + Order calls; verify against SQL, not mock output |
+| Adversarial edge cases | `python -m scripts.audit_edge_scenarios --strict` | 14 more HTTP/SQLite checks on ambiguous references and corrupt/missing data |
 | Compatibility regression | `python -m pytest -q` | Protect existing contracts; **not** feature acceptance on its own |
 
 Both audits write JSON reports under `data/`; GitHub Actions retains them as
@@ -80,6 +81,46 @@ https://github.com/hungtvb/retailIQ/actions/runs/40871264052.
 A later CI run verified **20/20 business queries**, **19/19 workflow scenarios**,
 real **Chromium E2E**, and **MCP Inventory/Order stdio** together:
 https://github.com/hungtvb/retailIQ/actions/runs/40872427598.
+
+## Additional adversarial acceptance (2026-10-29)
+
+A second, independent fixture-based audit was introduced because the initial
+**20/20 conversation** and **19/19 workflow** suites left common failure modes
+untested. It executes real FastAPI endpoints, isolated seeded databases and
+an independent SQL oracle; it does **not** use a simulated chat response.
+
+| Scenario IDs | Required business behavior |
+|---|---|
+| CHAT-TOP2 / CHAT-TOP3-EN | Return exactly 2/3 ranked SKUs with stock for each |
+| CHAT-PRONOUN-TOP3 | "Các sản phẩm đó" refers to prior top-3 September group |
+| CHAT-RANK3 | A valid third-place reference resolves the third SKU |
+| CHAT-RANK-OUTSIDE / CHAT-RANK-ZERO | Invalid ordinal after top 3 must **ask**, not silently choose top one |
+| CHAT-PLURAL-EN | "What about their stock?" returns the ranked group, not only top one |
+| CHAT-ISOLATION | References do not leak between conversations |
+| CHAT-NAMED-PRONOUN | An explicit product name remains the SKU anchor |
+| W4-EMPTY-INVENTORY / W4-ZERO-STOCK | No inventory / all reserved blocks order proposal |
+| W2-NULL-TIMESTAMP / W2-FUTURE-TIMESTAMP | Missing timestamps fail closed; future timestamps never count as fresh |
+| W3-W4-NEGATIVE-PRICE | Invalid negative price cannot create a pricing or order proposal |
+
+**First adversarial audit:** 10/14 PASS, 4 actual defects:
+- Prior top-3 rank 4 (or rank 0) incorrectly fell back to top seller.
+- An English plural pronoun incorrectly selected only top seller.
+- Corrupted source price \`-1 VND\` created an approval-ready pricing proposal.
+
+The routing/context resolution now preserves invalid references for
+clarification; English plural phrases resolve to the prior ranked group;
+\`catalog_product\` rejects invalid negative, null and non-integer prices
+before price/order proposals. Two additional real Chromium conversations
+check out-of-range ordinal clarification and plural-reference stock against SQL.
+
+**Latest strict evidence:** 14/14 edge scenarios, 20/20 existing business
+scenarios, 19/19 workflow scenarios, and browser/MCP integration checks
+all PASS in https://github.com/hungtvb/retailIQ/actions/runs/40878317768.
+
+Each suite remains a bounded sample of user behavior. All three are *offline
+synthetic acceptance*, except the separately verified **actual local MCP stdio**
+transport. No evidence here justifies marking RAGAS, LangSmith live, Langfuse,
+DeepEval, autonomous A2A, or production authorization as complete.
 
 ## Required course capability status (do not conflate)
 
