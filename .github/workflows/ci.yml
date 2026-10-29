@@ -20,7 +20,7 @@ jobs:
           RETAILIQ_REQUIRE_LANGGRAPH: 'true'
         run: python -m pytest -q -rs
       - name: Business query acceptance audit (report gaps, do not hide them)
-        run: python -m scripts.audit_queries --mode offline
+        run: python -m scripts.audit_queries --mode offline --strict
       - uses: actions/upload-artifact@v4
         with:
           name: retailiq-query-acceptance
