@@ -14,6 +14,7 @@ import sqlite3
 import uuid
 
 from retailiq.domain.analytics import catalog_product, inventory, revenue, top, month
+from retailiq.domain.semantic import semantic_summary, FRESHNESS_TIERS
 from retailiq.observability import log_event
 
 HCM = timezone(timedelta(hours=7))
@@ -159,7 +160,7 @@ def _freshness(rows: list[dict]) -> dict:
     # Compared to actual time; old synthetic inventory must never be called live.
     age = int((datetime.now(timezone.utc) - newest.astimezone(timezone.utc)).total_seconds()) if newest else None
     return {"tier": "15 minutes", "observed_at": newest.isoformat() if newest else None,
-            "age_seconds": age, "meets_target": bool(age is not None and 0 <= age <= 900)}
+            "age_seconds": age, "meets_target": bool(age is not None and 0 <= age <= FRESHNESS_TIERS["15_min"]["target_seconds"])}
 
 
 def run_demo(scenario: str, sku: str, quantity: int = 1,
@@ -201,8 +202,7 @@ def run_demo(scenario: str, sku: str, quantity: int = 1,
         else:
             step("inventory_mcp", "Local read adapter for " + product["sku"] +
                  "; MCP network transport not exercised")
-        step("semantic_layer", "Available = on_hand - reserved; revenue uses completed orders; "
-             "top sellers rank completed units")
+        step("semantic_layer", semantic_summary())
         freshness = _freshness(stock)
         step("freshness_guard", "Inventory snapshot " + ("meets" if freshness["meets_target"]
              else "does not meet") + " the 15-minute target")
