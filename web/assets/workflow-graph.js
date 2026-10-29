@@ -32,7 +32,7 @@
     if (!host) return null;
     const nodes = Array.isArray(definition.nodes) ? definition.nodes.slice(0,20) : [];
     const edges = Array.isArray(definition.edges) ? definition.edges.slice(0,40) : [];
-    const width = Math.max(750,nodes.length * 186 + 40), height = 244;
+    const width = Math.max(750,nodes.length * 186 + 40), height = 292;
     let timers = [];
     const lookup = new Map();
     const links = new Map();
@@ -57,12 +57,20 @@
     edges.forEach((edge) => {
       const a = positions.get(edge.from), b = positions.get(edge.to);
       if (!a || !b) return;
-      const x1 = a.x + 142, y1=a.y+39, x2=b.x, y2=b.y+39;
-      const path = svgEl('path',{d:'M '+x1+' '+y1+' C '+(x1+22)+' '+y1+', '+(x2-22)+' '+y2+', '+x2+' '+y2,
-        class:'graph-link','marker-end':'url(#'+markerId+')'});
+      const backwards = b.x < a.x;
+      const x1 = a.x + 142, y1 = a.y + 39, x2 = b.x, y2 = b.y + 39;
+      const feedbackY = 252;
+      const drawing = backwards
+        ? 'M '+(a.x+71)+' '+(a.y+78)+' C '+(a.x+71)+' '+feedbackY+
+          ', '+(b.x+71)+' '+feedbackY+', '+(b.x+71)+' '+(b.y+78)
+        : 'M '+x1+' '+y1+' C '+(x1+22)+' '+y1+', '+(x2-22)+' '+y2+', '+x2+' '+y2;
+      const path = svgEl('path',{d:drawing,
+        class:'graph-link'+(backwards?' graph-link-feedback':''),
+        'marker-end':'url(#'+markerId+')'});
       svg.appendChild(path);
       if (edge.label) {
-        const title=svgEl('text',{x:(x1+x2)/2,y:Math.min(y1,y2)-11,
+        const title=svgEl('text',{x:backwards?(a.x+b.x)/2+71:(x1+x2)/2,
+          y:backwards?feedbackY-7:Math.min(y1,y2)-11,
           class:'graph-edge-label','text-anchor':'middle'});
         title.textContent=String(edge.label).slice(0,20);
         svg.appendChild(title);
