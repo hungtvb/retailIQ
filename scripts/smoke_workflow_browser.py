@@ -102,9 +102,32 @@ def chat_query_journey(page) -> None:
         expect(page.locator("#chat-welcome")).to_be_visible()
 
     def submit(question: str) -> tuple[list[dict], str]:
-        page.locator("#q").fill(question)
+        field = page.locator("#q")
+        field.fill(question)
+        before = field.evaluate("""el => ({
+          value:el.value, valid:el.checkValidity(),
+          validation:el.validationMessage, form:el.form?.id
+        })""")
+        page.evaluate("""() => {
+          window.__riChatSubmitCount = 0;
+          document.querySelector('#ask-form').addEventListener(
+            'submit', () => window.__riChatSubmitCount += 1, {once: true}
+          );
+        }""")
         page.locator("#ask-submit").click()
-        expect(page.locator("#response-state")).to_contain_text("COMPLETE", timeout=15000)
+        try:
+            expect(page.locator("#response-state")).to_contain_text("COMPLETE", timeout=15000)
+        except AssertionError:
+            after = page.evaluate("""() => ({
+              formSubmitCount:window.__riChatSubmitCount,
+              inputValue:document.querySelector('#q').value,
+              formValid:document.querySelector('#ask-form').checkValidity(),
+              submitDisabled:document.querySelector('#ask-submit').disabled,
+              error:document.querySelector('#chat-error').textContent,
+              welcomeHidden:document.querySelector('#chat-welcome').hidden,
+              state:document.querySelector('#response-state').textContent
+            })""")
+            raise AssertionError(f"Browser chat submit diagnostic: before={before}, after={after}") from None
         payload = json.loads(page.locator("#raw").text_content())
         return payload["records"], page.locator("#answer").inner_text()
 
