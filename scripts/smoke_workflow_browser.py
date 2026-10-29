@@ -234,6 +234,52 @@ def workflow_edge_journey(page, db: Path) -> None:
     page.screenshot(path="data/workflow_week4_blocked_chromium.png",full_page=True)
 
 
+def layout_journey(page) -> None:
+    """Visual acceptance: compact header, chat-first desktop/mobile, full-width graph."""
+    page.set_viewport_size({"width": 1440, "height": 900})
+    page.goto(BASE, wait_until="domcontentloaded")
+    expect(page.locator("#tab-assistant")).to_have_attribute("aria-selected", "true")
+    header = page.locator(".site-header").bounding_box()
+    chat = page.locator(".conversation-card").bounding_box()
+    side = page.locator(".insights-column").bounding_box()
+    composer = page.locator(".chat-composer").bounding_box()
+    assert header and header["height"] <= 60, f"Header is too tall: {header}"
+    assert chat and side and chat["width"] > side["width"] * 1.45, (
+        f"Conversation not dominant: chat={chat}, evidence={side}"
+    )
+    assert composer and composer["y"] + composer["height"] < 920, (
+        f"Chat composer below useful viewport: {composer}"
+    )
+    assert page.locator(".chat-welcome img").count() == 0, "Redundant mascot hero returned"
+    assert page.locator(".hero").count() == 0, "Landing hero should not occupy tool workspace"
+    Path("data").mkdir(exist_ok=True)
+    page.screenshot(path="data/retailiq_ui_chat_desktop_chromium.png", full_page=True)
+
+    page.locator("#tab-workflows").click()
+    expect(page.locator(".workflow-canvas-card")).to_be_visible()
+    graph = page.locator(".workflow-canvas-card").bounding_box()
+    assert graph and graph["width"] >= 1000, f"Graph is too narrow on desktop: {graph}"
+    assert graph["y"] < 285, f"Workflow toolbar takes too much vertical space: {graph}"
+    page.screenshot(path="data/retailiq_ui_graph_desktop_chromium.png", full_page=True)
+
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.locator("#tab-assistant").click()
+    expect(page.locator("#ask-submit")).to_be_visible()
+    assert page.locator(".site-header").bounding_box()["height"] <= 52
+    scroll_width = page.evaluate("document.documentElement.scrollWidth")
+    assert scroll_width <= 392, f"Unexpected horizontal page scroll on mobile: {scroll_width}"
+    page.screenshot(path="data/retailiq_ui_chat_mobile_chromium.png", full_page=True)
+
+    page.locator("#tab-workflows").click()
+    expect(page.locator("#workflow-run")).to_be_visible()
+    page.locator("#workflow-scenario").select_option("week4")
+    page.locator("#workflow-run").click()
+    expect(page.locator("#workflow-graph .graph-node")).not_to_have_count(0)
+    scroll_width = page.evaluate("document.documentElement.scrollWidth")
+    assert scroll_width <= 392, f"Workflow page overflows mobile viewport: {scroll_width}"
+    page.screenshot(path="data/retailiq_ui_graph_mobile_chromium.png", full_page=True)
+
+
 def main() -> None:
     chrome = next((p for name in ("google-chrome", "google-chrome-stable", "chromium")
                    if (p := shutil.which(name))), None)
@@ -271,6 +317,7 @@ def main() -> None:
                     journey(page)
                     chat_query_journey(page, db)
                     workflow_edge_journey(page, db)
+                    layout_journey(page)
                 finally:
                     browser.close()
         finally:
