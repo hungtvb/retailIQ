@@ -101,7 +101,7 @@ function GraphCanvas({graph}: {graph:GraphState}) {
         ? 'Saved answers are available, but their execution events are not yet persisted.'
         : 'The network appears when a question starts. Nodes reflect recorded execution events only.'}</p>
     </div> :
-    <svg className="matrix-svg" viewBox="0 0 900 660" role="img"
+    <svg className="matrix-svg" viewBox="0 0 800 560" role="img"
       aria-label={positioned.length+' observed execution nodes and '+graph.edges.length+' relationships'}>
       <defs>
         <pattern id="matrix-grid" width="24" height="24" patternUnits="userSpaceOnUse">
@@ -120,10 +120,10 @@ function GraphCanvas({graph}: {graph:GraphState}) {
           <path d="M2 2 L10 6 L2 10" fill="none" stroke="#448bd0" strokeWidth="1.8"/>
         </marker>
       </defs>
-      <rect width="900" height="660" rx="16" fill="#f9fcfb"/>
-      <rect width="900" height="660" rx="16" fill="url(#matrix-grid)"/>
-      <circle cx="450" cy="306" r="211" fill="none" stroke="#e8f3f0" strokeWidth="1.2" strokeDasharray="5 7"/>
-      <circle cx="450" cy="306" r="110" fill="none" stroke="#edf5f2" strokeWidth="1" strokeDasharray="3 8"/>
+      <rect width="800" height="560" rx="16" fill="#f9fcfb"/>
+      <rect width="800" height="560" rx="16" fill="url(#matrix-grid)"/>
+      <circle cx="400" cy="280" r="205" fill="none" stroke="#e8f3f0" strokeWidth="1.2" strokeDasharray="5 7"/>
+      <circle cx="400" cy="280" r="110" fill="none" stroke="#edf5f2" strokeWidth="1" strokeDasharray="3 8"/>
       {graph.edges.map(e=>{
         const a=lookup.get(e.from),b=lookup.get(e.to);
         if(!a || !b) return null;
