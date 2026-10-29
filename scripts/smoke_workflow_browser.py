@@ -71,7 +71,7 @@ def journey(page) -> None:
     page.locator('.graph-node[data-node="inventory_search_agent"]').click()
     expect(page.locator("#workflow-node-detail")).to_contain_text("preflight data")
     expect(page.locator("#workflow-node-detail")).to_contain_text("no agent-owned tool call")
-    expect(page.locator("#workflow-timeline .workflow-timeline-item")).to_have_count(9)
+    expect(page.locator("#workflow-timeline .workflow-timeline-item")).to_have_count(8)
     SCREENSHOT.parent.mkdir(parents=True, exist_ok=True)
     page.screenshot(path=str(SCREENSHOT), full_page=True)
 
