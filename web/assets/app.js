@@ -347,14 +347,23 @@ function showAgentEvidence(data) {
   }
 }
 
+// Both graph modes share the Chat workspace; scenario runs remain explicitly
+// simulated and never replace the evidence for a user question.
+function showGraphMode(mode) {
+  const scenario = mode === 'scenario';
+  byId('graph-request-panel').hidden = scenario;
+  byId('workflows-panel').hidden = !scenario;
+  byId('graph-mode-request').setAttribute('aria-pressed', String(!scenario));
+  byId('graph-mode-scenario').setAttribute('aria-pressed', String(scenario));
+  byId('insights-column-mode').dataset.mode = scenario ? 'scenario' : 'request';
+}
 function showPanel(name) {
   const roi = name === 'roi';
   const logs = name === 'logs';
   byId('assistant-panel').hidden = name !== 'assistant';
   byId('roi-panel').hidden = !roi;
   byId('logs-panel').hidden = !logs;
-  byId('workflows-panel').hidden = name !== 'workflows';
-  for (const key of ['assistant', 'workflows', 'roi', 'logs']) {
+  for (const key of ['assistant', 'roi', 'logs']) {
     byId('tab-' + key).setAttribute('aria-selected', String(key === name));
   }
   if (roi && !roiLoaded) { roiLoaded = true; estimateROI(); }
@@ -484,6 +493,7 @@ async function ask() {
   setChatError();
   if (question.length < 3) { byId('q').reportValidity(); return; }
   askInProgress = true;
+  showGraphMode('request');
   const button = byId('ask-submit');
   const answer = byId('answer');
   const sessionPicker = byId('chat-session-picker');
@@ -715,9 +725,11 @@ function renderExecutionLogs(events) {
 
 function initRetailIQ() {
   byId('tab-assistant').addEventListener('click', () => showPanel('assistant'));
-  byId('tab-workflows').addEventListener('click', () => showPanel('workflows'));
   byId('tab-roi').addEventListener('click', () => showPanel('roi'));
   byId('tab-logs').addEventListener('click', () => showPanel('logs'));
+  byId('graph-mode-request').addEventListener('click', () => showGraphMode('request'));
+  byId('graph-mode-scenario').addEventListener('click', () => showGraphMode('scenario'));
+  showGraphMode('request');
   byId('logs-refresh').addEventListener('click', loadExecutionLogs);
   byId('export-csv').addEventListener('click', exportRecordsCsv);
   byId('log-scope').addEventListener('change', loadExecutionLogs);
@@ -728,7 +740,7 @@ function initRetailIQ() {
   // Accessible left/right navigation inside the tab list.
   document.querySelector('.workspace-tabs').addEventListener('keydown', (event) => {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-    const tabs = ['tab-assistant', 'tab-workflows', 'tab-roi', 'tab-logs'];
+    const tabs = ['tab-assistant', 'tab-roi', 'tab-logs'];
     const index = tabs.indexOf(event.target.id);
     const direction = event.key === 'ArrowRight' ? 1 : -1;
     const destination = byId(tabs[(index + direction + tabs.length) % tabs.length]);
