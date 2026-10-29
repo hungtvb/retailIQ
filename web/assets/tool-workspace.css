@@ -481,3 +481,7 @@ body,button,input,select,textarea {font-family:Inter,ui-sans-serif,system-ui,-ap
   .graph-node {transition:none!important;}
   .graph-node:hover,.graph-node:focus-visible,.graph-node-selected {transform:none;}
 }
+
+/* Do not suggest persisted answers contain replayable execution events. */
+.graph-request-notice {margin:8px 2px 12px;padding:9px 11px;border:1px dashed #cbe4dc;border-radius:7px;background:#f5fbf8;color:#47706b;font-size:11px;line-height:1.5;}
+.graph-request-notice[hidden] {display:none!important;}
