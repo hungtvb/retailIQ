@@ -17,7 +17,7 @@
 
 
 ## Preflight
-Follow `docs/05_Huong_dan_OpenAI_Compatible_VI.md`: configure the shared OpenAI-compatible `.env`, run `python -m scripts.check_openai` then optionally `--live`, seed with `python -m scripts.seed`, run `pytest -q`, then `uvicorn retailiq.api:app --host 127.0.0.1 --port 8000`. Open browser at http://127.0.0.1:8000. The checked-in `.env.example` selects full mode. Without a `.env` setting for `RETAILIQ_MODE`, the application falls back to offline mode. Full mode needs its dependencies and provider credentials; until a live E2E run, it remains unverified. Do not describe offline mode as LangGraph or vector RAG.
+Follow `docs/05_Huong_dan_OpenAI_Compatible_VI.md`: configure the shared OpenAI-compatible `.env`, run `python -m scripts.check_openai` then optionally `--live`, seed with `python -m scripts.seed`, run `pytest -q`, then `uvicorn retailiq.api:app --host 127.0.0.1 --port 8000`. Open browser at http://127.0.0.1:8000. The checked-in `.env.example` selects full mode. Without a `.env` setting for `RETAILIQ_MODE`, the application falls back to offline mode. Full mode needs dependencies and provider credentials. A dated 2026-10-29 local full-mode run is documented in `docs/09_Week1_Checklist_and_Evidence.md`; recheck the demo machine before presenting. Do not describe offline mode as LangGraph or vector RAG.
 
 ## Demo definitions
 The business hypothesis is natural-language interaction across existing operational tools with **Faster / Easier / Reliable** metrics. Replenishment Review is not the entire product. As-of fixed 2026-10-28 for seed repeatability. Net revenue excludes taxes/shipping/returns. Stock available is on_hand minus reserved, not on_hand alone.
@@ -25,7 +25,7 @@ The business hypothesis is natural-language interaction across existing operatio
 
 ## Presentation deck
 
-Use [`docs/slides/RetailIQ_Flezi_Week1_Checklist_Aligned.pptx`](slides/RetailIQ_Flezi_Week1_Checklist_Aligned.pptx) for the graded demo. Slide contents, build instructions, and speaking notes are in [`docs/slides/README.md`](slides/README.md). Keep live LangSmith/RAGAS gates marked unverified until real evidence is captured.
+Use [`docs/slides/RetailIQ_Flezi_Week1_Checklist_Aligned.pptx`](slides/RetailIQ_Flezi_Week1_Checklist_Aligned.pptx) for the graded demo. Slide contents, build instructions, and speaking notes are in [`docs/slides/README.md`](slides/README.md). A dated local LangSmith/RAGAS result is recorded in `docs/09_Week1_Checklist_and_Evidence.md`; verify live status on the demo machine before presenting.
 
 ## Clean setup, mode selection, reset, and troubleshooting
 
