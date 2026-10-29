@@ -214,9 +214,11 @@ function showEmptyChat() {
 async function createNewChat() {
   if (askInProgress) return;
   showEmptyChat();
-  await refreshSessions();
+  // Clear the draft before the asynchronous session refresh. Otherwise a
+  // fast user's new question can be erased after they already started typing.
   byId('q').value = '';
   byId('q').focus();
+  await refreshSessions();
 }
 
 async function deleteCurrentChat() {
