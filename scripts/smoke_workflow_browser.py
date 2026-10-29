@@ -86,6 +86,60 @@ def journey(page) -> None:
     )
 
 
+def chat_query_journey(page) -> None:
+    """Real browser conversational journeys with SQL-independent stock expectations."""
+    import json
+    from collections import defaultdict
+
+    from scripts.audit_queries import Oracle
+
+    oracle = Oracle(Path("data/retailiq.sqlite3"))
+
+    page.locator("#tab-assistant").click()
+
+    def new_chat() -> None:
+        page.locator("#chat-new").click()
+        expect(page.locator("#chat-welcome")).to_be_visible()
+
+    def submit(question: str) -> tuple[list[dict], str]:
+        page.locator("#q").fill(question)
+        page.locator("#ask-submit").click()
+        expect(page.locator("#response-state")).to_contain_text("COMPLETE", timeout=15000)
+        payload = json.loads(page.locator("#raw").text_content())
+        return payload["records"], page.locator("#answer").inner_text()
+
+    def verify_stock(records: list[dict], answer: str, period: str, count: int,
+                     rank: int | None = None) -> None:
+        ordered = oracle.top(period, count if rank is None else max(5,rank))
+        skus = ([ordered[rank - 1]["sku"]] if rank is not None else
+                [row["sku"] for row in ordered])
+        expected = {sku: oracle.available(sku) for sku in skus}
+        actual = defaultdict(int)
+        for row in records:
+            actual[row["sku"]] += row["available"]
+        assert dict(actual) == expected, f"Browser output did not match SQLite: {dict(actual)} != {expected}"
+        for sku in expected:
+            assert sku in answer, f"Browser answer omitted {sku}"
+        expect(page.locator("#summary-agent")).to_have_text("inventory agent")
+
+    # Direct multi-product stock, not a replenishment decision.
+    new_chat()
+    rows, answer = submit("Tồn kho của top 5 sản phẩm bán chạy tháng 10 năm 2026?")
+    verify_stock(rows, answer, "2026-10", 5)
+
+    # Pronoun refers to exactly the preceding user's September ranking.
+    new_chat()
+    submit("Top 5 sản phẩm bán chạy tháng 9 năm 2026?")
+    rows, answer = submit("Tồn kho của các sản phẩm đó?")
+    verify_stock(rows, answer, "2026-09", 5)
+
+    # Ranked reference must use second September seller, not top one.
+    new_chat()
+    submit("Top 5 sản phẩm bán chạy tháng 9 năm 2026?")
+    rows, answer = submit("Tồn kho của sản phẩm đứng thứ 2?")
+    verify_stock(rows, answer, "2026-09", 5, rank=2)
+
+
 def main() -> None:
     chrome = next((p for name in ("google-chrome", "google-chrome-stable", "chromium")
                    if (p := shutil.which(name))), None)
@@ -107,6 +161,7 @@ def main() -> None:
             try:
                 page = browser.new_page(viewport={"width": 1440, "height": 960})
                 journey(page)
+                chat_query_journey(page)
             finally:
                 browser.close()
     finally:
