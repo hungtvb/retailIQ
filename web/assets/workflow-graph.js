@@ -74,6 +74,7 @@
     if (!host || !definition) return null;
     const nodes=Array.isArray(definition.nodes)?definition.nodes.slice(0,20):[];
     const edges=Array.isArray(definition.edges)?definition.edges.slice(0,40):[];
+    const lineage=definition.lineage && typeof definition.lineage==='object'?definition.lineage:{};
     const {positions,width,height}=layout(nodes);
     const uid='ri-graph-'+(++graphSequence);
     const nodeLookup=new Map(),linkLookup=new Map();
@@ -181,6 +182,11 @@
         if(entry) entry.path.classList.add('graph-link-selected');
       });
       selected=id;
+      if(typeof options.onSelect==='function') options.onSelect({
+        id,node,status:button.dataset.status,
+        evidence:button.dataset.detail||'',lineage:lineage[id]||null,
+        incoming,outgoing
+      });
       if(detail) {
         const inLabels=incoming.map(e=>e.from+(e.label?' ['+e.label+']':'')).join(', ')||'start';
         const outLabels=outgoing.map(e=>e.to+(e.label?' ['+e.label+']':'')).join(', ')||'end';
@@ -222,6 +228,59 @@
     });
     viewport.appendChild(canvas);
     host.replaceChildren(viewport);
+    if(options.detailed && Object.keys(lineage).length) {
+      const section=document.createElement('section');
+      section.className='graph-provenance';
+      const heading=document.createElement('div');
+      heading.className='graph-provenance-heading';
+      const title=document.createElement('strong');
+      title.textContent='Tools & data lineage';
+      const warning=document.createElement('span');
+      warning.textContent='Reference metadata · a reached step is not proof of an agent-owned tool call';
+      heading.append(title,warning);
+      section.appendChild(heading);
+      const list=document.createElement('div');
+      list.className='graph-lineage-list';
+      for(const [nodeId,info] of Object.entries(lineage)) {
+        const owner=nodes.find(n=>n.id===nodeId);
+        if(!owner||!info||typeof info!=='object') continue;
+        const item=document.createElement('button');
+        item.type='button';
+        item.className='graph-lineage-item';
+        item.dataset.owner=nodeId;
+        const append=(label,value,css)=>{
+          const box=document.createElement('span');
+          box.className='graph-lineage-part '+css;
+          const tag=document.createElement('small');
+          tag.textContent=label;
+          const name=document.createElement('strong');
+          name.textContent=String(value||'Not recorded');
+          box.append(tag,name);
+          item.appendChild(box);
+        };
+        const arrow=label=>{
+          const el=document.createElement('span');
+          el.className='graph-lineage-arrow';
+          el.textContent='→';
+          el.setAttribute('aria-label',label);
+          el.title=label;
+          item.appendChild(el);
+        };
+        append('STEP',owner.label,'graph-part-agent');
+        arrow('uses / computes');
+        append('TOOL / OPERATION',info.tool,'graph-part-tool');
+        arrow('source / inputs');
+        append('DATA SOURCE',info.source,'graph-part-source');
+        item.title=String(info.relation||'Reference lineage');
+        item.addEventListener('click',()=>{
+          inspect(nodeId);
+          nodeLookup.get(nodeId)?.scrollIntoView({block:'nearest',inline:'nearest'});
+        });
+        list.appendChild(item);
+      }
+      section.appendChild(list);
+      host.appendChild(section);
+    }
     function setEdge(previous,id,status) {
       const edge=linkLookup.get(previous+'->'+id);
       if(!edge) return;
@@ -293,7 +352,7 @@
         },i*260));
       });
     }
-    return {update,reset,replay,showAll,hasNode:(id)=>nodeLookup.has(id)};
+    return {update,reset,replay,showAll,select:inspect,hasNode:(id)=>nodeLookup.has(id)};
   }
   let chat=null,chatHasEvidence=false;
   function chatClear() {chat=mount('execution-graph',chatDefinition);}
