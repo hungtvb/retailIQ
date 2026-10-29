@@ -113,13 +113,23 @@ def resolve_followup(question: str, history: list[dict] | None = None,
         ranked_count = requested_top_count(previous)
         ranked_period = requested_month(previous)
         rank = re.search(r'(?:đứng\s*thứ|xếp\s*thứ|rank(?:ed)?\s*#?)\s*(\d+)', q)
-        if rank and 1 <= int(rank.group(1)) <= ranked_count:
-            ranked = top(ranked_period)
+        if rank:
             index = int(rank.group(1)) - 1
-            return question + (' ' + ranked[index]['sku'] if index < len(ranked) else '')
+            if not 0 <= index < ranked_count:
+                # Explicitly invalid reference: preserve the question so the
+                # stock lookup asks for clarification. Never fall through to
+                # the first seller from the previous turn.
+                return question
+            ranked = top(ranked_period)
+            if index >= len(ranked):
+                return question
+            return question + ' ' + ranked[index]['sku']
         references_group = any(marker in q for marker in (
             'các sản phẩm đó', 'các sản phẩm ấy', 'những sản phẩm đó',
             'those products', 'these products', 'all of them'))
+        references_group |= bool(re.search(
+            r'\b(their|those|these|them)\b', q
+        ))
         if references_group:
             return f'Stock for top {ranked_count} best sellers in {ranked_period}'
     if 'top seller' in q or 'best seller' in q or 'bán chạy' in q:
