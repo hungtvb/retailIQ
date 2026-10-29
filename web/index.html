@@ -12,8 +12,11 @@
   <link rel="icon" type="image/svg+xml" href="/assets/brand/logo-mark.svg">
   <link rel="stylesheet" href="/assets/styles.css">
   <link rel="stylesheet" href="/assets/data-workspace.css">
+  <link rel="stylesheet" href="/assets/workflow-graph.css">
   <script defer src="/assets/agent-identity.js"></script>
   <script defer src="/assets/response-format.js"></script>
+  <script defer src="/assets/workflow-graph.js"></script>
+  <script defer src="/assets/workflow-ui.js"></script>
   <script defer src="/assets/app.js"></script>
 </head>
 <body>
@@ -31,6 +34,7 @@
       <div class="workspace" id="workspace">
         <nav class="workspace-tabs" aria-label="RetailIQ views" role="tablist">
           <button id="tab-assistant" type="button" role="tab" aria-selected="true" aria-controls="assistant-panel">Assistant</button>
+          <button id="tab-workflows" type="button" role="tab" aria-selected="false" aria-controls="workflows-panel">Workflow Graph</button>
           <button id="tab-roi" type="button" role="tab" aria-selected="false" aria-controls="roi-panel">Cost &amp; ROI</button>
           <button id="tab-logs" type="button" role="tab" aria-selected="false" aria-controls="logs-panel">Execution Logs</button>
         </nav>
@@ -101,7 +105,8 @@
               <div class="card-topline"><h2 id="trace-title">Execution</h2><span id="live-trace-state" class="live-trace-state">IDLE</span></div>
               <div class="live-trace" id="live-trace-panel">
                 <div class="live-trace-heading"><span class="live-trace-title"><span id="live-indicator" class="live-indicator"></span> LIVE AGENT ACTIVITY</span><span id="live-trace-count">0 events</span></div>
-                <ol id="live-trace-list" class="live-trace-list" aria-label="Live execution events" aria-live="polite" aria-relevant="additions"><li class="live-trace-empty">No events yet.</li></ol>
+                <div id="execution-graph" class="execution-graph" aria-label="Live node and edge execution graph"></div>
+                <details class="workflow-events"><summary>Event log (details)</summary><ol id="live-trace-list" class="live-trace-list" aria-label="Live execution events" aria-live="polite" aria-relevant="additions"><li class="live-trace-empty">No events yet.</li></ol></details>
                 <div class="live-trace-footer"><span>Request</span><code id="live-trace-request">—</code></div>
               </div>
               <details class="trace-details"><summary>Agent details &amp; raw evidence</summary>
@@ -111,6 +116,36 @@
               </details>
             </article>
             </aside>
+          </div>
+        </section>
+
+        <section id="workflows-panel" class="panel" role="tabpanel" aria-labelledby="tab-workflows" hidden>
+          <div class="section-heading"><h1>Workflow graph</h1><span class="subtle-suffix">FOUR-WEEK CAPABILITIES · SYNTHETIC SCENARIOS</span></div>
+          <div class="workflow-panel-grid">
+            <article class="paper-card workflow-card" aria-label="Workflow controls">
+              <h2>Choose a scenario</h2>
+              <form class="workflow-form" id="workflow-form" onsubmit="return false;">
+                <label>Scenario<select id="workflow-scenario" aria-label="Workflow scenario"><option>Loading…</option></select></label>
+                <label>Product SKU<input id="workflow-sku" value="EL-003" maxlength="64" autocomplete="off" aria-label="Product SKU"></label>
+                <label>Quantity<input id="workflow-quantity" type="number" min="1" max="20" step="1" value="2" aria-label="Quantity"></label>
+                <label>Simulated actor<select id="workflow-role" aria-label="Simulated actor"><option value="analyst">Retail analyst</option><option value="manager">Manager</option></select></label>
+                <button id="workflow-run" class="sunshine-button" type="button">Run workflow <span aria-hidden="true">↗</span></button>
+              </form>
+              <p class="workflow-notice">Local synthetic execution. The role picker is not user authentication. Approval records a mock decision only; no prices, stock or orders are modified.</p>
+              <p id="workflow-status" class="workflow-help" role="status" aria-live="polite">Loading workflow definitions…</p>
+              <div id="workflow-review-controls" class="workflow-actions" hidden>
+                <button type="button" id="workflow-approve">Approve</button>
+                <button type="button" id="workflow-reject">Reject</button>
+              </div>
+            </article>
+            <article class="paper-card workflow-card" aria-label="Workflow execution graph">
+              <div class="workflow-graph-head"><h2>Execution nodes &amp; handoffs</h2><small id="workflow-run-id">Not run</small></div>
+              <div id="workflow-graph" class="execution-graph" aria-label="Recorded workflow node graph"></div>
+              <div id="workflow-node-detail" class="workflow-node-detail" aria-live="polite">Select a node to inspect its evidence.</div>
+              <h2>Decision report</h2>
+              <div id="workflow-report" class="workflow-run-result" role="status">Select a scenario to begin.</div>
+              <p class="workflow-help">This graph replays executed backend steps. It is not a live model trace; use the Assistant execution graph for SSE live events.</p>
+            </article>
           </div>
         </section>
 
