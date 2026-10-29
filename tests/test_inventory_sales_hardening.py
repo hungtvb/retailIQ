@@ -67,8 +67,8 @@ def test_inventory_exact_availability_and_normalized_sku(db):
 
 def test_known_product_missing_inventory_never_crashes_or_invents_zero(db, monkeypatch):
     assert analytics.inventory('SKU-3') == []
-    monkeypatch.setattr(assistant, 'products', analytics.products)
-    monkeypatch.setattr(assistant, 'inventory', analytics.inventory)
+    monkeypatch.setattr('retailiq.queries.products', analytics.products)
+    monkeypatch.setattr('retailiq.queries.inventory', analytics.inventory)
     reply = assistant.do('How much stock for SKU-3?', 'stock')
     assert not reply['records']
     assert 'no inventory' in reply['answer'].lower()
