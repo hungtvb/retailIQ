@@ -33,7 +33,7 @@ async function ensureSession() {
   const response = await fetch('/api/sessions', {
     method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({})
   });
-  if (!response.ok) throw new Error('Cannot create local chat session');
+  if (!response.ok) throw new Error('Cannot create chat session');
   const session = await response.json();
   activeSessionId = session.id;
   localStorage.setItem('retailiq-active-session', activeSessionId);
@@ -43,7 +43,7 @@ async function ensureSession() {
 
 async function refreshSessions() {
   const response = await fetch('/api/sessions');
-  if (!response.ok) throw new Error('Unable to read local sessions');
+  if (!response.ok) throw new Error('Unable to read chat sessions');
   const data = await response.json();
   const picker = byId('chat-session-picker');
   picker.replaceChildren();
@@ -153,7 +153,7 @@ async function createNewChat() {
 
 async function deleteCurrentChat() {
   if (!activeSessionId) return;
-  if (!confirm('Delete this local conversation and all messages?')) return;
+  if (!confirm('Delete this conversation and all messages?')) return;
   const response = await fetch('/api/sessions/' + encodeURIComponent(activeSessionId), {method: 'DELETE'});
   if (!response.ok) throw new Error('Unable to delete session');
   activeSessionId = '';
@@ -477,7 +477,7 @@ async function ask() {
     renderRecords(result);
     byId('summary-agent').textContent = (result.active_agent || '—').replaceAll('_', ' ');
     byId('summary-period').textContent = result.as_of || '—';
-    byId('summary-mode').textContent = result.mode && result.mode.toLowerCase().includes('offline') ? 'Offline demo' : 'Full agent';
+    byId('summary-mode').textContent = result.mode && result.mode.toLowerCase().includes('offline') ? 'Offline · rules' : 'AI workflow';
     const completedState = byId('response-state');
     const dot = document.createElement('span');
     dot.className = 'status-dot';
@@ -553,7 +553,7 @@ async function estimateROI() {
       detail.textContent = scenario.payback_months === null ? 'No payback' : displayNumber(scenario.payback_months, 1) + ' mo';
       track.appendChild(bar); row.append(name, track, detail); container.appendChild(row);
     }
-    status.textContent = 'Illustrative scenario recalculated locally. No LLM call was made.';
+    status.textContent = 'Illustrative scenario recalculated. No LLM call was made.';
   } catch (error) {
     status.textContent = 'Unable to calculate: ' + error.message;
   } finally { button.disabled = false; }
@@ -581,7 +581,7 @@ async function loadExecutionLogs() {
     if (!response.ok) throw new Error('Logs unavailable (' + response.status + ')');
     const data = await response.json();
     renderExecutionLogs(data.events || []);
-    status.textContent = 'Local events only · No prompts, secrets or raw exception stacks exposed.';
+    status.textContent = 'Application events only · No prompts, secrets or raw exception stacks exposed.';
   } catch (error) {
     status.textContent = error.message;
     renderExecutionLogs([]);
