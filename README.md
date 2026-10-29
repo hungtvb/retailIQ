@@ -33,6 +33,13 @@ Short follow-up questions can reuse a product explicitly named by the user or se
 Sales and top-seller questions use the month named in the question; when no month is given, they use `RETAILIQ_AS_OF`. “Tháng 9” without a year means September of the configured reference year.
 “Newest products” uses `products.catalog_added_at` from the synthetic catalog; it does not claim a market release date. Re-run `python -m scripts.seed` after updating an older local database to add this field.
 
+### Source ownership (Week 1)
+
+- `retailiq/assistant.py` is the public entrypoint; `retailiq/orchestration/week1_graph.py` owns routing, handoff, and supervisor workflow.
+- `retailiq/queries.py` holds the shared bounded query dispatch; `retailiq/reply.py` formats the final user-facing answer. Neither module depends on the orchestration graph.
+- `retailiq/domain/analytics.py` is the reviewed read-only SQL and metric source of truth; `retailiq/rag/` handles product retrieval. Week 1 does **not** generate arbitrary SQL.
+- `scripts/seed.py` is the reproducible synthetic data generator. Do not edit the generated SQLite or product documents by hand; reseeding replaces the dataset.
+
 ### Offline mode
 
 Install `requirements-offline.txt` and set `RETAILIQ_MODE=offline` in `.env`. Offline mode supports deterministic SQL and lexical retrieval; it does not prove full LangGraph, Chroma, RAGAS, or LangSmith execution.
@@ -50,6 +57,6 @@ Install `requirements-offline.txt` and set `RETAILIQ_MODE=offline` in `.env`. Of
 
 ## Verification status
 
-Use [test evidence](docs/06_Test_Evidence.md) and [traceability](docs/14_Requirements_Traceability.md) for dated results. On code commit `a7f3bf6`, [main regression CI](https://github.com/hungtvb/retailIQ/actions/runs/40723434409) passed **283 Python tests + 12 frontend tests** and [synthetic pilot CI](https://github.com/hungtvb/retailIQ/actions/runs/40723434470) passed 7 focused tests. These are **local/mocked technical checks**, not live LLM/Chroma, RAGAS, LangSmith or measured human business value. See [traceability](docs/14_Requirements_Traceability.md).
+Use [test evidence](docs/06_Test_Evidence.md) and [traceability](docs/14_Requirements_Traceability.md) for dated results. The dated 2026-10-29 demo-machine evidence records five scripted full-mode cases, three provider-backed RAGAS samples, and remote LangSmith traces; see [Week 1 evidence](docs/09_Week1_Checklist_and_Evidence.md). CI regression and mocked-provider E2E results are separate from those live checks. None of these establishes open-ended conversational correctness or real business ROI.
 
 **Security:** `.env` is gitignored. Use synthetic data, bind to `127.0.0.1`, and do not expose this unauthenticated demo publicly.
