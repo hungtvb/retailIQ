@@ -84,7 +84,7 @@ Content-Type: application/json
 {"scenario":"week4","sku":"EL-003","quantity":2,"role":"analyst"}
 ```
 
-Other scenarios: `week2`, `week3`, `alerts`. The response includes
+Other scenarios: `week1`, `week2`, `week3`, `alerts`. The response includes
 `id`, `status`, `events`, `graph`, `report`, `simulation_notice`.
 
 ```http
