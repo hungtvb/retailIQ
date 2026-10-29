@@ -28,6 +28,11 @@ uvicorn retailiq.api:app --host 127.0.0.1 --port 8000
 
 Open <http://127.0.0.1:8000>. Run `python -m pytest -q -rs` for local tests. LangSmith tracing needs its own key and `LANGSMITH_TRACING=true`.
 
+The chat presents RetailIQ as the speaker. Specialist agents work behind the scenes and remain visible in execution details. Greetings and ordinary conversation use a general chat route; inventory, sales, and product claims still use the bounded data routes. Vietnamese questions receive Vietnamese answers where the underlying evidence is available. The data-record table is collapsed by default and can be opened for inspection or CSV export.
+Short follow-up questions can reuse a product explicitly named by the user or selected by a reviewed “newest” or “top seller” query in the same chat. RetailIQ does not infer a product from untrusted assistant prose, and a new unrelated topic ends that reference chain.
+Sales and top-seller questions use the month named in the question; when no month is given, they use `RETAILIQ_AS_OF`. “Tháng 9” without a year means September of the configured reference year.
+“Newest products” uses `products.catalog_added_at` from the synthetic catalog; it does not claim a market release date. Re-run `python -m scripts.seed` after updating an older local database to add this field.
+
 ### Offline mode
 
 Install `requirements-offline.txt` and set `RETAILIQ_MODE=offline` in `.env`. Offline mode supports deterministic SQL and lexical retrieval; it does not prove full LangGraph, Chroma, RAGAS, or LangSmith execution.

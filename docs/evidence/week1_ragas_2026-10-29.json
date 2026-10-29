@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "run_id": "0fe96cb78e5b4e97908bec9c08cc3829",
+  "evaluated_at": "2026-10-29T03:53:53.127908+00:00",
+  "execution_mode": "full",
+  "evaluator": "ragas",
+  "sample_count": 3,
+  "summary": {
+    "faithfulness": {
+      "mean": 1.0,
+      "min": 1.0
+    },
+    "answer_relevancy": {
+      "mean": 0.7290152586105414,
+      "min": 0.6650099141915485
+    }
+  },
+  "samples": [
+    {
+      "case_id": "db326cb292304966",
+      "source_count": 3,
+      "faithfulness": 1.0,
+      "answer_relevancy": 0.7765172263129223
+    },
+    {
+      "case_id": "7cf14b7d867adbc6",
+      "source_count": 3,
+      "faithfulness": 1.0,
+      "answer_relevancy": 0.7455186353271536
+    },
+    {
+      "case_id": "c8f10c038d7c4cbf",
+      "source_count": 1,
+      "faithfulness": 1.0,
+      "answer_relevancy": 0.6650099141915485
+    }
+  ],
+  "note": "Provider-backed evaluation; scores are not a production quality certification."
+}

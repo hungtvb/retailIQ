@@ -41,7 +41,7 @@ RetailIQ Copilot is a local demonstration assistant for an omnichannel electroni
 
 | Milestone | Planned scope | Current status |
 |---|---|---|
-| Week 1 · 27 Oct–02 Nov | Local Inventory & Sales SQL assistant, Product RAG, LangGraph routing, RAGAS, LangSmith, demo and evidence | Local code/tests and mocked graph evidence exist. Live LLM, Chroma, RAGAS scores, and LangSmith trace remain unverified. |
+| Week 1 · 27 Oct–02 Nov | Local Inventory & Sales SQL assistant, Product RAG, LangGraph routing, RAGAS, LangSmith, demo and evidence | Five scripted full-mode cases, three provider-backed RAGAS scores, and remote LangSmith traces were verified locally on 2026-10-29; see the [dated evidence](09_Week1_Checklist_and_Evidence.md). Open-ended retail question handling remains limited. |
 | Week 2 · 03–09 Nov | Freshness-aware routing, governed KPI layer, Inventory/Order MCP APIs, customer context, advanced retrieval | Planned; not acceptance for Week 1 |
 | Week 3 · 10–16 Nov | Human approval, access controls, alerts, Langfuse, DeepEval, cost/security/governance reports | Planned; not acceptance for Week 1 |
 | Week 4 · 17–23 Nov | Five specialist agents, A2A-style orchestration, verification loop, decision report, approved order scenario | Planned; not acceptance for Week 1 |

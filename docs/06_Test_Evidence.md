@@ -1,6 +1,6 @@
 # Week 1 — Test Evidence (current snapshot)
 
-**Updated:** 2026-10-28. This file is an evidence index, not a claim that real provider E2E passed.
+**Updated:** 2026-10-29. Earlier CI rows are historical snapshots. The live-provider rows below describe a separate run on the local demo machine.
 
 | Check | Result | Evidence / caveat |
 |---|---|---|
@@ -13,9 +13,9 @@
 | HTTP session concurrency and delete lifecycle | **Passed (mocked checkpoint deletion)** | `tests/test_week1_runtime_scope.py`: 409 for overlapping turns/deletion, cleanup before chat removal, 503 on cleanup failure |
 | Read-only retry and provider-call timeout | **Passed (mocked provider)** | `tests/test_week1_runtime_scope.py`: transient vs semantic failures, 20-second default configurable bound and one SDK retry |
 | GitHub CI compiled LangGraph | **Passed with mocked provider** | Current main runs above; live external provider remains unverified |
-| Live full-mode LangGraph + SQL + Chroma | **Not verified** | `python -m scripts.index_products`, `python -m scripts.full_e2e` with real provider configuration |
-| RAGAS evaluation scores | **Not verified** | `python -m scripts.eval_ragas` with live judge/model |
-| LangSmith nested traces and model cost | **Not verified** | Enable LangSmith with real key, then inspect trace links and usage |
+| Live full-mode LangGraph + SQL + Chroma | **5/5 scripted cases passed, 2026-10-29** | `python -m scripts.full_e2e`; local `data/full_e2e_report.json`; see [live evidence](09_Week1_Checklist_and_Evidence.md) |
+| RAGAS evaluation scores | **3/3 evaluated, 2026-10-29** | [Full score artifact](evidence/week1_ragas_2026-10-29.json); faithfulness mean 1.000, answer relevancy mean 0.729. Initial retrieval miss and threshold adjustment documented in the live evidence. |
+| LangSmith nested traces and model token usage | **Remote traces verified, 2026-10-29** | Project `retailiq-week1`; [trace links and scope](09_Week1_Checklist_and_Evidence.md). Token counts are visible; costs have not been reconciled with ROI. |
 
 Historical 43/43, 84-pass and 89-pass counts in earlier handoff notes are older snapshots. Each CI result above applies only to its stated commit.
 

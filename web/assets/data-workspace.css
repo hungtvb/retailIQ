@@ -71,6 +71,8 @@ body{font-size:14px;line-height:1.45}
 .secondary-button:hover:not(:disabled){background:#f1f4f8}
 .secondary-button:disabled{opacity:.45;cursor:not-allowed}
 .records-empty{padding:23px 17px;font-size:12px;color:#7a8493}
+.data-card > summary{cursor:pointer;padding:16px 18px;font-size:13px;font-weight:700;color:#26415e}
+.data-card > summary:focus-visible{outline:2px solid #265dba;outline-offset:-2px}
 .table-scroll{overflow:auto;max-height:340px}
 #records-table{width:100%;min-width:570px;border-collapse:separate;border-spacing:0;font-size:12px;line-height:1.45;font-variant-numeric:tabular-nums}
 #records-table th{position:sticky;top:0;z-index:1;background:#f5f7fa;text-align:left;text-transform:none;color:#475467;font-size:11px;letter-spacing:.01em;font-weight:700;border-bottom:1px solid #dce3ea}

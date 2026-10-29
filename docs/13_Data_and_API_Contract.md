@@ -22,7 +22,7 @@
 | Chat sessions | Local SQLite `data/chat_sessions.sqlite3` (override with `RETAILIQ_CHAT_DB`) | Durable local demo history; no authentication, tenant separation, or encryption guarantee. |
 | Local events | Rotating JSONL `data/logs/retailiq.jsonl` (override with `RETAILIQ_LOG_FILE`) | Bounded diagnostics, not immutable audit data or LangSmith traces. |
 
-`RETAILIQ_AS_OF` selects the synthetic reference date. Analytics use its `YYYY-MM` month; API `as_of` is that month string (for example, `2026-10`). Inventory rows have their own `updated_at`; full-mode analytics validate timestamp/timezone and stock invariants. No maximum-age freshness guarantee is defined.
+`RETAILIQ_AS_OF` selects the synthetic reference date and the default reporting month. Sales questions can request another month (for example, “doanh thu tháng 9”); without a year, that month uses the reference year. API `as_of` reports the selected `YYYY-MM` period. Inventory rows have their own `updated_at`; full-mode analytics validate timestamp/timezone and stock invariants. No maximum-age freshness guarantee is defined.
 
 ## Conceptual ERD
 
@@ -55,6 +55,7 @@ The ERD shows logical relationships. The seed schema enforces the inventory prim
 | `products.category` | text | Synthetic catalog category |
 | `products.price_vnd` | integer | Synthetic list price; not used as realized revenue |
 | `products.spec` | text | Synthetic product specification |
+| `products.catalog_added_at` | ISO date text | Date the product was added to the synthetic demo catalog; used for “newest products”, not a market launch date |
 | `locations.id` | text, primary key | Location code |
 | `locations.name` | text | Display location |
 | `locations.channel` | text | Synthetic location type, such as `warehouse` or `store` |

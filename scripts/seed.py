@@ -9,12 +9,15 @@ def seed(db_path: Path = DB, *, write_support_files: bool = True, reference_date
  db_path.parent.mkdir(parents=True, exist_ok=True)
  if db_path.exists(): db_path.unlink()
  c=sqlite3.connect(db_path)
- c.executescript('''CREATE TABLE products(sku TEXT PRIMARY KEY,name TEXT,category TEXT,price_vnd INTEGER,spec TEXT);
+ c.executescript('''CREATE TABLE products(sku TEXT PRIMARY KEY,name TEXT,category TEXT,price_vnd INTEGER,spec TEXT,catalog_added_at TEXT NOT NULL);
  CREATE TABLE locations(id TEXT PRIMARY KEY,name TEXT,channel TEXT);
  CREATE TABLE inventory(sku TEXT,location_id TEXT,on_hand INT,reserved INT,updated_at TEXT,PRIMARY KEY(sku,location_id),CHECK(on_hand>=reserved AND reserved>=0));
  CREATE TABLE orders(id TEXT PRIMARY KEY,ordered_at TEXT,channel TEXT,status TEXT);
  CREATE TABLE order_lines(id INT PRIMARY KEY,order_id TEXT,sku TEXT,quantity INT,unit_price_vnd INT,discount_vnd INT);''')
- c.executemany('INSERT INTO products VALUES(?,?,?,?,?)',PRODUCTS);c.executemany('INSERT INTO locations VALUES(?,?,?)',LOC)
+ c.executemany('INSERT INTO products VALUES(?,?,?,?,?,?)',
+               [(*product,(reference_date-timedelta(days=(len(PRODUCTS)-1-index)*7)).isoformat())
+                for index,product in enumerate(PRODUCTS)])
+ c.executemany('INSERT INTO locations VALUES(?,?,?)',LOC)
  for j,p in enumerate(PRODUCTS):
   for i,l in enumerate(LOC):c.execute('INSERT INTO inventory VALUES(?,?,?,?,?)',(p[0],l[0],25+((j*9+i*13)%70),(j+i*2)%7,reference_date.isoformat()+' 09:00 +07:00'))
  random.seed(20261028)

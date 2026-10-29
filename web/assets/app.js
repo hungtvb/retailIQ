@@ -17,11 +17,11 @@ function renderAssistantText(target, value) {
 function setActiveAgent(agent, intent = '') {
   const type = AgentID().type(agent, intent);
   const message = byId('active-response');
-  AgentID().apply(message, type);
+  AgentID().apply(message, 'iq');
   const avatar = byId('active-agent-avatar');
-  avatar.replaceChildren(AgentID().icon(type));
-  avatar.className = 'agent-avatar agent-avatar-' + type;
-  message.querySelector('.chat-message-label').textContent = AgentID().TYPES[type].name;
+  avatar.replaceChildren(AgentID().icon('iq'));
+  avatar.className = 'agent-avatar agent-avatar-iq';
+  message.querySelector('.chat-message-label').textContent = 'RetailIQ';
   const badge = byId('evidence-agent');
   AgentID().apply(badge, type);
   badge.textContent = AgentID().TYPES[type].short;
@@ -62,7 +62,7 @@ function appendChatMessage(role, content, agent = '') {
   item.className = 'chat-message chat-message-' + (role === 'user' ? 'user' : 'assistant');
   const label = document.createElement('span');
   label.className = 'chat-message-label';
-  const agentType = role === 'user' ? 'user' : AgentID().type(agent);
+  const agentType = role === 'user' ? 'user' : 'iq';
   AgentID().apply(item, agentType);
   label.textContent = role === 'user' ? 'You' : AgentID().TYPES[agentType].name;
   const body = document.createElement('span');
@@ -114,18 +114,19 @@ async function selectSession(id, preserveEvidence = false) {
   renderChatMessages(messages);
   byId('chat-welcome').hidden = messages.length > 0;
   const last = messages.length && messages[messages.length - 1].role === 'assistant' ? messages[messages.length - 1] : null;
+  const storedEvidence = last && last.evidence ? last.evidence : {};
   currentAnswerIsPersisted = Boolean(last);
   byId('active-response').hidden = !last;
   if (last) renderAssistantText(byId('answer'), last.content);
   else byId('answer').textContent = 'Ask a retail question, then continue with a follow-up.';
-  Rich().renderEvidence(byId('response-visuals'), {});
+  Rich().renderEvidence(byId('response-visuals'), storedEvidence);
+  renderRecords(storedEvidence);
   setActiveAgent(session.active_agent || 'iq');
   byId('answer').classList.remove('is-error');
   byId('meta').textContent = last ? 'Last agent: ' + (session.active_agent || 'unknown') : 'No execution yet.';
   if (!preserveEvidence) {
     byId('agent-trace').replaceChildren();
-    renderRecords();
-    byId('raw').textContent = '{}';
+    byId('raw').textContent = JSON.stringify(storedEvidence, null, 2);
     byId('live-trace-list').replaceChildren();
     byId('live-trace-count').textContent = '0 events';
     byId('live-trace-request').textContent = '—';
@@ -135,7 +136,7 @@ async function selectSession(id, preserveEvidence = false) {
     lastRequestId = '';
   }
   byId('summary-agent').textContent = session.active_agent || '—';
-  byId('summary-period').textContent = preserveEvidence ? byId('summary-period').textContent : '—';
+  byId('summary-period').textContent = storedEvidence.as_of || '—';
   byId('summary-mode').textContent = preserveEvidence ? byId('summary-mode').textContent : (last ? 'Stored answer' : '—');
   byId('response-state').textContent = last ? 'READY' : 'NEW CHAT';
   byId('answer').dataset.rawAnswer = last ? last.content : '';

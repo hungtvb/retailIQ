@@ -6,21 +6,26 @@ fallback and never reported as evidence of full LangGraph execution.
 from __future__ import annotations
 from typing import Literal, TypedDict
 import os
+import re
 from contextlib import contextmanager
 import atexit
 import threading
 from pathlib import Path
 import sqlite3
-from retailiq.assistant import intent, do
-from retailiq.domain.analytics import month, products, top
+from retailiq.assistant import intent, do, product_sku, wants_single_latest_product
+from retailiq.domain.analytics import month, products, requested_month, top
 from retailiq.core.config import chat_model, configure_langsmith
 from retailiq.skills import skill_for, load_skill
 from retailiq.observability import log_event, observed, request_id, session_id
 from retailiq.orchestration.agents import sales_analysis, inventory_analysis, product_analysis, replenish_review
+from retailiq.domain.analytics import catalog_product, newest_products
+from retailiq.language import is_vietnamese
 
 AGENT_FOR_INTENT = {
     'stock': 'inventory_agent', 'revenue': 'sales_agent',
     'top': 'sales_agent', 'product': 'product_agent', 'decision': 'retail_supervisor',
+    'general': 'retailiq',
+    'latest': 'product_agent',
 }
 
 
@@ -33,6 +38,7 @@ class State(TypedDict, total=False):
     answer: str
     records: list
     contexts: list
+    period: str
     active_agent: str
     handoff: dict | None
     skill: str
@@ -42,6 +48,8 @@ class State(TypedDict, total=False):
 
 def classify(question: str) -> str:
     q = question.casefold()
+    if any(x in q for x in ('newest product', 'latest product', 'new products', 'sản phẩm mới nhất', 'sản phẩm mới', 'mẫu mới nhất')):
+        return 'latest'
     sales = ('top seller', 'best seller', 'bán chạy', 'bestseller', 'selling most')
     stock = ('stock', 'inventory', 'tồn kho', 'available', 'replenish', 'reorder', 'restock', 'bổ sung')
     if any(x in q for x in sales) and any(x in q for x in stock):
@@ -54,9 +62,41 @@ def classify(question: str) -> str:
     return intent(question)
 
 
-def resolve_followup(question: str, history: list[dict] | None = None) -> str:
-    """Supply a grounded SKU to a short follow-up; never invent a product."""
-    if classify(question) != 'stock':
+def _referential(question: str) -> bool:
+    return bool(re.search(r'\b(nó|đó|ấy|this|that|its|it|giá|price|bao nhiêu|how much)\b', question.casefold()))
+
+
+def _previous_user_question(history: list[dict] | None) -> str:
+    for message in reversed(history or []):
+        if message.get('role') == 'user' and isinstance(message.get('content'), str):
+            content = message['content']
+            if classify(content) != 'general':
+                return content
+            if not _referential(content):
+                break
+    return ''
+
+
+def followup_intent(question: str, history: list[dict] | None = None) -> str:
+    """Infer only short, referential follow-ups from the last user turn."""
+    category = classify(question)
+    if category != 'general':
+        return category
+    prior = _previous_user_question(history)
+    if prior and requested_month(question) != month() and classify(prior) in ('revenue', 'top'):
+        return classify(prior)
+    if not _referential(question):
+        return category
+    if prior and classify(prior) in ('product', 'latest', 'top', 'stock'):
+        return 'product'
+    return category
+
+
+def resolve_followup(question: str, history: list[dict] | None = None,
+                     category: str | None = None) -> str:
+    """Supply a SKU only from user text or a deterministic catalog/sales result."""
+    category = category or followup_intent(question, history)
+    if category not in ('stock', 'product'):
         return question
     q = question.casefold()
     if any(p['sku'].casefold() in q or p['name'].casefold() in q for p in products()):
@@ -77,6 +117,15 @@ def resolve_followup(question: str, history: list[dict] | None = None) -> str:
         sku = product_sku(content)
         if sku:
             return question + ' ' + sku
+        previous_category = classify(content)
+        if previous_category == 'latest':
+            rows = newest_products(1)
+            return question + (' ' + rows[0]['sku'] if rows else '')
+        if previous_category == 'top':
+            rows = top()
+            return question + (' ' + rows[0]['sku'] if rows else '')
+        if previous_category == 'general' and not _referential(content):
+            return question
         if any(p['name'].casefold() in content.casefold() for p in products()):
             # Explicit but ambiguous reference => ask for a SKU; do not guess.
             return question
@@ -89,14 +138,14 @@ def route(state: State):
     from langgraph.types import Command
 
     class Route(BaseModel):
-        intent: Literal['stock', 'revenue', 'top', 'product', 'decision']
+        intent: Literal['stock', 'revenue', 'top', 'product', 'decision', 'general', 'latest']
 
-    effective = resolve_followup(state['question'], state.get('history', []))
-    category = classify(state['question'])
+    category = followup_intent(state['question'], state.get('history', []))
+    effective = resolve_followup(state['question'], state.get('history', []), category)
     fallback = False
     try:
         parsed = chat_model().with_structured_output(Route).invoke([
-            ('system', 'Route retail requests to stock/revenue/top/product/decision. '
+            ('system', 'Route retail requests to stock/revenue/top/product/decision/latest/general. '
              'Use decision only when cross-analyzing bestsellers and inventory. '
              'Never execute side effects.'),
             ('human', state['question']),
@@ -106,7 +155,7 @@ def route(state: State):
             fallback = True
             log_event('agent.router_fallback', level='WARNING',
                       error_type='InvalidRouteDecision')
-        elif category == 'product' or proposed == category:
+        elif proposed == category:
             # Other categories are enforced by deterministic business routing.
             category = proposed
     except Exception as error:
@@ -133,7 +182,7 @@ def sales_agent(state: State):
     # SQL KPI policy is enforced in reviewed functions, not an unused prompt.
     with observed('agent.sales', agent='sales_agent', execution_mode='full'):
         result = sales_analysis(state['effective_question'], state['intent'])
-    return Command(update={**result, 'active_agent': 'sales_agent'}, goto='__end__')
+    return Command(update={**result, 'active_agent': 'sales_agent'}, goto='retailiq_reply')
 
 
 def inventory_agent(state: State):
@@ -141,21 +190,87 @@ def inventory_agent(state: State):
     # Inventory arithmetic is enforced by read-only SQL.
     with observed('agent.inventory', agent='inventory_agent', execution_mode='full'):
         result = inventory_analysis(state['effective_question'])
-    return Command(update={**result, 'active_agent': 'inventory_agent'}, goto='__end__')
+    return Command(update={**result, 'active_agent': 'inventory_agent'}, goto='retailiq_reply')
 
 
 def product_agent(state: State):
     from langgraph.types import Command
     with observed('agent.product', agent='product_agent', execution_mode='full'):
-        result = product_analysis(state['effective_question'])
-    return Command(update={**result, 'active_agent': 'product_agent'}, goto='__end__')
+        if state['intent'] == 'latest':
+            result = {'answer': '', 'records': newest_products(1 if wants_single_latest_product(state['question']) else 5), 'contexts': [],
+                      'skill': 'catalog_lookup', 'agent': 'product_agent'}
+        elif any(word in state['question'].casefold() for word in ('giá', 'price', 'cost')) and product_sku(state['effective_question']):
+            item = catalog_product(product_sku(state['effective_question']))
+            result = {'answer': '', 'records': [item] if item else [], 'contexts': [],
+                      'skill': 'catalog_lookup', 'agent': 'product_agent'}
+        else:
+            result = product_analysis(state['effective_question'])
+    return Command(update={**result, 'active_agent': 'product_agent'}, goto='retailiq_reply')
 
 
 def retail_supervisor(state: State):
     from langgraph.types import Command
     with observed('agent.supervisor', agent='retail_supervisor', execution_mode='full'):
         result = replenish_review(state['effective_question'])
-    return Command(update={**result, 'active_agent': 'retail_supervisor'}, goto='__end__')
+    return Command(update={**result, 'active_agent': 'retail_supervisor'}, goto='retailiq_reply')
+
+
+def retailiq(state: State):
+    """Handle conversation without sending ordinary chat to product retrieval."""
+    from langgraph.types import Command
+    reply = chat_model().invoke([
+        ('system', 'You are RetailIQ, a helpful retail assistant. Reply in the language of the user question. '
+         'For greetings and ordinary conversation, answer naturally. Do not invent inventory, sales, '
+         'product specifications, prices, or policies. Ask for a specific retail question when data is needed.'),
+        ('human', state['question']),
+    ])
+    answer = getattr(reply, 'content', '')
+    if not isinstance(answer, str) or not answer.strip():
+        raise ValueError('RetailIQ returned an empty answer')
+    return Command(update={'answer': answer, 'active_agent': 'retailiq', 'records': [], 'contexts': []},
+                   goto='retailiq_reply')
+
+
+def retailiq_reply(state: State) -> dict:
+    """The sole user-facing reply step; specialist identity stays in metadata."""
+    rows = state.get('records') or []
+    category = state['intent']
+    if category == 'latest':
+        if not rows:
+            return {'answer': 'Chưa có dữ liệu ngày thêm vào danh mục.' if is_vietnamese(state['question']) else 'No catalog addition dates are available.'}
+        if is_vietnamese(state['question']):
+            return {'answer': 'Sản phẩm mới nhất theo ngày thêm vào danh mục demo: ' + '; '.join(f"{row['name']} ({row['sku']}), ngày {row['catalog_added_at']}" for row in rows) + '. Đây không phải ngày ra mắt thị trường.'}
+        return {'answer': 'Newest products by date added to the demo catalog: ' + '; '.join(f"{row['name']} ({row['sku']}), {row['catalog_added_at']}" for row in rows) + '. These are not market release dates.'}
+    if category == 'product' and rows and 'price_vnd' in rows[0]:
+        item = rows[0]
+        if is_vietnamese(state['question']):
+            return {'answer': f"Giá niêm yết trong danh mục demo của {item['name']} ({item['sku']}) là {item['price_vnd']:,} VND."}
+        return {'answer': f"The demo catalog list price for {item['name']} ({item['sku']}) is {item['price_vnd']:,} VND."}
+    if not is_vietnamese(state['question']):
+        return {'answer': state['answer']}
+    if category == 'stock' and rows:
+        total = sum(row['available'] for row in rows)
+        detail = '; '.join(f"{row['location']}: {row['available']} có thể bán" for row in rows)
+        return {'answer': f"{rows[0]['name']} ({rows[0]['sku']}) hiện có {total} sản phẩm có thể bán. {detail}."}
+    if category == 'revenue' and rows:
+        total = sum(row['net_revenue_vnd'] for row in rows)
+        return {'answer': f"Doanh thu thuần tháng {state.get('period', month())}: {total:,} VND từ đơn hoàn tất, sau giảm giá và trước hàng trả. " + '; '.join(f"{row['channel']}: {row['net_revenue_vnd']:,} VND" for row in rows) + '.'}
+    if category == 'revenue' and not rows:
+        return {'answer': f"Không có dữ liệu doanh thu từ đơn hoàn tất trong tháng {state.get('period', month())}."}
+    if category == 'top' and rows:
+        return {'answer': f"Sản phẩm bán chạy theo số lượng trong tháng {state.get('period', month())}: " + '; '.join(f"{i+1}. {row['name']} ({row['sku']}): {row['units_sold']} sản phẩm" for i, row in enumerate(rows)) + '.'}
+    if category == 'top' and not rows:
+        return {'answer': f"Không có dữ liệu sản phẩm bán chạy trong tháng {state.get('period', month())}."}
+    if category == 'decision' and len(rows) > 1:
+        leader = rows[0]
+        available = sum(row['available'] for row in rows[1:])
+        priority = 'Cần xem xét bổ sung hàng.' if available < leader['units_sold'] else 'Chưa cần ưu tiên bổ sung theo quy tắc demo.'
+        return {'answer': f"Đánh giá bổ sung hàng tháng {month()}: {leader['name']} bán {leader['units_sold']} sản phẩm, còn {available} sản phẩm có thể bán. {priority} Đây không phải dự báo hay đơn đặt hàng."}
+    if category == 'stock' and not rows:
+        return {'answer': 'Vui lòng nêu tên sản phẩm hoặc mã SKU đã biết.'}
+    if category == 'product' and not state.get('contexts'):
+        return {'answer': 'Không tìm thấy tài liệu sản phẩm phù hợp để xác minh câu trả lời.'}
+    return {'answer': state['answer']}
 
 
 def retryable_read_failure(error: Exception) -> bool:
@@ -177,11 +292,14 @@ def build_graph(*, checkpointer=None):
     read_retry = RetryPolicy(max_attempts=2, initial_interval=0.25,
                              jitter=False, retry_on=retryable_read_failure)
     graph.add_node('sales_agent', sales_agent, retry_policy=read_retry,
-                   destinations=('inventory_agent', END))
+                   destinations=('inventory_agent', 'retailiq_reply'))
     graph.add_node('inventory_agent', inventory_agent, retry_policy=read_retry,
-                   destinations=(END,))
-    graph.add_node('product_agent', product_agent, destinations=(END,))
-    graph.add_node('retail_supervisor', retail_supervisor, destinations=(END,))
+                   destinations=('retailiq_reply',))
+    graph.add_node('product_agent', product_agent, destinations=('retailiq_reply',))
+    graph.add_node('retail_supervisor', retail_supervisor, destinations=('retailiq_reply',))
+    graph.add_node('retailiq', retailiq, destinations=('retailiq_reply',))
+    graph.add_node('retailiq_reply', retailiq_reply)
+    graph.add_edge('retailiq_reply', END)
     graph.add_edge(START, 'router')
     # Control routing is Command-only: no accidental double-execution by static edges.
     return graph.compile(checkpointer=checkpointer)
@@ -334,7 +452,7 @@ def run(q: str, *, history: list[dict] | None = None, active_agent: str = '') ->
     result = validate_graph_result(result)
     return {'question': q, 'intent': result['intent'],
             'mode': 'LangGraph Multi-Agent + SQL / Chroma RAG',
-            'as_of': month(), 'answer': result['answer'],
+            'as_of': result.get('period', month()), 'answer': result['answer'],
             'records': result.get('records', []), 'contexts': result.get('contexts', []),
             'active_agent': result.get('active_agent', ''),
             'handoff': result.get('handoff'),

@@ -89,12 +89,13 @@
                 <div><span>Period</span><strong id="summary-period">—</strong></div>
                 <div><span>Mode</span><strong id="summary-mode">—</strong></div>
               </div>
-              <section class="paper-card data-card" aria-labelledby="data-heading">
-            <div class="card-topline data-topline"><div class="data-title"><h2 id="data-heading">Data records</h2><span id="evidence-agent" class="agent-badge" data-agent="iq">IQ</span><span id="data-count" class="data-count">0 rows</span></div><button type="button" id="export-csv" class="secondary-button" disabled>Export CSV</button></div>
+              <details class="paper-card data-card" aria-labelledby="data-heading">
+            <summary id="data-heading">View data records and sources</summary>
+            <div class="card-topline data-topline"><div class="data-title"><span id="evidence-agent" class="agent-badge" data-agent="iq">IQ</span><span id="data-count" class="data-count">0 rows</span></div><button type="button" id="export-csv" class="secondary-button" disabled>Export CSV</button></div>
             <div id="records-empty" class="records-empty">Query results will appear here as a table.</div>
             <div id="records-table-wrap" class="table-scroll" hidden><table id="records-table" aria-label="SQL query results"></table></div>
             <div id="sources-section" class="sources-section" hidden><strong>Product sources</strong><ul id="source-list"></ul></div>
-          </section>
+          </details>
               <article class="paper-card evidence-card" aria-labelledby="trace-title">
               <div class="card-topline"><h2 id="trace-title">Execution</h2><span id="live-trace-state" class="live-trace-state">IDLE</span></div>
               <div class="live-trace" id="live-trace-panel">

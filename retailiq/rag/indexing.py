@@ -261,7 +261,7 @@ def vector_search(question: str, k: int = 3) -> list[dict]:
             raise ValueError('RAG question must be 3–500 characters')
         if isinstance(k, bool) or not isinstance(k, int) or not 1 <= k <= 10:
             raise ValueError('RAG k must be between 1 and 10')
-        raw = os.getenv('RETAILIQ_RAG_MIN_RELEVANCE', '0.45')
+        raw = os.getenv('RETAILIQ_RAG_MIN_RELEVANCE', '0.40')
         try:
             threshold = float(raw)
         except ValueError as exc:

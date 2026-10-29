@@ -1,5 +1,6 @@
 """Acceptance scenarios for Week 1 FDE: session history + 4 patterns."""
 import pytest
+import sqlite3
 from fastapi.testclient import TestClient
 from retailiq.api import app
 from retailiq.infrastructure import sessions
@@ -22,6 +23,24 @@ def test_create_list_get_delete_session(client):
     assert client.get(f'/api/sessions/{sid}').json()['messages'] == []
     assert client.delete(f'/api/sessions/{sid}').status_code == 204
     assert client.get(f'/api/sessions/{sid}').status_code == 404
+
+
+def test_existing_message_database_is_migrated(tmp_path, monkeypatch):
+    path = tmp_path / 'old-conversations.sqlite3'
+    with sqlite3.connect(path) as db:
+        db.execute('''CREATE TABLE messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL,
+            role TEXT NOT NULL, content TEXT NOT NULL, intent TEXT, agent TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)''')
+    monkeypatch.setenv('RETAILIQ_CHAT_DB', str(path))
+    sid = sessions.create_session()['id']
+    sessions.add_turn(sid, 'Top seller?', {
+        'answer': 'A', 'intent': 'top', 'records': [{'name': 'A', 'units_sold': 12}],
+        'contexts': [{'source': 'catalog/A.md', 'text': 'private document body'}],
+    })
+    evidence = sessions.get_session(sid)['messages'][-1]['evidence']
+    assert evidence['records'] == [{'name': 'A', 'units_sold': 12}]
+    assert evidence['contexts'] == [{'source': 'catalog/A.md'}]
 
 
 def test_history_survives_reopen_and_isolates_sessions(client):

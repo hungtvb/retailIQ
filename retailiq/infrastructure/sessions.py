@@ -4,6 +4,7 @@ Local demo only: no authentication or tenant isolation. Avoid putting API secret
 """
 from __future__ import annotations
 import os
+import json
 from pathlib import Path
 import sqlite3
 import threading
@@ -14,6 +15,7 @@ from uuid import uuid4
 DEFAULT_DB = Path(__file__).resolve().parents[2] / 'data' / 'chat_sessions.sqlite3'
 MAX_SESSION_MESSAGES = 200  # Bounded API response; older messages stay in SQLite.
 MAX_STORED_ANSWER_CHARS = 20_000  # Explicit guard against oversized model output.
+MAX_STORED_EVIDENCE_CHARS = 100_000
 
 
 # Local single-process demo: prevent overlapping writes to the same conversation.
@@ -84,11 +86,13 @@ def _connect():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
             role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
-            content TEXT NOT NULL, intent TEXT, agent TEXT,
+            content TEXT NOT NULL, intent TEXT, agent TEXT, evidence_json TEXT,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS ix_messages_session ON messages(session_id, id);
         ''')
+        if 'evidence_json' not in {row['name'] for row in connection.execute('PRAGMA table_info(messages)')}:
+            connection.execute('ALTER TABLE messages ADD COLUMN evidence_json TEXT')
         with connection:
             yield connection
     finally:
@@ -112,11 +116,16 @@ def get_session(sid: str, *, include_messages: bool = True) -> dict | None:
         if include_messages:
             # Pull the newest bounded window rather than allocating all messages
             # for a long-running session. Preserve ascending presentation order.
-            rows = c.execute('''SELECT id, role, content, intent, agent, created_at
+            rows = c.execute('''SELECT id, role, content, intent, agent, evidence_json, created_at
                 FROM messages WHERE session_id=? ORDER BY id DESC LIMIT ?''',
                 (sid, MAX_SESSION_MESSAGES + 1)).fetchall()
             result['messages_truncated'] = len(rows) > MAX_SESSION_MESSAGES
-            result['messages'] = [dict(m) for m in reversed(rows[:MAX_SESSION_MESSAGES])]
+            result['messages'] = []
+            for message in reversed(rows[:MAX_SESSION_MESSAGES]):
+                item = dict(message)
+                raw = item.pop('evidence_json', None)
+                item['evidence'] = json.loads(raw) if raw else None
+                result['messages'].append(item)
         return result
 
 
@@ -150,9 +159,20 @@ def add_turn(sid: str, question: str, response: dict) -> None:
             raise ValueError('Assistant answer exceeds the persistence limit')
         agent = str(response.get('active_agent') or response.get('agent') or '')[:64]
         intent = str(response.get('intent') or '')[:32]
+        records = response.get('records') or []
+        contexts = response.get('contexts') or []
+        evidence = {'intent': intent, 'as_of': response.get('as_of'),
+                    'records': records[:200] if isinstance(records, list) else [],
+                    'contexts': [{'source': str(item['source'])[:300]} for item in contexts[:100]
+                                 if isinstance(item, dict) and isinstance(item.get('source'), str)]
+                    if isinstance(contexts, list) else []}
+        evidence_json = json.dumps(evidence, ensure_ascii=False)
+        if len(evidence_json) > MAX_STORED_EVIDENCE_CHARS:
+            evidence_json = json.dumps({'intent': intent, 'as_of': response.get('as_of'),
+                                        'records': [], 'contexts': []})
         c.execute('INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)', (sid, 'user', question))
-        c.execute('''INSERT INTO messages (session_id, role, content, intent, agent)
-                     VALUES (?, ?, ?, ?, ?)''', (sid, 'assistant', answer, intent, agent))
+        c.execute('''INSERT INTO messages (session_id, role, content, intent, agent, evidence_json)
+                     VALUES (?, ?, ?, ?, ?, ?)''', (sid, 'assistant', answer, intent, agent, evidence_json))
         title = question.strip()[:80] if row['title'] == 'New conversation' else row['title']
         c.execute('''UPDATE sessions SET title=?,active_agent=?,updated_at=CURRENT_TIMESTAMP
                      WHERE id=?''', (title, agent, sid))

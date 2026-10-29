@@ -88,6 +88,12 @@ def test_mocked_full_graph_session_handoff_and_durable_checkpoint(mocked_full):
     stored = mocked_full.get("/api/sessions/" + sid).json()
     assert len(stored["messages"]) == 4
     assert stored["active_agent"] == "inventory_agent"
+    latest = response.json()
+    evidence = stored["messages"][-1]["evidence"]
+    assert evidence["intent"] == latest["intent"]
+    assert evidence["records"] == latest["records"]
+    assert evidence["as_of"] == latest["as_of"]
+    assert evidence["contexts"] == [{"source": item["source"]} for item in latest["contexts"]]
     from langgraph.checkpoint.sqlite import SqliteSaver
     assert graph._session_graph().get_state(
         {"configurable": {"thread_id": sid}}

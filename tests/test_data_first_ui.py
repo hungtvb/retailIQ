@@ -61,5 +61,8 @@ def test_conversation_persists_messages_without_duplicate_latest_answer():
     assert "if (i === final) continue;" in js
     assert 'currentAnswerIsPersisted' in js
     assert 'await selectSession(sessionId, true)' in js
+    assert 'last && last.evidence ? last.evidence : {}' in js
+    assert "Rich().renderEvidence(byId('response-visuals'), storedEvidence)" in js
+    assert 'renderRecords(storedEvidence)' in js
     assert "appendChatMessage('user', question)" in js
     assert "scrollChatToBottom()" in js

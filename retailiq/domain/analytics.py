@@ -6,7 +6,7 @@ Week 1 data model. Inventory snapshots are validated, not freshness-filtered.
 """
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import os
 import re
 
@@ -25,14 +25,44 @@ def month() -> str:
     return date.fromisoformat(os.getenv('RETAILIQ_AS_OF', '2026-10-28')).strftime('%Y-%m')
 
 
-def _month_bounds() -> tuple[str, str]:
-    start = date.fromisoformat(month() + '-01')
+def requested_month(question: str) -> str:
+    """Resolve an explicit sales month against the demo reference year."""
+    reference = date.fromisoformat(os.getenv('RETAILIQ_AS_OF', '2026-10-28'))
+    text = question.casefold()
+    if 'tháng trước' in text or 'last month' in text:
+        previous = reference.replace(day=1) - timedelta(days=1)
+        return previous.strftime('%Y-%m')
+    match = re.search(r'tháng\s+(1[0-2]|0?[1-9])(?:\s*(?:năm|/|-)\s*(20\d{2}))?', text)
+    if not match:
+        match = re.search(r'\b(20\d{2})[-/](1[0-2]|0?[1-9])\b', text)
+        if match:
+            return f'{int(match.group(1)):04d}-{int(match.group(2)):02d}'
+        return reference.strftime('%Y-%m')
+    return f'{int(match.group(2) or reference.year):04d}-{int(match.group(1)):02d}'
+
+
+def _month_bounds(period: str | None = None) -> tuple[str, str]:
+    start = date.fromisoformat((period or month()) + '-01')
     end = date(start.year + 1, 1, 1) if start.month == 12 else date(start.year, start.month + 1, 1)
     return start.isoformat(), end.isoformat()
 
 
 def products() -> list[dict]:
     return query('SELECT * FROM products ORDER BY sku')
+
+
+def newest_products(limit: int = 5) -> list[dict]:
+    """Newest entries in the synthetic catalog, not market release dates."""
+    if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 10:
+        raise ValueError('Invalid newest-products limit')
+    return query('''SELECT sku, name, category, price_vnd, catalog_added_at
+                    FROM products ORDER BY catalog_added_at DESC, sku DESC LIMIT ?''', (limit,))
+
+
+def catalog_product(sku: str) -> dict | None:
+    rows = query('''SELECT sku, name, category, price_vnd, catalog_added_at
+                    FROM products WHERE sku = ? LIMIT 1''', (_sku(sku),))
+    return rows[0] if rows else None
 
 
 def _nonnegative_int(value, *, field: str) -> int:
@@ -111,8 +141,8 @@ def _ensure_sales_lines_valid(start: str, end: str) -> None:
         raise DomainDataError('Invalid completed-order line in sales period')
 
 
-def revenue() -> list[dict]:
-    start, end = _month_bounds()
+def revenue(period: str | None = None) -> list[dict]:
+    start, end = _month_bounds(period)
     _ensure_sales_lines_valid(start, end)
     rows = query('''
         SELECT o.channel, COUNT(DISTINCT o.id) AS orders,
@@ -129,8 +159,8 @@ def revenue() -> list[dict]:
     return rows
 
 
-def top() -> list[dict]:
-    start, end = _month_bounds()
+def top(period: str | None = None) -> list[dict]:
+    start, end = _month_bounds(period)
     _ensure_sales_lines_valid(start, end)
     rows = query('''
         SELECT p.sku, p.name, SUM(li.quantity) AS units_sold

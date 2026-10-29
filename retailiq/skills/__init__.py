@@ -18,4 +18,4 @@ def skill_for(intent: str) -> str:
     return {'revenue': 'sales_kpi', 'top': 'sales_kpi',
             'stock': 'inventory_availability',
             'product': 'product_grounding',
-            'decision': 'replenishment_review'}[intent]
+            'decision': 'replenishment_review', 'general': '', 'latest': 'catalog_lookup'}[intent]

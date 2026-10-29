@@ -44,6 +44,15 @@ def test_same_key_url_different_models(monkeypatch):
     assert 'demo-resource' not in str(config.safe_status())
 
 
+def test_optional_reasoning_effort_is_configurable(monkeypatch):
+    _fake_factory(monkeypatch)
+    _env(monkeypatch)
+    monkeypatch.setenv('LLM_REASONING_EFFORT', 'none')
+    assert config.chat_model().kwargs['reasoning_effort'] == 'none'
+    monkeypatch.delenv('LLM_REASONING_EFFORT')
+    assert 'reasoning_effort' not in config.chat_model().kwargs
+
+
 def test_azure_root_normalized_to_v1(monkeypatch):
     _env(monkeypatch,url='https://retailiq.openai.azure.com/')
     assert config.settings().base_url=='https://retailiq.openai.azure.com/openai/v1/'

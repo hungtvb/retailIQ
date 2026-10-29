@@ -31,7 +31,7 @@ This is **single-process local crash recovery**, not an ACID transaction across 
 - The model is told to cite known IDs `[S1]`, `[S2]`, etc. All emitted IDs must match the evidence passed to that request; provenance paths are attached by backend code, not model-selected paths.
 - Merely including a source ID **does not prove semantic entailment**. Claims can still be unsupported or source content malicious; LLM prompt injection resistance and factual faithfulness require live adversarial/evaluation tests.
 - Product docs must never be used to infer current stock or revenue. Those facts come from SQL modules.
-- The relevance threshold (default 0.45) is an **uncalibrated starting point**, not a measured confidence guarantee.
+- The relevance threshold (default 0.40) is an **uncalibrated starting point**, not a measured confidence guarantee.
 
 ## Tests and acceptance
 

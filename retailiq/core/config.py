@@ -85,6 +85,9 @@ def chat_model():
     cfg = settings()
     temperature = os.getenv('LLM_TEMPERATURE','').strip()
     extra = {'temperature':float(temperature)} if temperature else {}
+    reasoning_effort = os.getenv('LLM_REASONING_EFFORT', '').strip()
+    if reasoning_effort:
+        extra['reasoning_effort'] = reasoning_effort
     return ChatOpenAI(base_url=cfg.base_url,api_key=cfg.api_key,model=cfg.chat_model,
                       timeout=_provider_timeout(), max_retries=1, **extra)
 
