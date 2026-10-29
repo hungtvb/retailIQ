@@ -163,3 +163,24 @@ def test_scope_guard_filters_simulated_analyst_rows(client):
     assert "1 permitted locations" in analyst["events"][2]["detail"]
     assert "all locations" in manager["events"][1]["detail"]
     assert "3 permitted locations" in manager["events"][2]["detail"]
+
+
+def test_semantic_contract_includes_all_freshness_tiers(client):
+    api, _ = client
+    response = api.get("/api/workflows/semantics")
+    assert response.status_code == 200
+    contract = response.json()
+    assert set(contract["freshness_tiers"]) == {"live", "15_min", "hourly", "daily"}
+    assert not any(t["guaranteed"] for t in contract["freshness_tiers"].values())
+    assert contract["metrics"]["net_revenue"]["unit"] == "VND"
+
+
+def test_approval_report_reflects_final_state(client):
+    api, _ = client
+    run = submit(api, "week4").json()
+    reviewed = api.post("/api/workflows/runs/" + run["id"] + "/review",
+                        json={"role": "manager", "decision": "approve"}).json()
+    assert reviewed["status"] == "approved_simulated"
+    assert "Manager decision: approved_simulated" in reviewed["report"]
+    assert "review pending" not in reviewed["report"]
+    assert reviewed["events"][-1]["from"] == "manager_approval"
