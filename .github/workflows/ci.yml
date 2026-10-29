@@ -29,5 +29,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Frontend safe-rendering and agent-branding tests
-        run: node --test tests/frontend_format.test.cjs
+      - name: Frontend safe-rendering, graph JS syntax and agent-branding tests
+        run: |
+          node --check web/assets/workflow-graph.js
+          node --check web/assets/workflow-ui.js
+          node --check web/assets/app.js
+          node --test tests/frontend_format.test.cjs
