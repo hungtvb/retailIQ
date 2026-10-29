@@ -137,8 +137,10 @@ def review_run(run_id: str, role: str, decision: str) -> dict:
             events = json.loads(row["trace_json"])
             outcome = "approved_simulated" if decision == "approve" else "rejected"
             events.append({"node": "manager_approval", "status": "completed",
+                           "from": events[-1].get("from"),
                            "detail": "Manager " + decision + "d proposal (simulated)"})
             events.append({"node": "finalize", "status": "completed",
+                           "from": "manager_approval",
                            "detail": "Decision recorded; no operational data changed"})
             changed = db.execute(
                 "UPDATE workflow_runs SET status=?,trace_json=?,decision_at=? "
