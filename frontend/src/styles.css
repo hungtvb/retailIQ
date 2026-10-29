@@ -280,3 +280,12 @@ button:focus-visible,a:focus-visible,textarea:focus-visible {
   .network-pane {min-height:0;}
   .message-identity .view-execution {margin-left:4px;padding:4px 6px;}
 }
+
+/* Dense execution graphs retain readable node sizes rather than fitting
+   18+ nodes into a tiny viewport. No interaction is required. */
+.matrix-wrap {overflow-y:auto;overscroll-behavior:contain;scrollbar-color:#c7deda transparent;}
+.matrix-svg-expanded {width:100%;height:auto;max-height:none;min-height:unset;flex:0 0 auto;}
+@media(max-width:670px) {
+  .matrix-wrap {overflow:visible;}
+  .matrix-svg-mobile {height:auto;}
+}
