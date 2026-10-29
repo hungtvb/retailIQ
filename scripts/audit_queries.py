@@ -168,7 +168,8 @@ def run_audit(mode: str = 'offline', ids: set[str] | None = None) -> dict:
         seed(db_path=database,write_support_files=False,reference_date=REFERENCE_DATE)
         with patch.dict(os.environ, {'RETAILIQ_MODE':mode,'RETAILIQ_AS_OF':REFERENCE_DATE.isoformat(),
                            'RETAILIQ_DATA_DB':str(database),'RETAILIQ_CHAT_DB':str(directory/'chat.sqlite3'),
-                           'RETAILIQ_CHECKPOINT_DB':str(directory/'checkpoint.sqlite3')}):            from fastapi.testclient import TestClient
+                           'RETAILIQ_CHECKPOINT_DB':str(directory/'checkpoint.sqlite3')}):
+            from fastapi.testclient import TestClient
             from retailiq.api import app
             oracle = Oracle(database)
             results = []
