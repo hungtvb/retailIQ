@@ -24,6 +24,22 @@ def retailiq_reply(state: dict) -> dict:
         return {'answer': f"The sample catalog list price for {item['name']} ({item['sku']}) is {item['price_vnd']:,} VND."}
     if not is_vietnamese(state['question']):
         return {'answer': state['answer']}
+    if category == 'stock' and rows and len({row['sku'] for row in rows}) > 1:
+        # A ranked group is multiple independent inventory checks. Never
+        # attribute its combined availability to the first product.
+        grouped = {}
+        for row in rows:
+            sku = row['sku']
+            if sku not in grouped:
+                grouped[sku] = {'name': row['name'], 'available': 0}
+            grouped[sku]['available'] += row['available']
+        context = (' theo thứ tự doanh số tháng ' + state['period']
+                   if state.get('period') else '')
+        details = '; '.join(
+            f"{item['name']} ({sku}): {item['available']} có thể bán"
+            for sku, item in grouped.items()
+        )
+        return {'answer': 'Tồn kho các sản phẩm' + context + ': ' + details + '.'}
     if category == 'stock' and rows:
         total = sum(row['available'] for row in rows)
         detail = '; '.join(f"{row['location']}: {row['available']} có thể bán" for row in rows)
