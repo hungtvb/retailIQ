@@ -88,6 +88,7 @@ The ERD shows logical relationships. The seed schema enforces the inventory prim
 | `messages.role` | enum text | `user` or `assistant` |
 | `messages.content` | text | Question or answer stored locally |
 | `messages.intent`, `agent` | nullable text | Execution metadata, populated for assistant turn |
+| `messages.evidence_json` | nullable JSON text | Bounded, persisted evidence metadata for assistant messages (records, source identifiers, intent, period); not a replacement for authoritative business data |
 | `messages.created_at` | timestamp text | SQLite timestamp |
 
 ## KPI definitions
