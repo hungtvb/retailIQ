@@ -24,11 +24,14 @@ A code path, a UI node, or a passing unit test **does not prove a business scena
 | Business questions | `python -m scripts.audit_queries --mode offline --strict` | 20 independent SQL-checked conversation scenarios |
 | Workflow behavior | `python -m scripts.audit_workflows --strict` | 19 per-feature scenarios, API + SQLite oracle |
 | Real browser | `python -m scripts.smoke_workflow_browser` | Week 1–4 UI, evidence, approval, retry/blocked and conversation follow-ups |
+| MCP actual stdio | `python -m scripts.smoke_mcp_stdio` | Real subprocess MCP Inventory + Order calls; verify against SQL, not mock output |
 | Compatibility regression | `python -m pytest -q` | Protect existing contracts; **not** feature acceptance on its own |
 
 Both audits write JSON reports under `data/`; GitHub Actions retains them as
 downloadable artifacts. The browser command uses a **disposable seeded database**,
 not an existing local user database. It needs Chromium/Chrome and Playwright.
+The MCP smoke needs the optional `mcp` and `langchain-mcp-adapters` dependencies.
+Its subprocess gets the same isolated fixture via environment variables.
 
 ## Scenario coverage by week
 
@@ -62,10 +65,21 @@ presence. A retrieved document is **not** automatically a valid RAGAS score.
 2. `W3-APPROVE` and `W3-REJECT` failed: approval duplicated the manager
    node in the recorded trace and broke the `from` edge. Corrected by updating
    the existing awaiting node, then appending one finalization event.
+3. **Chromium E2E** caught a UI bug: the blocked proposal still displayed
+   Approve/Reject because author CSS `display:flex` overrode `hidden`.
+   The review control is now explicitly `display:none` while hidden.
+4. **Actual MCP stdio** caught an adapter bug missed by its mock-based test:
+   the LangChain tool result arrived as content blocks, not always a dict.
+   The decoder now normalizes supported response shapes *before* validating
+   SKU and stock schema; malformed results still fail closed.
 
 Initial run: **16/19 PASS**; after corrections, the strict audit recorded
 **19/19 PASS** in GitHub Actions run
 https://github.com/hungtvb/retailIQ/actions/runs/40871264052.
+
+A later CI run verified **20/20 business queries**, **19/19 workflow scenarios**,
+real **Chromium E2E**, and **MCP Inventory/Order stdio** together:
+https://github.com/hungtvb/retailIQ/actions/runs/40872427598.
 
 ## Required course capability status (do not conflate)
 
@@ -75,7 +89,7 @@ https://github.com/hungtvb/retailIQ/actions/runs/40871264052.
 | Week 1 LangGraph live + actual LLM tool traces | **Not verified by offline audit** |
 | Week 1 RAGAS / LangSmith reports | **No live evidence gate passed here** |
 | Week 2 semantic metrics and freshness checks | **Local behavior verified** |
-| Week 2 MCP Inventory/Order stdio handshake | **Optional implementation present; real transport not E2E verified** |
+| Week 2 MCP Inventory/Order stdio handshake | **Verified with real local stdio subprocess/tool invocation; not a hosted MCP service** |
 | Week 2 long-term memory, hybrid retrieval and reranking quality | **Not demonstrated by these scenarios** |
 | Week 3 manager approval, KPI threshold, location filtering | **Mock behavior verified; NOT real RBAC or notification** |
 | Week 3 Langfuse / DeepEval / security report | **Not verified by these scenarios** |
