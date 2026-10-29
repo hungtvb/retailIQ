@@ -35,6 +35,15 @@ jobs:
           path: data/workflow_audit_report.json
           if-no-files-found: ignore
           retention-days: 7
+      - name: Adversarial edge scenarios (report failures before enforcing)
+        run: python -m scripts.audit_edge_scenarios
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: retailiq-edge-scenarios
+          path: data/edge_scenario_audit.json
+          if-no-files-found: ignore
+          retention-days: 7
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
