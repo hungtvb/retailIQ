@@ -54,3 +54,109 @@
 @media (prefers-reduced-motion:reduce) {.graph-node[data-status="running"] {animation:none}}
 
 .graph-edge-label {font:600 10px 'DM Sans',sans-serif;fill:#5a728c;paint-order:stroke;stroke:#fafcff;stroke-width:4px;stroke-linejoin:round}
+
+
+/* Phase graph — coordinates must match NODE_W=188/NODE_H=83 in workflow-graph.js. */
+.graph-canvas {box-sizing:border-box}
+.graph-lane {position:absolute;top:6px;box-sizing:border-box;border:1px solid #e4eaf1;
+  border-radius:12px;background:rgba(255,255,255,.67);pointer-events:none}
+.graph-lane-heading {display:flex;flex-direction:column;gap:3px;padding:12px 12px 9px;
+  border-bottom:1px solid #e8edf3}
+.graph-lane-heading strong {font-size:11px;color:#334961;letter-spacing:.035em}
+.graph-lane-heading span {font-size:10px;color:#8090a2}
+.graph-node {box-sizing:border-box;width:188px;height:83px;min-height:83px;padding:8px 12px 10px;
+  z-index:2;gap:5px}
+.graph-node-header {display:flex;align-items:center;gap:8px;width:100%}
+.graph-node-number {font-size:10px;color:#9aa8b8;font-weight:700;font-variant-numeric:tabular-nums}
+.graph-node-kind {font-size:9px;font-weight:750;color:#667d95;letter-spacing:.08em}
+.graph-node-name {font-size:12px;font-weight:700;line-height:1.2}
+.graph-node-status {font-size:9px;font-weight:800}
+.graph-node-input {border-left:4px solid #8b9caf}
+.graph-link {stroke:#adbccd;stroke-width:1.9;stroke-dasharray:4 4}
+.graph-link-active {stroke:#238d75;stroke-width:2.7;stroke-dasharray:none}
+.graph-link-running {stroke:#458fca}
+.graph-link-blocked {stroke:#c95d55}
+.graph-link-feedback {stroke:#b99150}
+.graph-link-feedback-active {stroke:#bc813b;stroke-dasharray:6 3}
+.graph-link-selected {stroke-width:4}
+.graph-edge-caption rect {fill:#fff;stroke:#e2e8f0;stroke-width:.7}
+.graph-edge-caption.graph-edge-used rect {fill:#ebf8f2;stroke:#98cbbb}
+.graph-edge-caption.graph-edge-used .graph-edge-label {fill:#186d5a}
+.graph-node-source {border-left:4px solid #4c9e81}
+.graph-provenance {display:flex;flex-direction:column;gap:10px;margin-top:12px}
+.graph-provenance-heading {display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:5px}
+.graph-provenance-heading strong {font-size:13px}
+.graph-provenance-heading span {font-size:11px;color:#738296}
+.graph-lineage-list {display:flex;flex-direction:column;gap:8px}
+.graph-lineage-item {display:flex;align-items:stretch;gap:8px;text-align:left;width:100%;padding:9px;
+  border:1px solid #e2e8ef;border-radius:10px;background:#fbfcff;font:inherit;cursor:pointer;color:#293f56}
+.graph-lineage-item:hover,.graph-lineage-item:focus-visible {border-color:#73a0cd;outline-offset:2px}
+.graph-lineage-part {display:flex;flex:1;min-width:0;flex-direction:column;gap:5px;padding:8px 9px;
+  border-radius:8px;border:1px solid #dce6ef;overflow-wrap:anywhere;background:#fff}
+.graph-lineage-part small {font-size:9px;letter-spacing:.045em;font-weight:750;color:#687d93}
+.graph-lineage-part strong {font-size:11px;line-height:1.35;font-weight:600}
+.graph-part-agent {border-left:3px solid #5a8dcb}
+.graph-part-tool {border-left:3px solid #987fc2}
+.graph-part-source {border-left:3px solid #56a386}
+.graph-lineage-arrow {display:flex;align-items:center;justify-content:center;color:#68819a;font-size:19px}
+.workflow-graph-toolbar {display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin:12px 0 6px}
+.workflow-graph-toolbar button {min-height:34px;padding:7px 11px;border:1px solid #d6e0e9;
+  border-radius:8px;font:inherit;font-size:12px;font-weight:650;background:#fff;color:#42617d;cursor:pointer}
+.workflow-graph-toolbar button.workflow-view-active,.workflow-graph-toolbar button[aria-pressed="true"] {
+  background:#e8f2fb;border-color:#93bddc;color:#215d88}
+.workflow-graph-toolbar button:disabled {opacity:.5;cursor:not-allowed}
+.workflow-graph-toolbar #workflow-replay {margin-left:auto}
+.workflow-graph-legend {display:flex;flex-wrap:wrap;gap:10px;margin:9px 0;font-size:11px;color:#6d8093}
+.workflow-graph-legend span {display:flex;align-items:center;gap:5px}
+.workflow-legend-dot {display:inline-block;width:8px;height:8px;border-radius:50%;background:#a5b5c4}
+.legend-done {background:#45a488}.legend-running {background:#4b96c8}
+.legend-awaiting {background:#cf9b47}.legend-blocked {background:#d17270}
+.workflow-observation-grid {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin:16px 0}
+.workflow-inspector-card,.workflow-timeline-card {border:1px solid #e0e8ef;border-radius:11px;
+  padding:14px;min-width:0;background:#fff}
+.workflow-inspector-card h3,.workflow-timeline-card h3 {font-size:13px;margin:0 0 12px;font-weight:700}
+.workflow-timeline-card h3 small {display:block;font-size:10px;font-weight:400;color:#7b8b9d;margin-top:3px}
+.workflow-node-detail {min-height:70px;max-height:370px;overflow:auto;padding:0}
+.workflow-inspector-head {display:flex;align-items:center;justify-content:space-between;gap:9px;margin-bottom:10px}
+.workflow-inspector-head h3 {margin:0;font-size:13px}
+.workflow-inspector-state {padding:3px 7px;border-radius:12px;font-size:9px;font-weight:800;
+  background:#eef2f6;color:#5a728b}
+.workflow-inspector-state[data-status="completed"] {color:#227860;background:#e7f6ee}
+.workflow-inspector-state[data-status="awaiting"] {color:#9c6c25;background:#fff4df}
+.workflow-inspector-state[data-status="blocked"],.workflow-inspector-state[data-status="failed"] {color:#b84b48;background:#fff0ef}
+.workflow-inspector-field {display:flex;flex-direction:column;gap:3px;border-bottom:1px solid #edf1f5;
+  padding:9px 0;overflow-wrap:anywhere}
+.workflow-inspector-label {font-size:10px;color:#788b9e;font-weight:700;text-transform:uppercase;letter-spacing:.02em}
+.workflow-inspector-value {font-size:12px;color:#31475d;line-height:1.4}
+.workflow-inspector-section {font-size:12px;margin:14px 0 8px}
+.workflow-inspector-chain {display:flex;gap:6px;align-items:stretch}
+.workflow-inspector-chain>div {display:flex;align-items:center;min-width:0;flex:1;padding:7px;
+  border:1px solid #d7e1ed;border-radius:7px;font-size:10px;overflow-wrap:anywhere}
+.workflow-chain-agent {border-left:3px solid #5a8dcb!important}
+.workflow-chain-tool {border-left:3px solid #987fc2!important}
+.workflow-chain-source {border-left:3px solid #56a386!important}
+.workflow-chain-arrow {align-self:center;color:#657f98}
+.workflow-inspector-disclaimer {font-size:10px;color:#7b8795;line-height:1.4}
+.workflow-timeline {display:flex;flex-direction:column;gap:6px;max-height:370px;overflow-y:auto}
+.workflow-timeline-item {display:flex;align-items:center;gap:8px;min-width:0;width:100%;
+  border:1px solid #e4ebf1;border-radius:8px;padding:8px;background:#fbfcfe;text-align:left;
+  font:inherit;cursor:pointer}
+.workflow-timeline-item:hover,.workflow-timeline-item:focus-visible,
+.workflow-timeline-item.workflow-timeline-active {border-color:#83b3d5;background:#eef6fc}
+.workflow-timeline-index {font-size:10px;min-width:20px;color:#8595a7;font-weight:700}
+.workflow-timeline-main {display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.workflow-timeline-main strong {font-size:11px;color:#2e435b;overflow-wrap:anywhere}
+.workflow-timeline-main small {font-size:10px;color:#718397;overflow-wrap:anywhere}
+.workflow-timeline-status {font-size:9px;color:#5f829b;font-weight:700}
+.workflow-timeline-status[data-status="awaiting"] {color:#ad7c2d}
+.workflow-timeline-status[data-status="blocked"],.workflow-timeline-status[data-status="failed"] {color:#b44943}
+@media (max-width:1180px) {
+  .workflow-panel-grid {grid-template-columns:1fr}
+}
+@media (max-width:720px) {
+  .workflow-observation-grid {grid-template-columns:1fr}
+  .graph-lineage-item {flex-wrap:wrap}
+  .graph-lineage-part {flex-basis:40%}
+  .graph-lineage-arrow {font-size:16px}
+  .workflow-inspector-chain {flex-wrap:wrap}
+}
