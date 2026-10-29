@@ -145,7 +145,8 @@ function GraphCanvas({graph}: {graph:GraphState}) {
         ? 'Saved answers are available, but their execution events are not yet persisted.'
         : 'The network appears when a question starts. Nodes reflect recorded execution events only.'}</p>
     </div> :
-    <svg className={'matrix-svg'+(compact?' matrix-svg-mobile':'')}
+    <svg className={'matrix-svg'+(compact?' matrix-svg-mobile':'')+
+      (!compact&&canvasHeight>590?' matrix-svg-expanded':'')}
       viewBox={'0 0 '+canvasWidth+' '+canvasHeight} role="img"
       aria-label={positioned.length+' observed execution nodes and '+graph.edges.length+' relationships'}>
       <defs>
