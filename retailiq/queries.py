@@ -9,8 +9,41 @@ from .language import is_vietnamese
 from .reply import retailiq_reply
 
 
+def is_price_extreme(question: str) -> bool:
+ text = question.casefold()
+ return any(term in text for term in (
+     'mắc nhất', 'đắt nhất', 'rẻ nhất', 'most expensive', 'cheapest',
+     'least expensive', 'highest priced', 'lowest priced'))
+
+
+def highest_price(question: str) -> bool:
+ text = question.casefold()
+ return any(term in text for term in ('mắc nhất', 'đắt nhất', 'most expensive', 'highest priced'))
+
+
+def requested_top_count(question: str) -> int:
+ import re
+ match = re.search(r'\btop\s*([1-5])\b', question.casefold())
+ if match:
+  return int(match.group(1))
+ if 'top five' in question.casefold():
+  return 5
+ return 1 if wants_single_top_product(question) else 5
+
+
+def is_multi_stock_question(question: str) -> bool:
+ """Stock of a ranked group, not a replenishment review."""
+ import re
+ text = question.casefold()
+ stock = any(x in text for x in ('stock','inventory','tồn kho','available','còn hàng'))
+ ranked = any(x in text for x in ('bán chạy','best seller','top seller'))
+ plural = bool(re.search(r'\btop\s*[2-5]\b', text)) or 'top five' in text
+ return stock and ranked and plural
+
+
 def intent(q):
  q=q.lower()
+ if is_price_extreme(q):return 'product'
  if any(x in q for x in ['top seller','best seller','bán chạy']):return 'top'
  if any(x in q for x in ['revenue','doanh thu','sales performance']):return 'revenue'
  if any(x in q for x in ['stock','inventory','tồn kho','in stock','available units','còn hàng','còn bao nhiêu']):return 'stock'
@@ -52,6 +85,17 @@ def do(q,category):
           'Hello! I am RetailIQ. You can ask about inventory, revenue, top sellers, or product information.')
   return {'answer':answer,'records':[],'contexts':[]}
  if category=='stock':
+  if is_multi_stock_question(q):
+   period=requested_month(q)
+   ranked=top(period)[:requested_top_count(q)]
+   rows=[record for item in ranked for record in inventory(item['sku'])]
+   by_sku={item['sku']:sum(row['available'] for row in rows
+                           if row['sku']==item['sku']) for item in ranked}
+   answer=('Available stock for ranked completed-order products in '+period+': '+
+           '; '.join(item['name']+' ('+item['sku']+'): '+str(by_sku[item['sku']])+
+                     ' units' for item in ranked)+'.')
+   if not ranked: answer='No completed-order top sellers found for '+period+'.'
+   return {'answer':answer,'records':rows,'contexts':[],'period':period}
   sku=product_sku(q)
   if not sku:return {'answer':'Please specify a known product name or SKU.','records':[],'contexts':[]}
   rows=inventory(sku)
@@ -69,10 +113,20 @@ def do(q,category):
  if category=='top':
   period=requested_month(q)
   ranked=top(period) if period!=month() else top()
-  rows=ranked[:1] if wants_single_top_product(q) else ranked
+  rows=ranked[:requested_top_count(q)]
   if not rows:
    return {'answer':f'No completed-order top sellers for {period}.','records':[],'contexts':[], 'period':period}
   return {'answer':f'Top sellers by units in {period} (completed orders): '+ '; '.join(f"{i+1}. {r['name']} ({r['sku']}): {r['units_sold']} units" for i,r in enumerate(rows))+'.','records':rows,'contexts':[], 'period':period}
+ if category=='product' and is_price_extreme(q):
+   from .domain.analytics import price_extreme
+   category_filter='Accessory' if ('phụ kiện' in q.casefold() or 'accessor' in q.casefold()) else None
+   rows=price_extreme(highest=highest_price(q),category=category_filter)
+   if not rows:return {'answer':'No catalog products match this price filter.', 'records':[], 'contexts':[]}
+   leader=rows[0]
+   return {'answer':leader['name']+' ('+leader['sku']+'): '+
+           f"{leader['price_vnd']:,} VND list price in the synthetic catalog."+
+           (' Category: '+category_filter+'.' if category_filter else ''),
+           'records':rows,'contexts':[]}
  if category=='product' and any(word in q.casefold() for word in ('giá','price','cost')) and product_sku(q):
   from .domain.analytics import catalog_product
   item=catalog_product(product_sku(q))
