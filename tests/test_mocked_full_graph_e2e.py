@@ -40,7 +40,7 @@ def mocked_full(monkeypatch, tmp_path):
     monkeypatch.setenv("LANGSMITH_TRACING", "false")
     monkeypatch.setattr(graph, "chat_model", lambda: FakeRouter())
     monkeypatch.setattr(config, "chat_model", lambda: FakeProductModel())
-    monkeypatch.setattr(assistant, "retrieve", lambda question: [{
+    monkeypatch.setattr('retailiq.queries.retrieve', lambda question: [{
         "source": "data/product_docs/EL-003.md",
         "text": "USB-C GaN Charger 65W supports 65W USB-C PD charging.",
     }])
