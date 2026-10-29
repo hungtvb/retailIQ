@@ -39,6 +39,8 @@ test('real offline routing and tool call construct visible nodes and 2D position
   assert.equal(state.edges.filter(e=>e.kind==='handoff').length,0);
   state=finishGraph(state,true);
   assert.equal(state.nodes.find(n=>n.kind==='agent').status,'observed');
+  assert.equal(state.edges.filter(e=>e.kind==='result').length,0,
+    'No fabricated response dependency without a result agent event');
   const plotted=positionGraph(state);
   assert.ok(new Set(plotted.map(n=>n.x)).size >=2, 'Nodes collapsed into one vertical lane');
   assert.ok(new Set(plotted.map(n=>n.y)).size >=3, 'Graph has no two-dimensional spread');
@@ -117,7 +119,12 @@ test('handoff never implies completion of the sending agent',()=>{
     previous_agent:'sales_agent',target_agent:'inventory_agent'});
   assert.equal(state.nodes.find(n=>n.id==='agent:sales_agent').status,'observed');
   assert.equal(state.nodes.find(n=>n.id==='agent:inventory_agent').status,'running');
+  state=log(state,'chat.turn_result',{agent:'inventory_agent'});
   state=finishGraph(state,true);
   assert.equal(state.nodes.find(n=>n.id==='agent:sales_agent').status,'observed');
-  assert.equal(state.edges.find(n=>n.kind==='result').status,'observed');
+  const resultEdge=state.edges.find(n=>n.kind==='result');
+  assert.equal(resultEdge.status,'observed');
+  assert.equal(resultEdge.from,'agent:inventory_agent',
+    'The final result must point to the actual responsible agent, not the last inserted node');
+  assert.equal(resultEdge.to,'answer');
 });
