@@ -306,3 +306,7 @@ legend{font-size:10px;letter-spacing:.05em;margin-bottom:12px;color:#667085}
 /* History is a bounded API view, not a deletion of older SQLite rows. */
 .chat-history-limit{font-size:11px;line-height:1.45;color:#667085;border:1px solid #e3e9ef;border-radius:6px;background:#f7f9fc;padding:7px 10px;margin:0 0 8px;text-align:center}
 .chat-history-limit[hidden]{display:none!important}
+
+/* Session errors are separate from saved conversation messages. */
+.chat-error{margin:9px 2px 0;color:#a12a2a;font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+.chat-error[hidden]{display:none!important}
