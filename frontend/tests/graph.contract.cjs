@@ -76,3 +76,48 @@ test('cross-request and partial handoff events do not create false topology',()=
   assert.equal(state.nodes.length,1);
   assert.equal(state.nodes[0].skill,undefined);
 });
+
+test('role-based layout never collides for handoff, MCP, subagents or multiple tools',()=>{
+  const examples=[
+    {
+      nodes:[
+        {id:'request',kind:'request'},
+        {id:'agent:sales',kind:'agent',skill:'sales_analysis'},
+        {id:'agent:inventory',kind:'agent',skill:'inventory_check'},
+        {id:'tool:sql',kind:'tool'},
+        {id:'answer',kind:'output'}
+      ]
+    },
+    {
+      nodes:[
+        {id:'request',kind:'request'},
+        ...Array.from({length:6},(_,i)=>({id:'agent:'+i,kind:'agent',skill:'stock_analysis'})),
+        ...Array.from({length:3},(_,i)=>({id:'subagent:'+i,kind:'subagent'})),
+        ...Array.from({length:8},(_,i)=>({id:'tool:'+i,kind:i%2?'mcp':'tool'})),
+        {id:'answer',kind:'output'}
+      ]
+    }
+  ];
+  for(const input of examples)for(const compact of [false,true]){
+    const nodes=positionGraph(input,compact);
+    for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
+      const a=nodes[i],b=nodes[j];
+      const heightA=a.skill?108:87,heightB=b.skill?108:87;
+      const touchingX=Math.abs(a.x-b.x)<180;
+      const touchingY=Math.abs(a.y-b.y)<(heightA+heightB)/2;
+      assert.ok(!(touchingX&&touchingY),
+        (compact?'mobile':'desktop')+' overlap: '+a.id+' '+b.id);
+    }
+  }
+});
+test('handoff never implies completion of the sending agent',()=>{
+  let state=startGraph('req-1');
+  state=log(state,'agent.routed',{agent:'sales_agent'});
+  state=log(state,'agent.handoff',{
+    previous_agent:'sales_agent',target_agent:'inventory_agent'});
+  assert.equal(state.nodes.find(n=>n.id==='agent:sales_agent').status,'observed');
+  assert.equal(state.nodes.find(n=>n.id==='agent:inventory_agent').status,'running');
+  state=finishGraph(state,true);
+  assert.equal(state.nodes.find(n=>n.id==='agent:sales_agent').status,'observed');
+  assert.equal(state.edges.find(n=>n.kind==='result').status,'observed');
+});
