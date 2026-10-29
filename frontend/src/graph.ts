@@ -152,21 +152,30 @@ export function positionGraph(graph: GraphState): PositionedNode[] {
   const subagents = graph.nodes.filter(n => n.kind === 'subagent');
   const tools = graph.nodes.filter(n => n.kind === 'tool' || n.kind === 'mcp');
   const positions = new Map<string, [number, number]>();
-  if (graph.nodes.some(n => n.id === 'request')) positions.set('request',[450,70]);
-  const agentSlots: Array<[number,number]> = agents.length === 1
-    ? [[450,235]]
-    : agents.length === 2 ? [[235,238],[665,238]]
-    : [[185,208],[715,208],[450,345],[180,375],[720,375],[450,490]];
-  agents.forEach((n,i) => positions.set(n.id,agentSlots[i] ?? [
-    170+(i%4)*170, 370+Math.floor(i/4)*92
-  ]));
-  subagents.forEach((n,i) => positions.set(n.id,[
-    285 + (i%3)*165, 385 + Math.floor(i/3)*65
-  ]));
-  tools.forEach((n,i) => positions.set(n.id, tools.length === 1
-    ? [450,470] : [170 + (i%4)*185, 470+Math.floor(i/4)*84]));
-  if (graph.nodes.some(n=>n.id==='answer')) positions.set('answer',[450,
-    tools.length || subagents.length ? 595 : agents.length > 2 ? 565 : 455]);
-  return graph.nodes.map(n => ({ ...n, x: positions.get(n.id)?.[0] ?? 450,
-    y: positions.get(n.id)?.[1] ?? 315 }));
+  const isSingleLane = agents.length <= 1 && tools.length <= 1 && subagents.length === 0;
+  // A lone execution path still occupies a readable 2D network, rather than
+  // shrinking into a vertical column. This is spatial arrangement, not a
+  // fabricated branch, event or link.
+  if (isSingleLane) {
+    positions.set('request', [200, 115]);
+    if (agents[0]) positions.set(agents[0].id, [595, 190]);
+    if (tools[0]) positions.set(tools[0].id, [200, 370]);
+    if (graph.nodes.some(n=>n.id==='answer')) positions.set('answer', [595, 470]);
+  } else {
+    positions.set('request', [400, 78]);
+    const agentSlots: Array<[number,number]> = agents.length === 2
+      ? [[195,210],[605,210]]
+      : [[170,185],[625,185],[400,325],[160,345],[635,345],[400,390]];
+    agents.forEach((n,i) => positions.set(n.id,agentSlots[i] ?? [
+      175+(i%4)*155, 345+Math.floor(i/4)*70
+    ]));
+    subagents.forEach((n,i) => positions.set(n.id,[
+      235 + (i%3)*175, 355 + Math.floor(i/3)*70
+    ]));
+    tools.forEach((n,i) => positions.set(n.id, tools.length === 1
+      ? [400,432] : [175 + (i%4)*150, 418+Math.floor(i/4)*72]));
+    if (graph.nodes.some(n=>n.id==='answer')) positions.set('answer',[400,510]);
+  }
+  return graph.nodes.map(n => ({ ...n, x: positions.get(n.id)?.[0] ?? 400,
+    y: positions.get(n.id)?.[1] ?? 300 }));
 }
