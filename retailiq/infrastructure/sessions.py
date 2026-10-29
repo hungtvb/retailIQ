@@ -16,6 +16,8 @@ DEFAULT_DB = Path(__file__).resolve().parents[2] / 'data' / 'chat_sessions.sqlit
 MAX_SESSION_MESSAGES = 200  # Bounded API response; older messages stay in SQLite.
 MAX_STORED_ANSWER_CHARS = 20_000  # Explicit guard against oversized model output.
 MAX_STORED_EVIDENCE_CHARS = 100_000
+MAX_TRACE_EVENTS = 160
+MAX_STORED_TRACE_CHARS = 90_000
 
 
 # Local single-process demo: prevent overlapping writes to the same conversation.
@@ -90,9 +92,20 @@ def _connect():
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS ix_messages_session ON messages(session_id, id);
+        CREATE TABLE IF NOT EXISTS execution_traces (
+            session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+            request_id TEXT NOT NULL,
+            events_json TEXT NOT NULL,
+            truncated INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY(session_id,request_id)
+        );
         ''')
-        if 'evidence_json' not in {row['name'] for row in connection.execute('PRAGMA table_info(messages)')}:
+        message_columns = {row['name'] for row in connection.execute('PRAGMA table_info(messages)')}
+        if 'evidence_json' not in message_columns:
             connection.execute('ALTER TABLE messages ADD COLUMN evidence_json TEXT')
+        if 'request_id' not in message_columns:
+            connection.execute('ALTER TABLE messages ADD COLUMN request_id TEXT')
         with connection:
             yield connection
     finally:
@@ -116,7 +129,7 @@ def get_session(sid: str, *, include_messages: bool = True) -> dict | None:
         if include_messages:
             # Pull the newest bounded window rather than allocating all messages
             # for a long-running session. Preserve ascending presentation order.
-            rows = c.execute('''SELECT id, role, content, intent, agent, evidence_json, created_at
+            rows = c.execute('''SELECT id, role, content, intent, agent, request_id, evidence_json, created_at
                 FROM messages WHERE session_id=? ORDER BY id DESC LIMIT ?''',
                 (sid, MAX_SESSION_MESSAGES + 1)).fetchall()
             result['messages_truncated'] = len(rows) > MAX_SESSION_MESSAGES
@@ -171,8 +184,9 @@ def add_turn(sid: str, question: str, response: dict) -> None:
             evidence_json = json.dumps({'intent': intent, 'as_of': response.get('as_of'),
                                         'records': [], 'contexts': []})
         c.execute('INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)', (sid, 'user', question))
-        c.execute('''INSERT INTO messages (session_id, role, content, intent, agent, evidence_json)
-                     VALUES (?, ?, ?, ?, ?, ?)''', (sid, 'assistant', answer, intent, agent, evidence_json))
+        c.execute('''INSERT INTO messages (session_id, role, content, intent, agent, evidence_json, request_id)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)''', (sid, 'assistant', answer, intent, agent,
+                     evidence_json, response.get('request_id') or None))
         title = question.strip()[:80] if row['title'] == 'New conversation' else row['title']
         c.execute('''UPDATE sessions SET title=?,active_agent=?,updated_at=CURRENT_TIMESTAMP
                      WHERE id=?''', (title, agent, sid))
@@ -181,3 +195,66 @@ def add_turn(sid: str, question: str, response: dict) -> None:
 def delete_session(sid: str) -> bool:
     with _connect() as c:
         return c.execute('DELETE FROM sessions WHERE id=?', (sid,)).rowcount > 0
+
+
+# Metadata-only, bounded execution traces. No prompts, answers, SQL, tokens or
+# raw tool output. These are collected from the already redacted SSE event sink.
+_TRACE_FIELDS = frozenset({
+    'timestamp', 'event', 'level', 'request_id', 'session_id',
+    'agent', 'previous_agent', 'target_agent', 'intent', 'skill', 'tool',
+    'status', 'duration_ms', 'route_fallback', 'execution_mode',
+    'error_type', 'subagent'
+})
+
+
+def save_execution_trace(sid: str, rid: str, events: list[dict]) -> bool:
+    """Persist only events associated with an actual saved assistant turn.
+
+    Ignore a late trace after deletion, a mismatched request, and any event
+    fields that are not explicitly allowlisted.
+    """
+    if not sid or not rid or len(rid) > 64:
+        return False
+    safe = []
+    truncated = len(events) > MAX_TRACE_EVENTS
+    for raw in events[:MAX_TRACE_EVENTS]:
+        if not isinstance(raw, dict) or raw.get('request_id') != rid or raw.get('session_id') != sid:
+            continue
+        item = {key: value for key, value in raw.items() if key in _TRACE_FIELDS
+                and (isinstance(value, (str, int, float, bool)) and not
+                     isinstance(value, complex))}
+        if not isinstance(item.get('event'), str):
+            continue
+        safe.append(item)
+    payload = json.dumps(safe, ensure_ascii=False, separators=(',', ':'), allow_nan=False)
+    if len(payload) > MAX_STORED_TRACE_CHARS:
+        truncated = True
+        # Preserve prefix and include no partial serialized JSON.
+        while safe and len(payload) > MAX_STORED_TRACE_CHARS:
+            safe.pop()
+            payload = json.dumps(safe, ensure_ascii=False, separators=(',', ':'), allow_nan=False)
+    with _connect() as c:
+        exists = c.execute('''SELECT 1 FROM messages
+            WHERE session_id=? AND role='assistant' AND request_id=? LIMIT 1''',
+            (sid, rid)).fetchone()
+        if not exists:
+            return False
+        c.execute('''INSERT INTO execution_traces (session_id,request_id,events_json,truncated)
+                     VALUES (?,?,?,?) ON CONFLICT(session_id,request_id)
+                     DO UPDATE SET events_json=excluded.events_json,truncated=excluded.truncated''',
+                  (sid, rid, payload, int(truncated)))
+    return True
+
+
+def get_execution_trace(sid: str, rid: str) -> dict | None:
+    """None means absent/legacy, not a synthetic empty execution."""
+    with _connect() as c:
+        row = c.execute('''SELECT t.events_json,t.truncated
+            FROM execution_traces t
+            JOIN messages m ON m.session_id=t.session_id AND m.request_id=t.request_id
+            WHERE t.session_id=? AND t.request_id=? AND m.role='assistant' LIMIT 1''',
+            (sid, rid)).fetchone()
+        if not row:
+            return None
+        return {'request_id': rid, 'events': json.loads(row['events_json']),
+                'truncated': bool(row['truncated']), 'status': 'complete'}
