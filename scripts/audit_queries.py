@@ -14,6 +14,7 @@ from datetime import date
 import json
 import os
 from pathlib import Path
+from unittest.mock import patch
 import sqlite3
 import tempfile
 
@@ -165,51 +166,50 @@ def run_audit(mode: str = 'offline', ids: set[str] | None = None) -> dict:
         directory = Path(directory)
         database = directory/'retail.sqlite3'
         seed(db_path=database,write_support_files=False,reference_date=REFERENCE_DATE)
-        os.environ.update({'RETAILIQ_MODE':mode,'RETAILIQ_AS_OF':REFERENCE_DATE.isoformat(),
+        with patch.dict(os.environ, {'RETAILIQ_MODE':mode,'RETAILIQ_AS_OF':REFERENCE_DATE.isoformat(),
                            'RETAILIQ_DATA_DB':str(database),'RETAILIQ_CHAT_DB':str(directory/'chat.sqlite3'),
-                           'RETAILIQ_CHECKPOINT_DB':str(directory/'checkpoint.sqlite3')})
-        from fastapi.testclient import TestClient
-        from retailiq.api import app
-        oracle = Oracle(database)
-        results = []
-        with TestClient(app) as client:
-            for case in CASES:
-                if ids is not None and case.id not in ids:
-                    continue
-                report = {'id':case.id,'group':case.group,'questions':list(case.questions),
-                          'hypothesis':case.prediction,'suspected_layer':case.suspected_layer,
-                          'description':case.description}
-                try:
-                    created = client.post('/api/sessions',json={})
-                    if created.status_code != 201:
-                        raise RuntimeError(f'HTTP {created.status_code} creating session')
-                    sid = created.json()['id']
-                    for question in case.questions:
-                        raw = client.post('/ask',json={'question':question,'session_id':sid})
-                        if raw.status_code != 200:
-                            detail = raw.json().get('detail','request failed')
-                            raise RuntimeError(f'HTTP {raw.status_code}: {str(detail)[:180]}')
-                    result = raw.json()
-                    ok,rule,expected = assess(case,result,oracle)
-                    records = result.get('records') or []
-                    report.update({'status':'PASS' if ok else 'FAIL','check':rule,
-                                   'expected':expected,'observed':{
-                                       'intent':result.get('intent'),'agent':result.get('active_agent'),
-                                       'record_count':len(records),
-                                       'skus':sorted({r.get('sku') for r in records if isinstance(r,dict)
-                                                      and isinstance(r.get('sku'),str)}),
-                                       'answer':str(result.get('answer',''))[:800]}})
-                except Exception as error:
-                    report.update({'status':'ERROR','error_type':type(error).__name__,
-                                   'error':str(error)[:240] if isinstance(error,RuntimeError) else
-                                   'Execution error; inspect server logs'})
-                results.append(report)
-        counts = Counter(r['status'] for r in results)
-        return {'schema_version':1,'mode':mode,'reference_date':REFERENCE_DATE.isoformat(),
-                'cases':len(results),'summary':{'pass':counts['PASS'],'fail':counts['FAIL'],
-                                               'error':counts['ERROR']},
-                'note':'Hypotheses are separate from observations. Full mode may incur live provider cost.',
-                'results':results}
+                           'RETAILIQ_CHECKPOINT_DB':str(directory/'checkpoint.sqlite3')}):            from fastapi.testclient import TestClient
+            from retailiq.api import app
+            oracle = Oracle(database)
+            results = []
+            with TestClient(app) as client:
+                for case in CASES:
+                    if ids is not None and case.id not in ids:
+                        continue
+                    report = {'id':case.id,'group':case.group,'questions':list(case.questions),
+                              'hypothesis':case.prediction,'suspected_layer':case.suspected_layer,
+                              'description':case.description}
+                    try:
+                        created = client.post('/api/sessions',json={})
+                        if created.status_code != 201:
+                            raise RuntimeError(f'HTTP {created.status_code} creating session')
+                        sid = created.json()['id']
+                        for question in case.questions:
+                            raw = client.post('/ask',json={'question':question,'session_id':sid})
+                            if raw.status_code != 200:
+                                detail = raw.json().get('detail','request failed')
+                                raise RuntimeError(f'HTTP {raw.status_code}: {str(detail)[:180]}')
+                        result = raw.json()
+                        ok,rule,expected = assess(case,result,oracle)
+                        records = result.get('records') or []
+                        report.update({'status':'PASS' if ok else 'FAIL','check':rule,
+                                       'expected':expected,'observed':{
+                                           'intent':result.get('intent'),'agent':result.get('active_agent'),
+                                           'record_count':len(records),
+                                           'skus':sorted({r.get('sku') for r in records if isinstance(r,dict)
+                                                          and isinstance(r.get('sku'),str)}),
+                                           'answer':str(result.get('answer',''))[:800]}})
+                    except Exception as error:
+                        report.update({'status':'ERROR','error_type':type(error).__name__,
+                                       'error':str(error)[:240] if isinstance(error,RuntimeError) else
+                                       'Execution error; inspect server logs'})
+                    results.append(report)
+            counts = Counter(r['status'] for r in results)
+            return {'schema_version':1,'mode':mode,'reference_date':REFERENCE_DATE.isoformat(),
+                    'cases':len(results),'summary':{'pass':counts['PASS'],'fail':counts['FAIL'],
+                                                   'error':counts['ERROR']},
+                    'note':'Hypotheses are separate from observations. Full mode may incur live provider cost.',
+                    'results':results}
 
 
 def main() -> int:
