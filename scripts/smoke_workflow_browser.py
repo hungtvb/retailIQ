@@ -179,6 +179,13 @@ def chat_query_journey(page, fixture_db: Path) -> None:
     rows, answer = submit("What about their stock?")
     verify_stock(rows, answer, "2026-10", 5)
 
+    # Reloading a saved answer must not fabricate the previous request's trace.
+    page.reload(wait_until="domcontentloaded")
+    expect(page.locator("#live-trace-state")).to_contain_text("STORED")
+    expect(page.locator("#graph-request-notice")).to_contain_text(
+        "no replayable execution trace"
+    )
+
 
 def workflow_edge_journey(page, db: Path) -> None:
     """Real-browser status, retry, and freshness checks against isolated SQLite."""
@@ -273,6 +280,7 @@ def layout_journey(page) -> None:
     assert page.locator(".site-header").bounding_box()["height"] <= 52
     scroll_width = page.evaluate("document.documentElement.scrollWidth")
     assert scroll_width <= 392, f"Unexpected horizontal page scroll on mobile: {scroll_width}"
+    page.evaluate("window.scrollTo(0,0)")
     page.screenshot(path="data/retailiq_ui_chat_mobile_chromium.png", full_page=True)
 
     page.locator("#graph-mode-scenario").click()
@@ -282,6 +290,7 @@ def layout_journey(page) -> None:
     expect(page.locator("#workflow-graph .graph-node")).not_to_have_count(0)
     scroll_width = page.evaluate("document.documentElement.scrollWidth")
     assert scroll_width <= 392, f"Workflow page overflows mobile viewport: {scroll_width}"
+    page.evaluate("window.scrollTo(0,0)")
     page.screenshot(path="data/retailiq_ui_graph_mobile_chromium.png", full_page=True)
 
 
