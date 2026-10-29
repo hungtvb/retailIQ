@@ -36,3 +36,14 @@ jobs:
           node --check web/assets/app.js
           node --test tests/frontend_format.test.cjs
           node --test tests/workflow_ui_journey.test.cjs
+      - name: Browser E2E smoke (real Chromium + local FastAPI)
+        run: |
+          python -m pip install 'playwright>=1.52,<2'
+          python -m scripts.smoke_workflow_browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: retailiq-week4-browser-screenshot
+          path: data/workflow_week4_chromium.png
+          if-no-files-found: ignore
+          retention-days: 7
