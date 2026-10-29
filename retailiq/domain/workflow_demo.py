@@ -209,7 +209,9 @@ def run_demo(scenario: str, sku: str, quantity: int = 1,
                       execution_mode="offline")
         events.append({"node": node, "status": status, "detail": str(detail)[:180],
                        "from": previous})
-        log_event("workflow.node.completed", agent=node, status=status, execution_mode="offline")
+        log_event("workflow.node.updated" if status in ("running", "awaiting") else
+                  "workflow.node.completed", agent=node, status=status,
+                  execution_mode="offline")
         previous = node
 
     step("request", "Synthetic scenario: " + scenario)
@@ -295,18 +297,41 @@ def run_demo(scenario: str, sku: str, quantity: int = 1,
         step("order_management_agent", "Draft " + str(quantity) + " × " + product["sku"] +
              "; no order inserted")
         valid = location is not None and available >= quantity
-        step("verification", "Allocation, SKU, quantity and price " +
-             ("verified" if valid else "failed"), "completed" if valid else "blocked")
+        allocation_label = location["location_id"] if location else "none"
+        if valid:
+            step("verification", "Single-location allocation, SKU, quantity and price verified")
+        elif available >= quantity:
+            # One bounded verification → replan → verification loop.
+            # This is a proposal only; no reservations are made.
+            step("verification", "Single-location plan failed; request bounded replan", "running")
+            remaining = quantity
+            legs = []
+            for row in sorted(stock, key=lambda item: (-item["available"], item["location_id"])):
+                take = min(remaining, row["available"])
+                if take:
+                    legs.append((row["location_id"], take))
+                    remaining -= take
+                if remaining == 0:
+                    break
+            valid = remaining == 0
+            allocation_label = ", ".join(code + ": " + str(count) for code, count in legs)
+            step("fulfilment_optimisation_agent", "Replanned split allocation: " + allocation_label)
+            step("order_management_agent", "Revised draft after verification feedback")
+            step("verification", "Split allocation " + ("verified" if valid else "failed"),
+                 "completed" if valid else "blocked")
+        else:
+            step("verification", "Insufficient total inventory", "blocked")
         if valid:
             step("manager_approval", "Manager decision required", "awaiting")
             report = ("Draft order for " + str(quantity) + " × " + product["sku"] +
-                      "; location " + location["location_id"] +
+                      "; allocation " + allocation_label +
                       "; list total " + str(quantity * product["price_vnd"]) +
                       " VND. Verified against synthetic snapshot; manager review pending. "
                       "No real sales order or reservation.")
             status = "pending_manager"
         else:
-            report = ("Order proposal BLOCKED: no single location has " + str(quantity) +
-                      " units of " + product["sku"] + ". No order was created.")
+            report = ("Order proposal BLOCKED: insufficient verified stock for " +
+                      str(quantity) + " units of " + product["sku"] +
+                      ". No order was created.")
             status = "blocked"
     return _save(scenario, status, events, report)
