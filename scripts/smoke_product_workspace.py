@@ -78,6 +78,8 @@ def run_journey(page):
 
     # Mobile: no horizontal page overflow; real chat and canvas remain accessible.
     page.set_viewport_size({"width": 390, "height": 844})
+    expect(page.locator(".matrix-svg")).to_be_visible()
+    page.screenshot(path=str(OUT / "retailiq_product_workspace_mobile_live.png"), full_page=True)
     page.reload(wait_until="domcontentloaded")
     expect(page.locator(".chat-pane")).to_be_visible()
     expect(page.locator(".network-pane")).to_be_visible()
