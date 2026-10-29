@@ -6,6 +6,20 @@ Local Week 1 demo for synthetic retail inventory, sales analytics, product knowl
 
 ## Full-mode quick start
 
+**If chat reports a missing Python module:** Make sure the server uses the same
+Python environment where full dependencies were installed:
+
+```bash
+python -m pip install -r requirements-full.txt
+python -c "from langgraph.checkpoint.sqlite import SqliteSaver; print('Checkpoint OK')"
+```
+
+Start the server with `python -m uvicorn retailiq.api:app --host 127.0.0.1 --port 8000`
+using that same Python interpreter. `ModuleNotFoundError: retailiq.*` usually
+means source files or the working directory are out of sync; update the project
+and restart instead of installing a similarly named external package.
+
+
 Requires Python 3.11+ and an OpenAI-compatible chat and embedding provider.
 
 ```bash
