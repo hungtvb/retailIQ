@@ -281,9 +281,16 @@ def review_run(run_id: str, role: str, decision: str) -> dict:
                 raise ValueError("Workflow is not pending manager review")
             events = json.loads(row["trace_json"])
             outcome = "approved_simulated" if decision == "approve" else "rejected"
-            events.append({"node": "manager_approval", "status": "completed",
-                           "from": events[-1].get("from"),
-                           "detail": "Manager " + decision + "d proposal (simulated)"})
+            if (not events or events[-1].get("node") != "manager_approval"
+                    or events[-1].get("status") != "awaiting"):
+                raise ValueError("Recorded workflow has no pending manager gate")
+            # Completion updates the *same* approval node. Appending a second
+            # approval event incorrectly invents a verification -> manager
+            # handoff after manager was already awaiting a decision.
+            events[-1] = {**events[-1], "status": "completed",
+                          "detail": "Manager " + (
+                              "approved" if decision == "approve" else "rejected"
+                          ) + " proposal (simulated)"}
             events.append({"node": "finalize", "status": "completed",
                            "from": "manager_approval",
                            "detail": "Decision recorded; no operational data changed"})
@@ -306,10 +313,11 @@ def review_run(run_id: str, role: str, decision: str) -> dict:
 
 def _freshness(rows: list[dict]) -> dict:
     updates = [datetime.fromisoformat(row["updated_at"]) for row in rows]
-    newest = max(updates) if updates else None
-    # Compared to actual time; old synthetic inventory must never be called live.
-    age = int((datetime.now(timezone.utc) - newest.astimezone(timezone.utc)).total_seconds()) if newest else None
-    return {"tier": "15 minutes", "observed_at": newest.isoformat() if newest else None,
+    oldest = min(updates) if updates else None
+    # A SKU's aggregate stock combines ALL locations; one stale location makes
+    # the complete result stale even if another location updated just now.
+    age = int((datetime.now(timezone.utc) - oldest.astimezone(timezone.utc)).total_seconds()) if oldest else None
+    return {"tier": "15 minutes", "observed_at": oldest.isoformat() if oldest else None,
             "age_seconds": age, "meets_target": bool(age is not None and 0 <= age <= FRESHNESS_TIERS["15_min"]["target_seconds"])}
 
 
@@ -372,12 +380,12 @@ def run_demo(scenario: str, sku: str, quantity: int = 1,
                  "; MCP network transport not exercised")
         step("semantic_layer", semantic_summary())
         freshness = _freshness(stock)
-        step("freshness_guard", "Inventory snapshot " + ("meets" if freshness["meets_target"]
+        step("freshness_guard", "Oldest inventory location snapshot " + ("meets" if freshness["meets_target"]
              else "does not meet") + " the 15-minute target")
         step("evidence", str(available) + " available units from " + str(len(stock)) +
              " locations; source timestamps retained")
         report = ("Stock: " + str(available) + " available for " + product["sku"] +
-                  ". Source timestamp: " + str(freshness["observed_at"]) +
+                  ". Oldest source timestamp: " + str(freshness["observed_at"]) +
                   ". Target: 15 minutes; " +
                   ("PASS" if freshness["meets_target"] else "STALE") +
                   ". Not real-time data. Completed-order revenue (month " +
