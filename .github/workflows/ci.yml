@@ -19,6 +19,13 @@ jobs:
         env:
           RETAILIQ_REQUIRE_LANGGRAPH: 'true'
         run: python -m pytest -q -rs
+      - name: Business query acceptance audit (report gaps, do not hide them)
+        run: python -m scripts.audit_queries --mode offline
+      - uses: actions/upload-artifact@v4
+        with:
+          name: retailiq-query-acceptance
+          path: data/query_audit_report.json
+          retention-days: 7
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
