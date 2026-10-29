@@ -2,7 +2,7 @@
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
 from retailiq.observability import log_event, bind_context
-from retailiq.infrastructure.sessions import create_session, get_session, list_sessions, delete_session, session_mutation, SessionBusyError
+from retailiq.infrastructure.sessions import create_session, get_session, list_sessions, delete_session, session_mutation, SessionBusyError, get_execution_trace
 
 router = APIRouter(prefix='/api/sessions', tags=['conversations'])
 
@@ -26,6 +26,16 @@ def session(session_id: str):
     if result is None:
         raise HTTPException(status_code=404, detail='Session not found')
     return result
+
+@router.get('/{session_id}/traces/{request_id}')
+def execution_trace(session_id: str, request_id: str):
+    if get_session(session_id, include_messages=False) is None:
+        raise HTTPException(status_code=404, detail='Session not found')
+    result = get_execution_trace(session_id, request_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail='Execution trace not recorded')
+    return result
+
 
 @router.delete('/{session_id}', status_code=204)
 def remove_session(session_id: str):
