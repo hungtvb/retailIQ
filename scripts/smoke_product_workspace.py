@@ -55,15 +55,29 @@ def run_journey(page):
     OUT.mkdir(exist_ok=True)
     page.screenshot(path=str(OUT / "retailiq_product_workspace_desktop.png"), full_page=True)
 
-    # Multi-turn and reload must retain answer, but not invent saved trace.
-    page.locator("textarea").fill("What is the revenue this month?")
+    # Multi-agent follow-up: require a real handoff and persist the exact trace.
+    page.locator("textarea").fill("How many units of the top seller are in stock?")
     page.get_by_role("button", name="Send message").click()
     expect(page.locator(".chat-state")).to_contain_text("Complete", timeout=25000)
     expect(page.locator(".message-assistant")).to_have_count(2)
+    expect(page.locator(".matrix-link-handoff")).to_have_count(1)
+    page.screenshot(path=str(OUT / "retailiq_product_workspace_handoff.png"), full_page=True)
+    handoff_count = page.locator(".matrix-node").count()
+    assert handoff_count >= 4
+
+    # Actual persisted request ID + privacy-filtered execution events survive reload.
     page.reload(wait_until="domcontentloaded")
     expect(page.locator(".message-assistant")).to_have_count(2)
-    expect(page.locator(".matrix-empty")).to_contain_text("Execution trace unavailable")
-    assert page.locator(".matrix-node").count() == 0, "Invented historical execution graph"
+    expect(page.locator(".matrix-link-handoff")).to_have_count(1)
+    assert page.locator(".matrix-node").count() == handoff_count
+    assert page.locator(".matrix-empty").count() == 0
+
+    # Switch between actual saved answer traces; no fabricated handoff on first answer.
+    page.get_by_role("button", name="Show execution for answer 2").click()
+    expect(page.locator(".matrix-link-handoff")).to_have_count(0)
+    expect(page.locator(".matrix-node.matrix-agent")).to_have_count(1)
+    page.get_by_role("button", name="Show execution for answer 4").click()
+    expect(page.locator(".matrix-link-handoff")).to_have_count(1)
     assert not js_errors, f"Browser exceptions: {js_errors}"
 
     # New session is a draft: no extra record created until first message.
