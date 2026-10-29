@@ -52,7 +52,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: retailiq-week4-browser-screenshot
-          path: data/workflow_week4_chromium.png
+          name: retailiq-workflow-browser-evidence
+          path: data/workflow_week4_*chromium.png
           if-no-files-found: ignore
           retention-days: 7
