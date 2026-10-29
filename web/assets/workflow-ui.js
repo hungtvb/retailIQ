@@ -225,10 +225,18 @@
       scenarios=Array.isArray(data.scenarios)?data.scenarios:[];
       const selector=$('workflow-scenario');
       selector.replaceChildren();
+      const compactNames={
+        week1:'W1 · Sales analytics',
+        week2:'W2 · Inventory & freshness',
+        week3:'W3 · Pricing approval',
+        alerts:'W3 · Stock alert',
+        week4:'W4 · Order coordination'
+      };
       for(const scenario of scenarios) {
         const option=document.createElement('option');
         option.value=scenario.id;
-        option.textContent=scenario.title;
+        option.textContent=compactNames[scenario.id]||scenario.title;
+        option.title=scenario.title;
         selector.appendChild(option);
       }
       selector.value='week4';
