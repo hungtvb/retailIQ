@@ -9,7 +9,7 @@ router = APIRouter(prefix="/api/workflows", tags=["workflow-demo"])
 
 
 class RunInput(BaseModel):
-    scenario: Literal["week2", "week3", "alerts", "week4"]
+    scenario: Literal["week1", "week2", "week3", "alerts", "week4"]
     sku: str = Field(default="EL-003", min_length=3, max_length=64)
     quantity: int = Field(default=1, ge=1, le=20)
     role: Literal["analyst", "manager"] = "analyst"
