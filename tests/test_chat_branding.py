@@ -18,14 +18,17 @@ def test_brand_assets_served_as_local_svg():
         assert "<script" not in response.text.lower()
 
 
-def test_logo_favicon_and_chat_mascot_markup():
+def test_logo_favicon_and_compact_chat_markup():
     html = client.get("/").text
     assert '<link rel="icon" type="image/svg+xml" href="/assets/brand/logo-mark.svg">' in html
     assert 'class="brand-wordmark"' in html
     assert 'id="chat-welcome"' in html
     assert 'id="active-response"' in html
     assert 'id="active-agent-avatar" class="agent-avatar agent-avatar-iq"' in html
-    assert 'src="/assets/brand/mascot-guide.svg"' in html
+    assert 'src="/assets/brand/mascot-guide.svg"' not in html
+    assert '<strong>Ask RetailIQ</strong>' in html
+    assert 'id="tab-workflows"' in html
+    assert '/assets/tool-workspace.css' in html
     assert "class=\"hero\"" not in html
     assert "Cost &amp; ROI" in html
     assert 'id="records-table"' in html
