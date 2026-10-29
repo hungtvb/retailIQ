@@ -23,7 +23,7 @@
         <div class="brand-symbol" aria-hidden="true"><img src="/assets/brand/logo-mark.svg" alt="" width="38" height="40"></div>
         <div class="brand-name"><span class="brand-wordmark">Retail<span class="brand-iq">IQ</span></span><span class="brand-product">Copilot</span></div>
       </div>
-      <div class="header-right"><span class="data-label">ELECTRONICS · SAMPLE DATA</span><span class="environment-pill"><span class="status-dot" aria-hidden="true"></span> LOCAL</span></div>
+      <div class="header-right"><span class="data-label">ELECTRONICS · SAMPLE DATA</span></div>
     </header>
 
     <main>
@@ -111,22 +111,22 @@
             </article>
             </aside>
           </div>
-          <p class="data-disclaimer">Synthetic retail data · Offline mode is not live LangGraph / Chroma execution.</p>
+          <p class="data-disclaimer">Sample retail data · Offline responses do not use LLM or vector search.</p>
         </section>
 
         <section id="logs-panel" class="panel" role="tabpanel" aria-labelledby="tab-logs" hidden>
-          <div class="section-heading"><h1>Execution logs</h1><span class="subtle-suffix">LOCAL JSONL · METADATA ONLY</span></div>
+          <div class="section-heading"><h1>Execution logs</h1><span class="subtle-suffix">JSONL · METADATA ONLY</span></div>
           <article class="paper-card logs-card">
-            <div class="card-topline"><span class="micro-label">Events</span><span class="small-status"><span class="status-dot"></span> LOCAL ONLY</span></div>
+            <div class="card-topline"><span class="micro-label">Events</span><span class="small-status"><span class="status-dot"></span> APP EVENTS</span></div>
             <div class="log-controls">
               <label>Scope<select id="log-scope" aria-label="Filter events by chat session"><option value="current">Current chat</option><option value="all">All sessions</option><option value="request">Last request</option></select></label>
               <label>Severity<select id="log-level" aria-label="Filter events by severity"><option value="">All levels</option><option value="INFO">Info</option><option value="WARNING">Warning</option><option value="ERROR">Error</option></select></label>
               <button id="logs-refresh" type="button" class="sunshine-button log-refresh">Refresh <span aria-hidden="true">↻</span></button>
             </div>
-            <div class="log-stats"><div><span class="micro-label">EVENTS SHOWN</span><strong id="log-count">—</strong></div><div><span class="micro-label">REQUEST ID</span><code id="log-request-id">—</code></div><div><span class="micro-label">SOURCE</span><strong>LOCAL / JSONL</strong></div></div>
+            <div class="log-stats"><div><span class="micro-label">EVENTS SHOWN</span><strong id="log-count">—</strong></div><div><span class="micro-label">REQUEST ID</span><code id="log-request-id">—</code></div><div><span class="micro-label">SOURCE</span><strong>JSONL</strong></div></div>
             <p id="logs-status" class="form-feedback" role="status" aria-live="polite">Choose filters to inspect events.</p>
             <div id="logs-list" class="logs-list" aria-label="Execution event log" aria-live="polite"><div class="log-empty">No events loaded yet.</div></div>
-            <p class="chart-note">Local diagnostics only; not LangSmith traces or a production audit log.</p>
+            <p class="chart-note">Application diagnostics; not LangSmith traces or a production audit log.</p>
           </article>
         </section>
 
