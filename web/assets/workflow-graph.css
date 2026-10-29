@@ -52,3 +52,5 @@
 .workflow-events summary {cursor:pointer;font-size:12px;color:#647b8d}
 @media (max-width:890px) {.workflow-panel-grid {grid-template-columns:1fr}.workflow-card {padding:15px}}
 @media (prefers-reduced-motion:reduce) {.graph-node[data-status="running"] {animation:none}}
+
+.graph-edge-label {font:600 10px 'DM Sans',sans-serif;fill:#5a728c;paint-order:stroke;stroke:#fafcff;stroke-width:4px;stroke-linejoin:round}
