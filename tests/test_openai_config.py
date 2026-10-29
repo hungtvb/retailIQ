@@ -110,7 +110,7 @@ def test_graph_node_routes_with_dummy_llm(monkeypatch):
     class Model:
         def invoke(self,messages):return types.SimpleNamespace(content='Grounded product description [S1]')
     monkeypatch.setattr(config,'chat_model',lambda:Model())
-    monkeypatch.setattr(assistant,'retrieve',lambda q:[{'source':'EL-001','text':'EL-001 is a laptop'}])
+    monkeypatch.setattr('retailiq.queries.retrieve',lambda q:[{'source':'EL-001','text':'EL-001 is a laptop'}])
     assert graph.classify('How many AlphaBook Pro 14 in stock?')=='stock'
     response=agents.product_analysis('Tell me about AlphaBook Pro 14')
     assert response['contexts'][0]['source']=='EL-001'
