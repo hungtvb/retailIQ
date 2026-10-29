@@ -188,8 +188,17 @@ def run_demo(scenario: str, sku: str, quantity: int = 1,
 
     step("request", "Synthetic scenario: " + scenario)
     if scenario == "week2":
-        step("inventory_mcp", "Local read adapter for " + product["sku"] +
-             "; MCP network transport not exercised")
+        if os.getenv("RETAILIQ_WORKFLOW_USE_MCP", "0") == "1":
+            from retailiq.mcp_adapter import read_inventory
+            mcp_stock = read_inventory(product["sku"])
+            if mcp_stock != stock:
+                raise ValueError("MCP stock evidence differs from reviewed SQL")
+            stock = mcp_stock
+            available = sum(row["available"] for row in stock)
+            step("inventory_mcp", "Real stdio MCP inventory tool invoked via LangChain adapter")
+        else:
+            step("inventory_mcp", "Local read adapter for " + product["sku"] +
+                 "; MCP network transport not exercised")
         step("semantic_layer", "Available = on_hand - reserved; revenue uses completed orders; "
              "top sellers rank completed units")
         freshness = _freshness(stock)
@@ -216,8 +225,15 @@ def run_demo(scenario: str, sku: str, quantity: int = 1,
                   ". Threshold: 20. Local sample, not monitoring or an external notification.")
         status = "completed"
     elif scenario == "week3":
-        step("scope_guard", "Catalog-only pricing proposal; actor is a simulated " + role)
-        step("inventory_search_agent", str(available) + " units from verified stock records")
+        # Demonstrate row filtering in a policy slice; the role field is NOT
+        # authenticated and must never be presented as real RBAC.
+        scoped_stock = stock if role == "manager" else [
+            row for row in stock if row["location_id"] == "ST-HCM"]
+        scoped_available = sum(row["available"] for row in scoped_stock)
+        step("scope_guard", "Simulated " + role + " scope: " +
+             ("all locations" if role == "manager" else "ST-HCM only"))
+        step("inventory_search_agent", str(scoped_available) +
+             " visible units from " + str(len(scoped_stock)) + " permitted locations")
         proposal_price = product["price_vnd"] * 95 // 100
         step("dynamic_pricing_agent", "Propose 5% markdown; rounded proposal " +
              str(proposal_price) + " VND")
