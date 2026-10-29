@@ -62,7 +62,7 @@ def _local_demo_request(request: Request) -> bool:
 async def record_http(request: Request, call_next):
     if not _local_demo_request(request):
         return JSONResponse(status_code=403, content={
-            'detail': 'RetailIQ Week 1 is local-only; authenticated remote access is not supported.'
+            'detail': 'Remote access is unavailable. Connect through the configured trusted host.'
         })
     rid = new_request_id()
     path = request.url.path
@@ -208,7 +208,7 @@ def stream_answer(data: AskBody, request: Request):
                 except Exception as error:
                     log_exception('chat.execution_failed', error)
                     enqueue_final('error', {'code': 'execution_failed',
-                                           'message': 'Agent execution failed; check local diagnostics.',
+                                           'message': 'Agent execution failed; check execution logs.',
                                            'request_id': rid})
                 finally:
                     enqueue_final('done', {'request_id': rid})
