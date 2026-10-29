@@ -42,6 +42,8 @@
 .workflow-run-result {white-space:pre-wrap;overflow-wrap:anywhere; line-height:1.65; padding:12px; border-radius:9px; background:#f7f9fc;color:#33475c;font-size:13px;margin:14px 0}
 .workflow-node-detail {padding:9px 0; color:#51667a;font-size:12px;min-height:35px}
 .workflow-actions {display:flex;flex-wrap:wrap;gap:9px;margin-top:12px}
+/* Explicitly respect the approval gate's hidden state (author display:flex overrides UA hidden). */
+#workflow-review-controls[hidden] {display:none}
 .workflow-actions button {border-radius:8px;min-height:37px;padding:9px 14px;border:1px solid #d0d9e3;background:#fff;color:#263e57;cursor:pointer;font-weight:600}
 .workflow-actions #workflow-approve {background:#e9f6ee;border-color:#90bfa2}
 .workflow-actions #workflow-reject {background:#fff0ed;border-color:#dbaba4}
