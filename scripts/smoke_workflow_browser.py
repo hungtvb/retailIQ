@@ -188,8 +188,9 @@ def workflow_edge_journey(page, db: Path) -> None:
     expect(page.locator('.graph-node[data-node="freshness_guard"]')).to_have_attribute(
         "data-status","completed"
     )
+    page.locator('.graph-node[data-node="freshness_guard"]').click()
     expect(page.locator("#workflow-node-detail")).to_contain_text(
-        "No execution event recorded for this step."
+        "Oldest inventory location snapshot does not meet"
     )
 
     # Force a split: 8 + 8 + 4 is exactly the requested 20, not 24 shipped.
