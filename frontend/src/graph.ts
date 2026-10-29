@@ -157,59 +157,56 @@ export function positionGraph(graph: GraphState, compact = false): PositionedNod
   const subagents = graph.nodes.filter(n => n.kind === 'subagent');
   const tools = graph.nodes.filter(n => n.kind === 'tool' || n.kind === 'mcp');
   const positions = new Map<string, [number, number]>();
-  const isSingleLane = agents.length <= 1 && tools.length <= 1 && subagents.length === 0;
+  const onePath = agents.length <= 1 && tools.length <= 1 && subagents.length === 0;
+  const hasOutput = graph.nodes.some(n => n.id === 'answer');
+
   if (compact) {
-    // Two columns on small screens: preserve readable label sizes, don't
-    // shrink the entire 800px SVG to fit a 360px viewport.
+    // At 390px, two 180px-wide cards cannot share a row without collision.
+    // A single chain can use a legible zig-zag; complex graphs distribute
+    // roles in consecutive rows instead of scaling cards down to unreadable.
     const left = 95, right = 265;
-    if (isSingleLane) {
+    if (onePath) {
       positions.set('request', [left,82]);
       if (agents[0]) positions.set(agents[0].id,[right,183]);
-      if (tools[0]) positions.set(tools[0].id,[left,296]);
-      if (graph.nodes.some(n=>n.id==='answer')) positions.set('answer',[right,407]);
+      if (tools[0]) positions.set(tools[0].id,[left,300]);
+      if (hasOutput) positions.set('answer',[right,420]);
     } else {
-      positions.set('request',[180,70]);
-      agents.forEach((n,i)=>positions.set(n.id,[
-        i%2===0?left:right, 188+Math.floor(i/2)*120
-      ]));
-      const base=188+Math.ceil(agents.length/2)*120;
-      subagents.forEach((n,i)=>positions.set(n.id,[
-        i%2===0?left:right,base+Math.floor(i/2)*112
-      ]));
-      const toolBase=base+Math.ceil(subagents.length/2)*112;
-      tools.forEach((n,i)=>positions.set(n.id,[
-        i%2===0?left:right,toolBase+Math.floor(i/2)*112
-      ]));
-      if(graph.nodes.some(n=>n.id==='answer'))positions.set('answer',[
-        180,toolBase+Math.ceil(tools.length/2)*112+35
-      ]);
+      positions.set('request',[180,80]);
+      let nextY = 215, index = 0;
+      for (const n of [...agents,...subagents,...tools]) {
+        positions.set(n.id,[index%2===0?left:right,nextY]);
+        nextY+=131;
+        index++;
+      }
+      if(hasOutput) positions.set('answer',[180,nextY+8]);
     }
     return graph.nodes.map(n=>({...n,x:positions.get(n.id)?.[0]??180,
       y:positions.get(n.id)?.[1]??190}));
   }
-  // A lone execution path still occupies a readable 2D network, rather than
-  // shrinking into a vertical column. This is spatial arrangement, not a
-  // fabricated branch, event or link.
-  if (isSingleLane) {
-    positions.set('request', [200, 115]);
-    if (agents[0]) positions.set(agents[0].id, [595, 190]);
-    if (tools[0]) positions.set(tools[0].id, [200, 370]);
-    if (graph.nodes.some(n=>n.id==='answer')) positions.set('answer', [595, 470]);
+
+  if (onePath) {
+    // Balanced quadrants without inventing extra execution branches.
+    positions.set('request', [200,105]);
+    if (agents[0]) positions.set(agents[0].id,[595,190]);
+    if (tools[0]) positions.set(tools[0].id,[200,365]);
+    if (hasOutput) positions.set('answer',[595,480]);
   } else {
-    positions.set('request', [400, 78]);
-    const agentSlots: Array<[number,number]> = agents.length === 2
-      ? [[195,210],[605,210]]
-      : [[170,185],[625,185],[400,325],[160,345],[635,345],[400,390]];
-    agents.forEach((n,i) => positions.set(n.id,agentSlots[i] ?? [
-      175+(i%4)*155, 345+Math.floor(i/4)*70
-    ]));
-    subagents.forEach((n,i) => positions.set(n.id,[
-      235 + (i%3)*175, 355 + Math.floor(i/3)*70
-    ]));
-    tools.forEach((n,i) => positions.set(n.id, tools.length === 1
-      ? [400,432] : [175 + (i%4)*150, 418+Math.floor(i/4)*72]));
-    if (graph.nodes.some(n=>n.id==='answer')) positions.set('answer',[400,510]);
+    positions.set('request', [400,75]);
+    const arrange = (items: GraphNode[], y: number): number => {
+      if (!items.length) return y;
+      const slots = items.length===1?[400]:items.length===2?[205,595]:[165,400,635];
+      items.forEach((item,i)=>{
+        const row=Math.floor(i/3),col=i%3;
+        positions.set(item.id,[slots.length===3?slots[col]:slots[i]??slots[0],
+          y+row*145]);
+      });
+      return y+Math.ceil(items.length/3)*145;
+    };
+    let next = arrange(agents,205);
+    next = arrange(subagents,next);
+    next = arrange(tools,next);
+    if (hasOutput) positions.set('answer',[400,next+3]);
   }
-  return graph.nodes.map(n => ({ ...n, x: positions.get(n.id)?.[0] ?? 400,
-    y: positions.get(n.id)?.[1] ?? 300 }));
+  return graph.nodes.map(n => ({...n,x:positions.get(n.id)?.[0]??400,
+    y:positions.get(n.id)?.[1]??300}));
 }
