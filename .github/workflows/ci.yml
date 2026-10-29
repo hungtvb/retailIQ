@@ -26,6 +26,15 @@ jobs:
           name: retailiq-query-acceptance
           path: data/query_audit_report.json
           retention-days: 7
+      - name: Four-week behavioral scenario audit (inspect real gaps)
+        run: python -m scripts.audit_workflows
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: retailiq-workflow-scenarios
+          path: data/workflow_audit_report.json
+          if-no-files-found: ignore
+          retention-days: 7
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
