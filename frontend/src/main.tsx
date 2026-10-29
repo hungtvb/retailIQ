@@ -260,6 +260,8 @@ function App(){
   const [question,setQuestion]=useState('');
   const [phase,setPhase]=useState<Phase>('ready');
   const [graph,setGraph]=useState<GraphState>(emptyGraph);
+  const [selectedRequestId,setSelectedRequestId]=useState('');
+  const [traceTruncated,setTraceTruncated]=useState(false);
   const [error,setError]=useState('');
   const [sidebarOpen,setSidebarOpen]=useState(false);
   const [loading,setLoading]=useState(true);
@@ -275,16 +277,42 @@ function App(){
     setSessions(list.sessions ?? []);
     return list.sessions ?? [];
   }
+  async function restoreTrace(sid:string, requestId:string|undefined|null,
+                              serial:number) {
+    if (!requestId) {
+      if (serial===requestSerial.current) {
+        setSelectedRequestId('');setTraceTruncated(false);setGraph(unavailableGraph());
+      }
+      return;
+    }
+    try {
+      const saved=await readJson<StoredTrace>(await fetch('/api/sessions/'+
+        encodeURIComponent(sid)+'/traces/'+encodeURIComponent(requestId)));
+      if(serial!==requestSerial.current)return;
+      let next=startGraph(saved.request_id);
+      for(const event of saved.events)next=applyExecutionEvent(next,event);
+      setGraph(finishGraph(next,saved.status==='complete'));
+      setTraceTruncated(saved.truncated);
+      setSelectedRequestId(requestId);
+    }catch{
+      if(serial===requestSerial.current) {
+        setGraph(unavailableGraph());
+        setSelectedRequestId(requestId);setTraceTruncated(false);
+      }
+    }
+  }
   async function openSession(id:string){
     if(inFlight.current) return;
     const serial=++requestSerial.current;
-    setError('');setLoading(true);
+    setError('');setLoading(true);setGraph(emptyGraph());
     try{
       const session=await readJson<Session>(await fetch('/api/sessions/'+encodeURIComponent(id)));
       if(serial!==requestSerial.current) return;
       activeIdRef.current=id;setActiveId(id);
       setMessages(session.messages??[]);
       setGraph(unavailableGraph());
+      const latest=[...(session.messages??[])].reverse().find(m=>m.role==='assistant');
+      void restoreTrace(id,latest?.request_id,serial);
       localStorage.setItem('retailiq-workspace-session',id);
       setSidebarOpen(false);
       setPhase('ready');
@@ -296,6 +324,7 @@ function App(){
     ++requestSerial.current;
     activeIdRef.current='';setActiveId('');
     setMessages([]);setGraph(emptyGraph());setPhase('ready');
+    setSelectedRequestId('');setTraceTruncated(false);
     setQuestion('');setError('');setLoading(false);setSidebarOpen(false);
     localStorage.removeItem('retailiq-workspace-session');
   }
@@ -327,6 +356,8 @@ function App(){
           activeIdRef.current=remembered;setActiveId(remembered);
           setMessages(session.messages??[]);
           setGraph(unavailableGraph());
+          const latest=[...(session.messages??[])].reverse().find(m=>m.role==='assistant');
+          void restoreTrace(remembered,latest?.request_id,requestSerial.current);
         }
       }catch(e){if(mounted)setError((e as Error).message)}
       finally{if(mounted)setLoading(false)}
@@ -344,6 +375,7 @@ function App(){
     setError('');setQuestion('');setPhase('running');
     setMessages(prev=>[...prev,{role:'user',content}]);
     setGraph(emptyGraph());
+    setSelectedRequestId('');setTraceTruncated(false);
     let sessionId=activeIdRef.current;
     try{
       if(!sessionId){
@@ -377,6 +409,7 @@ function App(){
       if(streamError)throw new Error(streamError);
       if(!hasDone||!result)throw new Error('Stream ended before the answer was received.');
       setGraph(prev=>finishGraph(prev,true));
+      setSelectedRequestId((result as AskResult).request_id||'');
       const session=await readJson<Session>(await fetch('/api/sessions/'+encodeURIComponent(sessionId)));
       if(serial===requestSerial.current){
         setMessages(session.messages??[]);
@@ -454,7 +487,15 @@ function App(){
               className={'message message-'+msg.role}>
               <div className="message-identity">{msg.role==='assistant'?
                 <span className="assistant-avatar">IQ</span>:<span className="user-avatar">YOU</span>}
-                <span>{msg.role==='assistant'?'RetailIQ':'You'}</span></div>
+                <span>{msg.role==='assistant'?'RetailIQ':'You'}</span>
+                {msg.role==='assistant'&&msg.request_id&&<button
+                  className={'view-execution'+(selectedRequestId===msg.request_id?' selected':'')}
+                  disabled={busy} onClick={()=>{setGraph(unavailableGraph());
+                    void restoreTrace(activeIdRef.current,msg.request_id,requestSerial.current)}}
+                  aria-label={'Show execution for answer '+(i+1)}>
+                  {selectedRequestId===msg.request_id?'Viewing execution':'View execution'}
+                </button>}
+              </div>
               <div className="message-body">{msg.content}</div>
               {msg.role==='assistant'&&<EvidenceTable evidence={msg.evidence}/>}
             </article>)}
@@ -488,6 +529,9 @@ function App(){
               graph.phase==='unavailable'?'Not recorded':'Standby'}</span>
           </div>
           <GraphCanvas graph={graph}/>
+          {traceTruncated&&<div className="trace-warning" role="status">
+            Partial trace: the event capture limit was reached.
+          </div>}
           <footer className="network-footer">
             <div className="network-metric"><span>Nodes</span><strong>{graph.nodes.length}</strong></div>
             <div className="network-metric"><span>Connections</span><strong>{graph.edges.length}</strong></div>
