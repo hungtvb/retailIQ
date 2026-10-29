@@ -193,7 +193,7 @@ test('SSE parser rejects event floods', async () => {
 
 // Browser-state regressions: deleted chats must not be recreated and failed
 // optimistic turns must not survive a refresh from persisted conversation data.
-function chatBrowserFixture(initialSessions = [], {failDelete = false, failAsk = false} = {}) {
+function chatBrowserFixture(initialSessions = [], {failDelete = false, failAsk = false, streamReply = null} = {}) {
   class BrowserElement extends Element {
     constructor(tag) {
       super(tag);
@@ -262,6 +262,29 @@ function chatBrowserFixture(initialSessions = [], {failDelete = false, failAsk =
       return respond(200, {...sessions[index], active_agent: 'sales_agent', messages_truncated: false});
     }
     if (url === '/ask/stream' && failAsk) return respond(503, {detail: 'Provider unavailable'});
+    if (url === '/ask/stream' && streamReply) {
+      const request = JSON.parse(options.body);
+      const session = sessions.find(s => s.id === request.session_id);
+      session.messages.push(
+        {role: 'user', content: request.question},
+        {role: 'assistant', content: streamReply.answer, agent: streamReply.active_agent,
+         evidence: {intent: streamReply.intent, records: streamReply.records,
+                    contexts: streamReply.contexts, as_of: streamReply.as_of}}
+      );
+      const events = [
+        ['started', {request_id: 'request-1'}],
+        ['result', {...streamReply, request_id: 'request-1', session_id: request.session_id}],
+        ['done', {request_id: 'request-1'}]
+      ];
+      const bytes = Buffer.from(events.map(([type, payload]) =>
+        'event: ' + type + '\\n' + 'data: ' + JSON.stringify(payload) + '\\n\\n').join('').replaceAll('\\n', '\n'));
+      let read = false;
+      return {ok: true, status: 200, headers: {get: () => null},
+        body: {getReader: () => ({
+          read: async () => read ? {done: true} : (read = true, {done: false, value: bytes}),
+          cancel: async () => {}, releaseLock: () => {}
+        })}};
+    }
     throw new Error('Unexpected request: ' + method + ' ' + url);
   }
   const scope = vm.createContext({
@@ -271,7 +294,7 @@ function chatBrowserFixture(initialSessions = [], {failDelete = false, failAsk =
       setItem: (key, value) => storage.set(key, value),
       removeItem: key => storage.delete(key),
     },
-    fetch: fetchMock, confirm: () => true, console, URL,
+    fetch: fetchMock, confirm: () => true, console, URL, TextDecoder,
   });
   const app = fs.readFileSync(path.join(__dirname, '../web/assets/app.js'), 'utf8');
   vm.runInContext(app, scope, {filename: 'app.js'});
@@ -318,4 +341,75 @@ test('Failed request restores saved history instead of keeping optimistic messag
   assert.equal(fixture.node('q').value, 'And last month?');
   assert.match(fixture.node('chat-error').textContent, /Provider unavailable/);
   assert.equal(fixture.node('chat-error').hidden, false);
+});
+
+
+test('Persisted assistant turns retain KPI cards and charts when reopening history', async () => {
+  const revenueEvidence = {intent: 'revenue', records: [
+    {channel: 'Web', net_revenue_vnd: 1200},
+    {channel: 'Store', net_revenue_vnd: 800}
+  ], contexts: []};
+  const fixture = chatBrowserFixture([{id: 'sales-chat', messages: [
+    {role: 'user', content: 'Revenue?'},
+    {role: 'assistant', content: '**Revenue:** 2,000 VND', agent: 'sales_agent',
+     evidence: revenueEvidence},
+    {role: 'user', content: 'Tell me about the charger'},
+    {role: 'assistant', content: 'See [S1]', agent: 'product_agent',
+     evidence: {intent: 'product', records: [], contexts: [{source: 'catalog/charger.md'}]}}
+  ]}]);
+  await fixture.run('initializeSessions()');
+  const history = fixture.node('chat-history');
+  assert.equal(history.children.length, 3); // Latest assistant is rendered separately.
+  assert.equal(tree(history, 'strong').some(n => n.textContent === '2,000'), true);
+  assert.equal(tree(history, 'span').some(n => n.className === 'rich-bar-fill'), true);
+  assert.equal(tree(fixture.node('response-visuals'), 'span')
+    .some(n => n.className === 'rich-citation' && n.textContent === 'catalog/charger.md'), true);
+  await fixture.run('createNewChat()');
+  await fixture.run("selectSession('sales-chat')");
+  assert.equal(tree(fixture.node('chat-history'), 'strong')
+    .some(n => n.textContent === '2,000'), true);
+  assert.equal(tree(fixture.node('chat-history'), 'span')
+    .some(n => n.className === 'rich-bar-fill'), true);
+});
+
+test('New streamed answer preserves the preceding answer formatting and sources', async () => {
+  const previousEvidence = {intent: 'product', records: [],
+    contexts: [{source: 'catalog/previous.md'}]};
+  const fixture = chatBrowserFixture([{id: 'followup-chat', messages: [
+    {role: 'user', content: 'Tell me about the product'},
+    {role: 'assistant', content: '**Product facts** [S1]', agent: 'product_agent',
+     evidence: previousEvidence}
+  ]}], {streamReply: {
+    intent: 'stock', answer: '**Stock:** 30 units', active_agent: 'inventory_agent',
+    as_of: '2026-10', mode: 'LangGraph Multi-Agent',
+    records: [{location: 'Store', available: 13}, {location: 'Warehouse', available: 17}],
+    contexts: []
+  }});
+  await fixture.run('initializeSessions()');
+  fixture.node('q').value = 'How much stock?';
+  await fixture.run('ask()');
+  const history = fixture.node('chat-history');
+  assert.equal(history.children.length, 3);
+  assert.equal(tree(history, 'span').some(n =>
+    n.className === 'rich-citation' && n.textContent === 'catalog/previous.md'), true);
+  assert.equal(tree(fixture.node('response-visuals'), 'strong')
+    .some(n => n.textContent === '30'), true);
+  await fixture.run("selectSession('followup-chat')");
+  assert.equal(tree(fixture.node('chat-history'), 'span')
+    .some(n => n.className === 'rich-citation' && n.textContent === 'catalog/previous.md'), true);
+  assert.equal(tree(fixture.node('response-visuals'), 'strong')
+    .some(n => n.textContent === '30'), true);
+});
+
+test('Old assistant messages without evidence remain valid Markdown-only history', async () => {
+  const fixture = chatBrowserFixture([{id: 'legacy', messages: [
+    {role: 'user', content: 'Hi'},
+    {role: 'assistant', content: '**Hello**', evidence: null},
+    {role: 'user', content: 'Next'},
+    {role: 'assistant', content: 'New', evidence: null}
+  ]}]);
+  await fixture.run('initializeSessions()');
+  assert.equal(fixture.node('chat-history').children.length, 3);
+  assert.equal(tree(fixture.node('chat-history'), 'strong').some(n => n.textContent === 'Hello'), true);
+  assert.equal(tree(fixture.node('chat-history'), 'section').length, 0);
 });
