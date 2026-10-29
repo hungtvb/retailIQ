@@ -32,6 +32,22 @@ def wait_server():
     raise RuntimeError("Product workspace did not start: build frontend first")
 
 
+def assert_no_node_overlap(page):
+    nodes = page.locator(".matrix-node").evaluate_all(
+        """elements => elements.map(el => {
+            const r = el.getBoundingClientRect();
+            return {name: el.getAttribute('aria-label'),left:r.left,right:r.right,
+                    top:r.top,bottom:r.bottom};
+        })""")
+    for i, a in enumerate(nodes):
+        for b in nodes[i+1:]:
+            horizontal = min(a['right'],b['right'])-max(a['left'],b['left'])
+            vertical = min(a['bottom'],b['bottom'])-max(a['top'],b['top'])
+            assert not (horizontal > 3 and vertical > 3), (
+                f"Execution node overlap: {a['name']} and {b['name']}, "
+                f"{horizontal:.1f}x{vertical:.1f}px")
+
+
 def run_journey(page):
     js_errors = []
     page.on("pageerror", lambda error: js_errors.append(str(error)))
@@ -53,6 +69,7 @@ def run_journey(page):
     expect(page.locator(".answer-evidence")).to_be_visible()
     assert not js_errors, f"Browser exceptions: {js_errors}"
     OUT.mkdir(exist_ok=True)
+    assert_no_node_overlap(page)
     page.screenshot(path=str(OUT / "retailiq_product_workspace_desktop.png"), full_page=True)
 
     # Multi-agent follow-up: require a real handoff and persist the exact trace.
@@ -61,6 +78,7 @@ def run_journey(page):
     expect(page.locator(".chat-state")).to_contain_text("Complete", timeout=25000)
     expect(page.locator(".message-assistant")).to_have_count(2)
     expect(page.locator(".matrix-link-handoff")).to_have_count(1)
+    assert_no_node_overlap(page)
     page.screenshot(path=str(OUT / "retailiq_product_workspace_handoff.png"), full_page=True)
     handoff_count = page.locator(".matrix-node").count()
     assert handoff_count >= 4
@@ -97,6 +115,7 @@ def run_journey(page):
     # otherwise the screenshot captures a mid-transition overlay.
     expect(page.locator(".sidebar")).not_to_be_in_viewport()
     page.evaluate("window.scrollTo(0,0)")
+    assert_no_node_overlap(page)
     page.screenshot(path=str(OUT / "retailiq_product_workspace_mobile_live.png"), full_page=True)
     page.reload(wait_until="domcontentloaded")
     expect(page.locator(".chat-pane")).to_be_visible()
