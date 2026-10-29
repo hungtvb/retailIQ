@@ -84,9 +84,14 @@ EDGE_LABELS = {
 def definitions() -> list[dict]:
     return [{"id": key, "title": DESCRIPTIONS[key],
              "nodes": [{"id": i, "label": title, "kind": kind} for i, title, kind in nodes],
-             "edges": [{"from": nodes[n][0], "to": nodes[n + 1][0],
-                        "label": EDGE_LABELS[key][n]}
-                       for n in range(len(nodes) - 1)],
+             "edges": ([{"from": nodes[n][0], "to": nodes[n + 1][0],
+                          "label": EDGE_LABELS[key][n]}
+                         for n in range(len(nodes) - 1)] +
+                       ([{"from": "verification", "to": "fulfilment_optimisation_agent",
+                          "label": "retry"},
+                         {"from": "fulfilment_optimisation_agent",
+                          "to": "order_management_agent", "label": "revise"}]
+                        if key == "week4" else [])),
              "execution": "deterministic_local_simulation"} for key, nodes in GRAPH.items()]
 
 
@@ -198,7 +203,9 @@ def run_demo(scenario: str, sku: str, quantity: int = 1,
     def step(node, detail, status="completed"):
         nonlocal previous
         if previous is not None:
-            log_event("agent.handoff", previous_agent=previous, target_agent=node,
+            event_name = ("agent.handoff" if previous.endswith("_agent") and
+                          node.endswith("_agent") else "workflow.handoff")
+            log_event(event_name, previous_agent=previous, target_agent=node,
                       execution_mode="offline")
         events.append({"node": node, "status": status, "detail": str(detail)[:180],
                        "from": previous})
