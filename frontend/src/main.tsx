@@ -174,7 +174,8 @@ function GraphCanvas({graph}: {graph:GraphState}) {
         const a=lookup.get(e.from),b=lookup.get(e.to);
         if(!a || !b) return null;
         const path=arc(a,b,e.kind);
-        return <g key={e.id} className={'matrix-link matrix-link-'+e.kind+' state-'+e.status}>
+        return <g key={e.id} data-from={e.from} data-to={e.to}
+          className={'matrix-link matrix-link-'+e.kind+' state-'+e.status}>
           <path d={path} className="matrix-edge-shadow"/>
           <path d={path} className="matrix-edge-main"
             markerEnd={'url(#matrix-arrow-'+(
