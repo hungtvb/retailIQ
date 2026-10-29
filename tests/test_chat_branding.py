@@ -27,7 +27,9 @@ def test_logo_favicon_and_compact_chat_markup():
     assert 'id="active-agent-avatar" class="agent-avatar agent-avatar-iq"' in html
     assert 'src="/assets/brand/mascot-guide.svg"' not in html
     assert '<strong>Ask RetailIQ</strong>' in html
-    assert 'id="tab-workflows"' in html
+    assert 'id="tab-workflows"' not in html
+    assert 'id="graph-mode-request"' in html
+    assert 'id="graph-mode-scenario"' in html
     assert '/assets/tool-workspace.css' in html
     assert "class=\"hero\"" not in html
     assert "Cost &amp; ROI" in html
