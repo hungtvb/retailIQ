@@ -337,8 +337,9 @@
     }
     function showAll(events,terminalStatus) {
       reset();
-      for(const item of (Array.isArray(events)?events.slice(0,40):[])) {
+      for(const [i,item] of (Array.isArray(events)?events.slice(0,40):[]).entries()) {
         update(item.node,item.status||'completed',item.detail||'',item.from);
+        if(typeof options.onStep==='function') options.onStep(item,i);
       }
       markTerminal(terminalStatus);
     }
@@ -348,6 +349,7 @@
       visible.forEach((item,i)=>{
         timers.push(setTimeout(()=>{
           update(item.node,item.status||'completed',item.detail||'',item.from);
+          if(typeof options.onStep==='function') options.onStep(item,i);
           if(i===visible.length-1) markTerminal(terminalStatus);
         },i*260));
       });
