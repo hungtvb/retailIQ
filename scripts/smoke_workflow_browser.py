@@ -37,7 +37,7 @@ def wait_for_app() -> None:
 
 def journey(page) -> None:
     page.goto(BASE, wait_until="domcontentloaded")
-    page.locator("#tab-workflows").click()
+    page.locator("#graph-mode-scenario").click()
     picker = page.locator("#workflow-scenario")
     expect(picker.locator("option")).to_have_count(5)
 
@@ -187,7 +187,7 @@ def workflow_edge_journey(page, db: Path) -> None:
             with conn:
                 conn.execute(sql, params)
 
-    page.locator("#tab-workflows").click()
+    page.locator("#graph-mode-scenario").click()
     page.locator("#workflow-sku").fill("EL-003")
 
     # A single stale location must invalidate the aggregate-stock freshness.
@@ -244,33 +244,38 @@ def layout_journey(page) -> None:
     side = page.locator(".insights-column").bounding_box()
     composer = page.locator(".chat-composer").bounding_box()
     assert header and header["height"] <= 60, f"Header is too tall: {header}"
-    assert chat and side and chat["width"] > side["width"] * 1.45, (
-        f"Conversation not dominant: chat={chat}, evidence={side}"
+    assert chat and side and chat["width"] >= 450 and side["width"] >= 490, (
+        f"Chat and graph must both be usable: chat={chat}, graph={side}"
     )
     assert composer and composer["y"] + composer["height"] < 920, (
         f"Chat composer below useful viewport: {composer}"
     )
     assert page.locator(".chat-welcome img").count() == 0, "Redundant mascot hero returned"
     assert page.locator(".hero").count() == 0, "Landing hero should not occupy tool workspace"
+    assert page.locator("#tab-workflows").count() == 0, "Graph must not be a separate tab"
+    expect(page.locator("#graph-mode-request")).to_have_attribute("aria-pressed", "true")
+    expect(page.locator("#execution-graph .graph-node")).to_have_count(6)
     Path("data").mkdir(exist_ok=True)
     page.screenshot(path="data/retailiq_ui_chat_desktop_chromium.png", full_page=True)
 
-    page.locator("#tab-workflows").click()
+    page.locator("#graph-mode-scenario").click()
     expect(page.locator(".workflow-canvas-card")).to_be_visible()
     graph = page.locator(".workflow-canvas-card").bounding_box()
-    assert graph and graph["width"] >= 1000, f"Graph is too narrow on desktop: {graph}"
-    assert graph["y"] < 285, f"Workflow toolbar takes too much vertical space: {graph}"
+    assert graph and graph["width"] >= 490, f"Graph pane too narrow: {graph}"
+    assert graph["y"] < 380, f"Workflow controls too tall: {graph}"
+    expect(page.locator("#graph-mode-scenario")).to_have_attribute("aria-pressed", "true")
+    expect(page.locator("#graph-request-panel")).to_be_hidden()
     page.screenshot(path="data/retailiq_ui_graph_desktop_chromium.png", full_page=True)
 
     page.set_viewport_size({"width": 390, "height": 844})
-    page.locator("#tab-assistant").click()
+    page.locator("#graph-mode-request").click()
     expect(page.locator("#ask-submit")).to_be_visible()
     assert page.locator(".site-header").bounding_box()["height"] <= 52
     scroll_width = page.evaluate("document.documentElement.scrollWidth")
     assert scroll_width <= 392, f"Unexpected horizontal page scroll on mobile: {scroll_width}"
     page.screenshot(path="data/retailiq_ui_chat_mobile_chromium.png", full_page=True)
 
-    page.locator("#tab-workflows").click()
+    page.locator("#graph-mode-scenario").click()
     expect(page.locator("#workflow-run")).to_be_visible()
     page.locator("#workflow-scenario").select_option("week4")
     page.locator("#workflow-run").click()
