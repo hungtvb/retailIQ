@@ -33,6 +33,13 @@ app.include_router(logs_router)
 app.include_router(workflows_router)
 app.mount('/assets', StaticFiles(directory=Path(__file__).resolve().parents[2] / 'web' / 'assets'), name='assets')
 
+# New product UI is independently built and served alongside the existing
+# entrypoint until full browser/business acceptance is complete.
+_WORKSPACE_DIST = Path(__file__).resolve().parents[2] / 'frontend' / 'dist'
+app.mount('/workspace/assets',
+          StaticFiles(directory=_WORKSPACE_DIST / 'assets', check_dir=False),
+          name='product-workspace-assets')
+
 
 def _safe_http_path(path: str) -> str:
     """Canonicalize route labels so customer values embedded in URLs are not logged."""
@@ -114,6 +121,16 @@ def _missing_module_message(error: ModuleNotFoundError) -> str:
 class AskBody(BaseModel):
     question: str = Field(min_length=3, max_length=500)
     session_id: str | None = Field(default=None, min_length=36, max_length=36)
+
+
+@app.get('/workspace', response_class=HTMLResponse)
+@app.get('/workspace/', response_class=HTMLResponse)
+def product_workspace():
+    index = _WORKSPACE_DIST / 'index.html'
+    if not index.is_file():
+        raise HTTPException(status_code=503,
+                            detail='Workspace has not been built. Run npm install && npm run build in frontend/.')
+    return index.read_text(encoding='utf8')
 
 
 @app.get('/', response_class=HTMLResponse)
