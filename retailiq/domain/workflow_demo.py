@@ -129,7 +129,7 @@ def review_run(run_id: str, role: str, decision: str) -> dict:
         raise ValueError("Review must be approve or reject")
     with closing(_connect()) as db:
         with db:
-            row = db.execute("SELECT status,trace_json,scenario FROM workflow_runs WHERE id=?",
+            row = db.execute("SELECT status,trace_json,scenario,report FROM workflow_runs WHERE id=?",
                              (run_id,)).fetchone()
             if row is None:
                 raise KeyError("Workflow run not found")
@@ -143,10 +143,16 @@ def review_run(run_id: str, role: str, decision: str) -> dict:
             events.append({"node": "finalize", "status": "completed",
                            "from": "manager_approval",
                            "detail": "Decision recorded; no operational data changed"})
+            report = (row["report"]
+                      .replace("Manager approval pending.", "")
+                      .replace("manager review pending.", "").rstrip() +
+                      " Manager decision: " + outcome +
+                      ". This is a recorded simulation, not a catalog or order mutation.")
             changed = db.execute(
-                "UPDATE workflow_runs SET status=?,trace_json=?,decision_at=? "
+                "UPDATE workflow_runs SET status=?,trace_json=?,report=?,decision_at=? "
                 "WHERE id=? AND status='pending_manager'",
-                (outcome, json.dumps(events), datetime.now(timezone.utc).isoformat(), run_id))
+                (outcome, json.dumps(events), report,
+                 datetime.now(timezone.utc).isoformat(), run_id))
             if changed.rowcount != 1:
                 raise ValueError("Workflow review conflict")
     log_event("workflow.review.completed", agent="manager_approval",
