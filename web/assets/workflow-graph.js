@@ -26,17 +26,18 @@
     return ({idle:'WAITING', running:'RUNNING',completed:'DONE',awaiting:'APPROVAL',
              blocked:'BLOCKED',failed:'FAILED'}[s] || 'WAITING');
   }
+  let graphSequence = 0;
   function mount(elementId, definition, options = {}) {
     const host = document.getElementById(elementId);
     if (!host) return null;
     const nodes = Array.isArray(definition.nodes) ? definition.nodes.slice(0,20) : [];
     const edges = Array.isArray(definition.edges) ? definition.edges.slice(0,40) : [];
-    const width = Math.max(750,nodes.length * 168 + 40), height = 244;
+    const width = Math.max(750,nodes.length * 186 + 40), height = 244;
     let timers = [];
     const lookup = new Map();
     const links = new Map();
     const positions = new Map(nodes.map((node,index) => [node.id,{
-      x: 30 + index * 168, y: 67 + (index % 2 ? 29 : 0)}]));
+      x: 30 + index * 186, y: 67 + (index % 2 ? 29 : 0)}]));
     const viewport = document.createElement('div');
     viewport.className = 'graph-scroll';
     viewport.setAttribute('aria-label','Execution dependency graph');
@@ -47,13 +48,25 @@
     const svg = svgEl('svg',{class:'graph-edges',viewBox:'0 0 '+width+' '+height,'aria-hidden':'true'});
     svg.style.width=width+'px';
     svg.style.height=height+'px';
+    const markerId='graph-arrow-'+(++graphSequence);
+    const defs=svgEl('defs');
+    const marker=svgEl('marker',{id:markerId,markerWidth:7,markerHeight:7,refX:6,refY:3,
+      orient:'auto',markerUnits:'userSpaceOnUse'});
+    marker.appendChild(svgEl('path',{d:'M 0 0 L 6 3 L 0 6 z',fill:'#8ca6b8'}));
+    defs.appendChild(marker); svg.appendChild(defs);
     edges.forEach((edge) => {
       const a = positions.get(edge.from), b = positions.get(edge.to);
       if (!a || !b) return;
       const x1 = a.x + 142, y1=a.y+39, x2=b.x, y2=b.y+39;
       const path = svgEl('path',{d:'M '+x1+' '+y1+' C '+(x1+22)+' '+y1+', '+(x2-22)+' '+y2+', '+x2+' '+y2,
-        class:'graph-link'});
+        class:'graph-link','marker-end':'url(#'+markerId+')'});
       svg.appendChild(path);
+      if (edge.label) {
+        const title=svgEl('text',{x:(x1+x2)/2,y:Math.min(y1,y2)-11,
+          class:'graph-edge-label','text-anchor':'middle'});
+        title.textContent=String(edge.label).slice(0,20);
+        svg.appendChild(title);
+      }
       links.set(edge.from+'->'+edge.to,path);
     });
     canvas.appendChild(svg);
@@ -122,8 +135,11 @@
     return {update,reset,replay,hasNode:(id)=>lookup.has(id)};
   }
   let chat = null;
-  function chatReset() {
+  function chatClear() {
     chat = mount('execution-graph',chatDefinition);
+  }
+  function chatReset() {
+    chatClear();
     if (chat) chat.update('request','completed','User question submitted');
   }
   function chatEvent(event) {
@@ -156,5 +172,5 @@
       chat.update('answer','failed','Request failed');
     }
   }
-  root.RetailGraph={mount,chatReset,chatEvent,chatFinished};
+  root.RetailGraph={mount,chatClear,chatReset,chatEvent,chatFinished};
 })(window);
