@@ -89,7 +89,10 @@ export function applyExecutionEvent(state: GraphState, event: ExecutionEvent): G
   } else if (name === 'agent.handoff' && event.previous_agent && event.target_agent) {
     const from = 'agent:' + event.previous_agent;
     const to = 'agent:' + event.target_agent;
-    nodes = upsertNode(nodes, completed(concise(event.previous_agent), 'agent', from, 'completed'));
+    // Handoff proves transfer, NOT completion of the source agent.
+    const source = nodes.find(n => n.id === from);
+    nodes = upsertNode(nodes, completed(concise(event.previous_agent), 'agent', from,
+      source?.status === 'completed' ? 'completed' : 'observed'));
     nodes = upsertNode(nodes, completed(concise(event.target_agent), 'agent', to, 'running'));
     edges = upsertEdge(edges, edge(from, to, 'handoff', 'completed'));
   } else if (name.startsWith('agent.subagent.') && event.agent && event.subagent) {
@@ -137,8 +140,10 @@ export function finishGraph(state: GraphState, ok: boolean): GraphState {
   if (ok) {
     nodes = upsertNode(nodes, {id:'answer',label:'Response delivered',
       kind:'output',status:'completed'});
-    if (terminal) edges = upsertEdge(edges, edge(terminal.id,'answer','result','completed'));
-    else edges = upsertEdge(edges,edge('request','answer','result','completed'));
+    // This association is inferred from the terminal observation and final
+    // result event, not an observed agent-to-agent handoff.
+    if (terminal) edges = upsertEdge(edges, edge(terminal.id,'answer','result','observed'));
+    else edges = upsertEdge(edges,edge('request','answer','result','observed'));
   }
   return { ...state, nodes, edges, phase:ok?'complete':'failed' };
 }
@@ -147,12 +152,41 @@ export function unavailableGraph(): GraphState {
 }
 
 export interface PositionedNode extends GraphNode { x: number; y: number; }
-export function positionGraph(graph: GraphState): PositionedNode[] {
+export function positionGraph(graph: GraphState, compact = false): PositionedNode[] {
   const agents = graph.nodes.filter(n => n.kind === 'agent');
   const subagents = graph.nodes.filter(n => n.kind === 'subagent');
   const tools = graph.nodes.filter(n => n.kind === 'tool' || n.kind === 'mcp');
   const positions = new Map<string, [number, number]>();
   const isSingleLane = agents.length <= 1 && tools.length <= 1 && subagents.length === 0;
+  if (compact) {
+    // Two columns on small screens: preserve readable label sizes, don't
+    // shrink the entire 800px SVG to fit a 360px viewport.
+    const left = 95, right = 265;
+    if (isSingleLane) {
+      positions.set('request', [left,82]);
+      if (agents[0]) positions.set(agents[0].id,[right,183]);
+      if (tools[0]) positions.set(tools[0].id,[left,296]);
+      if (graph.nodes.some(n=>n.id==='answer')) positions.set('answer',[right,407]);
+    } else {
+      positions.set('request',[180,70]);
+      agents.forEach((n,i)=>positions.set(n.id,[
+        i%2===0?left:right, 188+Math.floor(i/2)*120
+      ]));
+      const base=188+Math.ceil(agents.length/2)*120;
+      subagents.forEach((n,i)=>positions.set(n.id,[
+        i%2===0?left:right,base+Math.floor(i/2)*112
+      ]));
+      const toolBase=base+Math.ceil(subagents.length/2)*112;
+      tools.forEach((n,i)=>positions.set(n.id,[
+        i%2===0?left:right,toolBase+Math.floor(i/2)*112
+      ]));
+      if(graph.nodes.some(n=>n.id==='answer'))positions.set('answer',[
+        180,toolBase+Math.ceil(tools.length/2)*112+35
+      ]);
+    }
+    return graph.nodes.map(n=>({...n,x:positions.get(n.id)?.[0]??180,
+      y:positions.get(n.id)?.[1]??190}));
+  }
   // A lone execution path still occupies a readable 2D network, rather than
   // shrinking into a vertical column. This is spatial arrangement, not a
   // fabricated branch, event or link.
