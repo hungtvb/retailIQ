@@ -1,0 +1,138 @@
+"""Real Chromium acceptance of the React product workspace with isolated seeded data.
+
+Run after \`cd frontend && npm install && npm run build\`.
+Records both desktop and mobile screenshots. Not a fake browser fixture.
+"""
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+from datetime import date
+from pathlib import Path
+from urllib.request import urlopen
+
+from playwright.sync_api import expect, sync_playwright
+
+BASE = "http://127.0.0.1:8769"
+OUT = Path("data")
+
+
+def wait_server():
+    for _ in range(75):
+        try:
+            with urlopen(BASE + "/workspace", timeout=1) as reply:
+                if reply.status == 200:
+                    return
+        except OSError:
+            time.sleep(.2)
+    raise RuntimeError("Product workspace did not start: build frontend first")
+
+
+def run_journey(page):
+    js_errors = []
+    page.on("pageerror", lambda error: js_errors.append(str(error)))
+    page.goto(BASE + "/workspace", wait_until="domcontentloaded")
+    expect(page.locator(".network-pane")).to_be_visible()
+    expect(page.locator(".chat-pane")).to_be_visible()
+    expect(page.locator(".matrix-empty")).to_contain_text("Execution network")
+    assert page.locator("#tab-workflows").count() == 0, "Legacy Graph tab leaked into the new workspace"
+
+    # Actual POST -> SSE -> backend SQL -> persisted conversation.
+    page.get_by_role("button", name="Top sellers").click()
+    expect(page.locator(".chat-state")).to_contain_text("Complete", timeout=25000)
+    expect(page.locator(".message-assistant")).to_have_count(1)
+    expect(page.locator(".matrix-svg")).to_be_visible()
+    assert page.locator(".matrix-node").count() >= 2
+    assert page.locator(".matrix-node.matrix-agent").count() >= 1, "No routed agent from real SSE"
+    assert page.locator(".matrix-node.matrix-tool").count() >= 1, "No observed tool invocation"
+    assert page.locator(".matrix-link").count() >= 1, "No observed agent connections"
+    expect(page.locator(".answer-evidence")).to_be_visible()
+    assert not js_errors, f"Browser exceptions: {js_errors}"
+    OUT.mkdir(exist_ok=True)
+    page.screenshot(path=str(OUT / "retailiq_product_workspace_desktop.png"), full_page=True)
+
+    # Multi-turn and reload must retain answer, but not invent saved trace.
+    page.locator("textarea").fill("What is the revenue this month?")
+    page.get_by_role("button", name="Send message").click()
+    expect(page.locator(".chat-state")).to_contain_text("Complete", timeout=25000)
+    expect(page.locator(".message-assistant")).to_have_count(2)
+    page.reload(wait_until="domcontentloaded")
+    expect(page.locator(".message-assistant")).to_have_count(2)
+    expect(page.locator(".matrix-empty")).to_contain_text("Execution trace unavailable")
+    assert page.locator(".matrix-node").count() == 0, "Invented historical execution graph"
+    assert not js_errors, f"Browser exceptions: {js_errors}"
+
+    # New session is a draft: no extra record created until first message.
+    old_sessions = page.locator(".session-row").count()
+    page.get_by_role("button", name="New conversation").click()
+    expect(page.locator(".chat-onboarding")).to_be_visible()
+    assert page.locator(".session-row").count() == old_sessions
+    page.locator("textarea").fill("How many units of AlphaBook Pro 14 are in stock?")
+    page.get_by_role("button", name="Send message").click()
+    expect(page.locator(".chat-state")).to_contain_text("Complete", timeout=25000)
+    expect(page.locator(".session-row")).to_have_count(old_sessions + 1)
+
+    # Mobile: no horizontal page overflow; real chat and canvas remain accessible.
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.reload(wait_until="domcontentloaded")
+    expect(page.locator(".chat-pane")).to_be_visible()
+    expect(page.locator(".network-pane")).to_be_visible()
+    page.evaluate("window.scrollTo(0,0)")
+    viewport_width = page.evaluate("document.documentElement.scrollWidth")
+    assert viewport_width <= 392, f"Mobile horizontal overflow: {viewport_width}"
+    page.screenshot(path=str(OUT / "retailiq_product_workspace_mobile.png"), full_page=True)
+    assert not js_errors, f"Browser exceptions: {js_errors}"
+
+
+def main():
+    chrome = next((p for name in ("google-chrome", "google-chrome-stable", "chromium")
+                   if (p := shutil.which(name))), None)
+    if not chrome:
+        raise RuntimeError("Chrome/Chromium not installed")
+    if not Path("frontend/dist/index.html").is_file():
+        raise RuntimeError("Build React workspace before browser E2E: cd frontend && npm install && npm run build")
+    from scripts.seed import seed
+    with tempfile.TemporaryDirectory(prefix="retailiq-product-e2e-") as temp:
+        root = Path(temp)
+        db = root / "retail.sqlite3"
+        seed(db, write_support_files=False, reference_date=date(2026, 10, 28))
+        env = dict(os.environ,
+                   RETAILIQ_MODE="offline", RETAILIQ_AS_OF="2026-10-28",
+                   RETAILIQ_WORKFLOW_USE_MCP="0",
+                   RETAILIQ_DATA_DB=str(db),
+                   RETAILIQ_CHAT_DB=str(root / "chat.sqlite3"),
+                   RETAILIQ_WORKFLOW_DB=str(root / "runs.sqlite3"),
+                   RETAILIQ_CHECKPOINT_DB=str(root / "checkpoints.sqlite3"),
+                   RETAILIQ_LOG_FILE=str(root / "events.jsonl"))
+        server = subprocess.Popen(
+            [sys.executable, "-m", "uvicorn", "retailiq.api:app",
+             "--host", "127.0.0.1", "--port", "8769", "--log-level", "warning"],
+            env=env, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
+        )
+        try:
+            wait_server()
+            with sync_playwright() as browser_api:
+                browser = browser_api.chromium.launch(
+                    executable_path=chrome, headless=True,
+                    args=["--no-sandbox", "--disable-dev-shm-usage"]
+                )
+                try:
+                    page = browser.new_page(viewport={"width": 1440, "height": 900})
+                    run_journey(page)
+                finally:
+                    browser.close()
+        finally:
+            server.terminate()
+            try:
+                server.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                server.kill()
+                server.wait(timeout=5)
+
+
+if __name__ == "__main__":
+    main()
