@@ -6,7 +6,8 @@ Never expose this unauthenticated demo service to an untrusted network.
 import re
 from mcp.server.fastmcp import FastMCP
 
-from retailiq.domain.analytics import inventory, month
+from retailiq.domain.analytics import inventory
+from retailiq.domain.semantic import semantic_summary
 from retailiq.infrastructure.sqlite import query
 
 mcp = FastMCP("RetailIQ Synthetic Retail Tools")
@@ -37,9 +38,7 @@ def order_lookup(order_id: str) -> dict:
 @mcp.resource("retailiq://semantics")
 def semantic_definitions() -> str:
     """Definitions shared with the local retail analytics query layer."""
-    return ("available=on_hand-reserved; net_revenue=sum(quantity*unit_price-discount) "
-            "for completed orders; top_sellers=completed order quantity in " + month() +
-            "; inventory freshness is reported from snapshot timestamps")
+    return semantic_summary() + "; source timestamps are required for freshness claims"
 
 
 if __name__ == "__main__":
