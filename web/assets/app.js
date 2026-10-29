@@ -158,6 +158,7 @@ async function selectSession(id, preserveEvidence = false) {
     byId('live-trace-state').textContent = 'IDLE';
     byId('live-indicator').className = 'live-indicator';
     byId('live-trace-panel').classList.remove('trace-is-live');
+    window.RetailGraph?.chatClear();
     lastRequestId = '';
   }
   byId('summary-agent').textContent = session.active_agent || '—';
@@ -739,5 +740,6 @@ function initRetailIQ() {
   });
   initializeSessions();
   byId('answer').classList.add('is-placeholder');
+  window.RetailGraph?.chatClear();
 }
 window.addEventListener('DOMContentLoaded', initRetailIQ);
