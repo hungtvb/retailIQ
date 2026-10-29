@@ -350,7 +350,8 @@ function showPanel(name) {
   byId('assistant-panel').hidden = name !== 'assistant';
   byId('roi-panel').hidden = !roi;
   byId('logs-panel').hidden = !logs;
-  for (const key of ['assistant', 'roi', 'logs']) {
+  byId('workflows-panel').hidden = name !== 'workflows';
+  for (const key of ['assistant', 'workflows', 'roi', 'logs']) {
     byId('tab-' + key).setAttribute('aria-selected', String(key === name));
   }
   if (roi && !roiLoaded) { roiLoaded = true; estimateROI(); }
@@ -372,6 +373,7 @@ function resetLiveTrace() {
   byId('live-trace-state').textContent = 'CONNECTING';
   byId('live-indicator').className = 'live-indicator live-indicator-running';
   byId('live-trace-panel').classList.add('trace-is-live');
+  window.RetailGraph?.chatReset();
 }
 
 function setLiveTraceState(status) {
@@ -380,6 +382,7 @@ function setLiveTraceState(status) {
     (status === 'RUNNING' || status === 'CONNECTING' ? ' live-indicator-running' :
     status === 'ERROR' ? ' live-indicator-error' : ' live-indicator-complete');
   byId('live-trace-panel').classList.toggle('trace-is-live', status === 'RUNNING' || status === 'CONNECTING');
+  if (status === 'COMPLETE' || status === 'ERROR') window.RetailGraph?.chatFinished(status === 'COMPLETE');
 }
 
 function appendLiveEvent(event) {
@@ -407,6 +410,7 @@ function appendLiveEvent(event) {
   content.append(title, sub); entry.append(dot, AgentID().icon(identity), content, time); list.appendChild(entry);
   byId('live-trace-count').textContent = String(Number(byId('live-trace-count').textContent.split(' ')[0]) + 1) + ' events';
   list.scrollTop = list.scrollHeight;
+  window.RetailGraph?.chatEvent(event);
 }
 
 // fetch(POST) streaming: EventSource cannot send the chat body/session id.
@@ -576,6 +580,7 @@ async function ask() {
     if (!byId('q').value.trim()) byId('q').value = question;
     byId('response-state').textContent = 'ERROR';
     byId('summary-mode').textContent = 'Error';
+    setLiveTraceState('ERROR');
     scrollChatToBottom();
   } finally {
     askInProgress = false;
@@ -707,6 +712,7 @@ function renderExecutionLogs(events) {
 
 function initRetailIQ() {
   byId('tab-assistant').addEventListener('click', () => showPanel('assistant'));
+  byId('tab-workflows').addEventListener('click', () => showPanel('workflows'));
   byId('tab-roi').addEventListener('click', () => showPanel('roi'));
   byId('tab-logs').addEventListener('click', () => showPanel('logs'));
   byId('logs-refresh').addEventListener('click', loadExecutionLogs);
@@ -719,7 +725,7 @@ function initRetailIQ() {
   // Accessible left/right navigation inside the tab list.
   document.querySelector('.workspace-tabs').addEventListener('keydown', (event) => {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-    const tabs = ['tab-assistant', 'tab-roi', 'tab-logs'];
+    const tabs = ['tab-assistant', 'tab-workflows', 'tab-roi', 'tab-logs'];
     const index = tabs.indexOf(event.target.id);
     const direction = event.key === 'ArrowRight' ? 1 : -1;
     const destination = byId(tabs[(index + direction + tabs.length) % tabs.length]);
