@@ -189,3 +189,133 @@ test('SSE parser rejects event floods', async () => {
   await assert.rejects(parser(stream.response, () => {}), /event limit/);
   assert.equal(stream.cancelled(), true);
 });
+
+
+// Browser-state regressions: deleted chats must not be recreated and failed
+// optimistic turns must not survive a refresh from persisted conversation data.
+function chatBrowserFixture(initialSessions = [], {failDelete = false, failAsk = false} = {}) {
+  class BrowserElement extends Element {
+    constructor(tag) {
+      super(tag);
+      this.hidden = false;
+      this.value = '';
+      this.selectedIndex = 0;
+      const classes = new Set();
+      this.classList = {
+        add: (...names) => names.forEach(name => classes.add(name)),
+        remove: (...names) => names.forEach(name => classes.delete(name)),
+        toggle: (name, enabled) => {
+          if (enabled) classes.add(name);
+          else classes.delete(name);
+        }
+      };
+    }
+    get options() { return this.children; }
+    querySelector() { return new BrowserElement('span'); }
+    focus() {}
+    reportValidity() { return false; }
+  }
+  const elements = new Map();
+  const node = id => {
+    if (!elements.has(id)) elements.set(id, new BrowserElement('div'));
+    return elements.get(id);
+  };
+  const doc = {
+    getElementById: node,
+    createElement: tag => new BrowserElement(tag),
+    createElementNS: (_ns, tag) => new BrowserElement(tag),
+    createTextNode: text => new Element('#text', String(text)),
+    querySelectorAll: () => [],
+  };
+  const storage = new Map();
+  const sessions = [...initialSessions];
+  const calls = [];
+  const respond = (status, data = {}) => ({
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => data,
+  });
+  async function fetchMock(url, options = {}) {
+    const method = options.method || 'GET';
+    calls.push([method, url]);
+    if (url === '/api/sessions' && method === 'GET') {
+      return respond(200, {sessions: sessions.map(s => ({
+        id: s.id, title: s.title || 'Conversation', message_count: s.messages?.length || 0
+      }))});
+    }
+    if (url === '/api/sessions' && method === 'POST') {
+      const id = 'created-' + String(sessions.length + 1);
+      const session = {id, title: 'New conversation', messages: []};
+      sessions.unshift(session);
+      return respond(201, session);
+    }
+    const prefix = '/api/sessions/';
+    if (url.startsWith(prefix)) {
+      const id = decodeURIComponent(url.slice(prefix.length));
+      const index = sessions.findIndex(s => s.id === id);
+      if (index === -1) return respond(404, {detail: 'Session not found'});
+      if (method === 'DELETE') {
+        if (failDelete) return respond(503, {detail: 'Checkpoint cleanup failed'});
+        sessions.splice(index, 1);
+        return respond(204);
+      }
+      return respond(200, {...sessions[index], active_agent: 'sales_agent', messages_truncated: false});
+    }
+    if (url === '/ask/stream' && failAsk) return respond(503, {detail: 'Provider unavailable'});
+    throw new Error('Unexpected request: ' + method + ' ' + url);
+  }
+  const scope = vm.createContext({
+    window: {addEventListener() {}, RetailIQIdentity: identity, RetailIQFormat: format},
+    document: doc, localStorage: {
+      getItem: key => storage.get(key) || null,
+      setItem: (key, value) => storage.set(key, value),
+      removeItem: key => storage.delete(key),
+    },
+    fetch: fetchMock, confirm: () => true, console, URL,
+  });
+  const app = fs.readFileSync(path.join(__dirname, '../web/assets/app.js'), 'utf8');
+  vm.runInContext(app, scope, {filename: 'app.js'});
+  const run = expression => vm.runInContext(expression, scope);
+  return {run, node, calls, sessions, storage};
+}
+
+test('New chat is a draft and deleting the last chat leaves no replacement session', async () => {
+  const fixture = chatBrowserFixture([{id: 's1', title: 'Sales', messages: [
+    {role: 'user', content: 'Revenue?'},
+    {role: 'assistant', content: '100', evidence: {records: [], contexts: []}},
+  ]}]);
+  await fixture.run('initializeSessions()');
+  assert.equal(fixture.run('activeSessionId'), 's1');
+  await fixture.run('deleteCurrentChat()');
+  assert.equal(fixture.sessions.length, 0);
+  assert.equal(fixture.run('activeSessionId'), '');
+  assert.equal(fixture.node('chat-error').hidden, true);
+  assert.equal(fixture.node('chat-history').children.length, 0);
+  assert.equal(fixture.node('chat-welcome').hidden, false);
+  assert.equal(fixture.calls.filter(([method]) => method === 'POST').length, 0);
+  await fixture.run('createNewChat()');
+  assert.equal(fixture.calls.filter(([method]) => method === 'POST').length, 0);
+});
+
+test('Checkpoint deletion errors are visible and preserve the selected chat', async () => {
+  const fixture = chatBrowserFixture([{id: 's2', messages: []}], {failDelete: true});
+  await fixture.run('initializeSessions()');
+  await assert.rejects(fixture.run('deleteCurrentChat()'), /503.*Checkpoint cleanup failed/);
+  assert.equal(fixture.sessions.length, 1);
+  assert.equal(fixture.run('activeSessionId'), 's2');
+});
+
+test('Failed request restores saved history instead of keeping optimistic messages', async () => {
+  const fixture = chatBrowserFixture([{id: 's3', messages: [
+    {role: 'user', content: 'What is revenue?'},
+    {role: 'assistant', content: '100 VND', evidence: {records: [], contexts: []}},
+  ]}], {failAsk: true});
+  await fixture.run('initializeSessions()');
+  fixture.node('q').value = 'And last month?';
+  await fixture.run('ask()');
+  assert.equal(fixture.node('chat-history').children.length, 1);
+  assert.equal(fixture.node('chat-history').textContent.includes('And last month?'), false);
+  assert.equal(fixture.node('q').value, 'And last month?');
+  assert.match(fixture.node('chat-error').textContent, /Provider unavailable/);
+  assert.equal(fixture.node('chat-error').hidden, false);
+});
