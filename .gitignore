@@ -12,6 +12,7 @@ data/retailiq.sqlite3-shm
 data/retailiq.sqlite3-wal
 data/retailiq.sqlite3
 data/chat_sessions.sqlite3
+data/workflow_demo.sqlite3*
 data/agent_checkpoints.sqlite3*
 data/full_e2e_report.json
 
