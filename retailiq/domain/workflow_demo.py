@@ -62,10 +62,19 @@ DESCRIPTIONS = {
 }
 
 
+EDGE_LABELS = {
+    "week2": ["query", "rows", "KPI", "timestamp"],
+    "week3": ["scope", "stock", "proposal", "validate", "review", "decision"],
+    "alerts": ["metrics", "query", "threshold", "report"],
+    "week4": ["stock", "allocate", "context", "price", "draft", "verify", "approve", "record"],
+}
+
+
 def definitions() -> list[dict]:
     return [{"id": key, "title": DESCRIPTIONS[key],
              "nodes": [{"id": i, "label": title, "kind": kind} for i, title, kind in nodes],
-             "edges": [{"from": nodes[n][0], "to": nodes[n + 1][0], "label": "handoff"}
+             "edges": [{"from": nodes[n][0], "to": nodes[n + 1][0],
+                        "label": EDGE_LABELS[key][n]}
                        for n in range(len(nodes) - 1)],
              "execution": "deterministic_local_simulation"} for key, nodes in GRAPH.items()]
 
