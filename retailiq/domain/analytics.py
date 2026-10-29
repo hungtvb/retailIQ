@@ -179,3 +179,16 @@ def top(period: str | None = None) -> list[dict]:
             raise DomainDataError('Top-selling product name is missing')
         _nonnegative_int(row.get('units_sold'), field='units_sold')
     return rows
+
+
+def price_extreme(*, highest: bool, category: str | None = None) -> list[dict]:
+    """Rank synthetic list prices with reviewed SQL; only allow known category."""
+    if category is not None and category not in {"Accessory", "Laptop", "Phone", "Audio",
+                                                  "Peripheral", "Display", "Tablet"}:
+        raise ValueError("Unsupported catalog category")
+    direction = "DESC" if highest else "ASC"  # fixed SQL token, never user SQL
+    if category is None:
+        return query("SELECT sku,name,category,price_vnd FROM products "
+                     f"ORDER BY price_vnd {direction},sku LIMIT 1")
+    return query("SELECT sku,name,category,price_vnd FROM products WHERE category=? "
+                 f"ORDER BY price_vnd {direction},sku LIMIT 1", (category,))
