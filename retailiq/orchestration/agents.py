@@ -5,7 +5,7 @@ supervisor; their scoped graph state is not mixed into the main conversation.
 """
 from __future__ import annotations
 import os
-from retailiq.assistant import do
+from retailiq.queries import do
 from retailiq.domain.analytics import month
 from retailiq.skills import load_skill
 from retailiq.observability import log_event, observed
