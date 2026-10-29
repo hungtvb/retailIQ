@@ -137,3 +137,29 @@ def test_graph_ui_assets_and_sse_link(client):
     assert "textContent" in graph
     assert "chatEvent(event)" in appjs
     assert "graph?.replay(result.events)" in ui
+
+
+def test_mcp_adapter_is_only_claimed_when_actually_invoked(client, monkeypatch):
+    api, _ = client
+    import retailiq.mcp_adapter as adapter
+    from retailiq.domain.analytics import inventory
+    calls = []
+    def fake_mcp(sku):
+        calls.append(sku)
+        return inventory(sku)
+    monkeypatch.setattr(adapter, "read_inventory", fake_mcp)
+    monkeypatch.setenv("RETAILIQ_WORKFLOW_USE_MCP", "1")
+    result = submit(api, "week2").json()
+    assert result["status"] == "completed"
+    assert calls == ["EL-003"]
+    assert "Real stdio MCP inventory tool" in result["events"][1]["detail"]
+
+
+def test_scope_guard_filters_simulated_analyst_rows(client):
+    api, _ = client
+    analyst = submit(api, "week3", role="analyst").json()
+    manager = submit(api, "week3", role="manager").json()
+    assert "ST-HCM only" in analyst["events"][1]["detail"]
+    assert "1 permitted locations" in analyst["events"][2]["detail"]
+    assert "all locations" in manager["events"][1]["detail"]
+    assert "3 permitted locations" in manager["events"][2]["detail"]
