@@ -15,7 +15,7 @@ def test_trace_persisted_and_request_scoped(tmp_path, monkeypatch):
 
     response = client.post('/ask/stream', json={
         'question':'Which products are top sellers?', 'session_id':first})
-    frames = [chunk for chunk in response.text.split('\\n\\n') if 'event: result' in chunk]
+    frames = [chunk for chunk in response.text.split('\n\n') if 'event: result' in chunk]
     assert response.status_code == 200 and frames
     result = json.loads(frames[0].split('data: ', 1)[1])
     rid = result['request_id']
@@ -48,7 +48,7 @@ def test_trace_rejects_unsaved_turn_and_redacts_fields(tmp_path, monkeypatch):
 
     result = client.post('/ask/stream', json={
         'question':'Which products are top sellers?', 'session_id':first})
-    frames = [x for x in result.text.split('\\n\\n') if 'event: result' in x]
+    frames = [x for x in result.text.split('\n\n') if 'event: result' in x]
     rid = json.loads(frames[0].split('data: ', 1)[1])['request_id']
     good = {'event':'agent.routed','request_id':rid,'session_id':first,
             'agent':'sales_agent','prompt':'SECRET', 'answer':'PRIVATE',
