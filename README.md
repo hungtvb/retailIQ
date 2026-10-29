@@ -22,6 +22,13 @@ and restart instead of installing a similarly named external package.
 
 Requires Python 3.11+ and an OpenAI-compatible chat and embedding provider.
 
+`requirements-full.txt` installs the application runtime (chat, agents, LangGraph,
+Chroma, LangSmith) **without RAGAS**. For the separate course evaluation step,
+install `requirements-eval.txt` and then run `python -m scripts.eval_ragas`.
+RAGAS brings in `scikit-network`; it is not needed to chat. On a platform
+without a compatible prebuilt wheel, this separation avoids requiring a C/C++
+compiler merely to start RetailIQ.
+
 ```bash
 python -m venv .venv
 # Linux/macOS
