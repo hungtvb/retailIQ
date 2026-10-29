@@ -92,7 +92,8 @@ export function applyExecutionEvent(state: GraphState, event: ExecutionEvent): G
     // Handoff proves transfer, NOT completion of the source agent.
     const source = nodes.find(n => n.id === from);
     nodes = upsertNode(nodes, completed(concise(event.previous_agent), 'agent', from,
-      source?.status === 'completed' ? 'completed' : 'observed'));
+      source?.status === 'completed' || source?.status === 'failed' ?
+        source.status : 'observed'));
     nodes = upsertNode(nodes, completed(concise(event.target_agent), 'agent', to, 'running'));
     edges = upsertEdge(edges, edge(from, to, 'handoff', 'completed'));
   } else if (name.startsWith('agent.subagent.') && event.agent && event.subagent) {
@@ -104,7 +105,10 @@ export function applyExecutionEvent(state: GraphState, event: ExecutionEvent): G
   } else if (name === 'chat.turn_result' && event.agent) {
     // The backend identifies the responsible final agent. This is the
     // only evidence-backed association between execution and the answer.
-    nodes = upsertNode(nodes, completed(concise(event.agent), 'agent', agentId, 'observed'));
+    const owner = nodes.find(n => n.id === agentId);
+    nodes = upsertNode(nodes, completed(concise(event.agent), 'agent', agentId,
+      owner?.status === 'completed' || owner?.status === 'failed' ?
+        owner.status : 'observed'));
     edges = upsertEdge(edges, edge(agentId, 'answer', 'result', 'observed'));
   } else if (name === 'skill.selected' && event.skill) {
     // Selection proves intended skill, not the execution of that skill.
