@@ -40,14 +40,20 @@ Each scenario is described by a server-provided JSON graph:
 - `status`: completed / blocked / pending_manager / approved_simulated / rejected.
 
 The renderer creates accessible focusable DOM nodes and SVG paths with arrowheads,
-no external graph dependency. Backend details are inserted via `textContent`,
-not via `innerHTML`; clicking a node reveals its recorded evidence.
+no external graph dependency. **Overview** shows phase lanes and executed handoffs;
+**Tools & sources** adds Step → Tool/Operation → Data Source reference chains.
+The **Node inspector** distinguishes recorded event evidence from implementation
+metadata; the **Execution timeline** supports node selection and replay.
+Backend details are inserted via `textContent`, not via `innerHTML`.
 
 **Chat graph:** live logs can be emitted by offline reviewed SQL or by full-mode
 LangGraph. Only observed tool steps appear as completed evidence.
 
-**Workflow tab:** requests return a persisted trace, which the UI replays
-with animation. A node is not marked complete unless present in the trace.
+**Workflow tab:** requests return a persisted trace shown immediately;
+**Replay steps** animates it on request. A node is not marked complete unless
+present in the trace. `graph.lineage` is a source/operation reference, **not
+additional observed agent tool calls**. Week 3/4 specialists consume preflight
+SQLite data and deterministic calculations.
 A blocked verification never emits an approval event; on review, the persisted
 decision appends manager and finalize events with their handoff.
 
@@ -123,6 +129,7 @@ python -m pytest -q tests/test_four_week_workflows.py
 node --check web/assets/workflow-graph.js
 node --check web/assets/workflow-ui.js
 node --test tests/frontend_format.test.cjs
+node --test tests/workflow_ui_journey.test.cjs
 ```
 
 Key regression conditions: graph edges point to known nodes, timestamp freshness
@@ -135,3 +142,20 @@ injection in new graph rendering.
 the optional route; they do not prove a live stdio MCP server handshake,
 live LLM, Langfuse, DeepEval, hybrid reranker quality, or autonomous A2A protocol.
 Capture those separately if course grading requires them.
+
+## Real browser E2E acceptance (not a unit test)
+
+GitHub Actions starts the actual FastAPI app and seeded SQLite, opens it in
+headless Chromium, navigates all five scenarios across Weeks 1–4, checks
+tool/source provenance, recorded states, replay, approval and rejection.
+The Week 4 screenshot is stored in the Actions artifact named
+`retailiq-week4-browser-screenshot`.
+
+To run locally with Chrome/Chromium already installed:
+
+`python -m pip install playwright`
+`python -m scripts.smoke_workflow_browser`
+
+This confirms the offline synthetic user journey in a real browser. It does
+not establish live LLM calls, autonomous A2A, real MCP transport or
+authenticated manager approval. A green pytest suite alone is not UI acceptance.
