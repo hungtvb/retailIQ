@@ -203,7 +203,14 @@ function EvidenceTable({evidence}: {evidence?:Evidence}) {
   const sources=(evidence?.contexts || []).flatMap(x=>x.source?[x.source]:[]).slice(0,5);
   if (!rows.length && !sources.length) return null;
   const allKeys=rows.length?Object.keys(rows[0]):[];
-  const keys=allKeys.slice(0,12);
+  // Put evidence that answers a retail question before incidental identifiers.
+  // The dataset values stay unchanged; this only reorders visible columns.
+  const firstKeys=['sku','name','location','available','units_sold',
+    'net_revenue_vnd','on_hand','reserved','revenue','quantity'];
+  const keys=[
+    ...firstKeys.filter(key=>allKeys.includes(key)),
+    ...allKeys.filter(key=>!firstKeys.includes(key))
+  ].slice(0,12);
   return <div className="answer-evidence">
     <div className="evidence-top"><span>Source records</span>
       <span>{rows.length} row{rows.length===1?'':'s'} · {keys.length} column{keys.length===1?'':'s'}</span></div>
