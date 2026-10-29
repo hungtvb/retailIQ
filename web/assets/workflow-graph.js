@@ -227,7 +227,22 @@
       canvas.appendChild(button);
     });
     viewport.appendChild(canvas);
+    // Show all four phases at once when space permits; preserve horizontal
+    // scrolling on smaller screens where labels would become unreadable.
+    if (host.__riGraphObserver) host.__riGraphObserver.disconnect();
     host.replaceChildren(viewport);
+    if (typeof root.ResizeObserver === 'function') {
+      const fit = () => {
+        const available = viewport.clientWidth;
+        if (!available) return; // scenario graph may be hidden until selected
+        canvas.style.zoom = available >= 630
+          ? String(Math.min(1, (available - 10) / width)) : '';
+      };
+      const observer = new root.ResizeObserver(fit);
+      observer.observe(viewport);
+      host.__riGraphObserver = observer;
+      if (typeof root.requestAnimationFrame === 'function') root.requestAnimationFrame(fit);
+    }
     if(options.detailed && Object.keys(lineage).length) {
       const section=document.createElement('section');
       section.className='graph-provenance';
