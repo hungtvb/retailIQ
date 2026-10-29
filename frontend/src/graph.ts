@@ -101,6 +101,11 @@ export function applyExecutionEvent(state: GraphState, event: ExecutionEvent): G
     nodes = upsertNode(nodes, completed(concise(event.agent), 'agent', from, 'running'));
     nodes = upsertNode(nodes, completed(concise(event.subagent), 'subagent', to, status));
     edges = upsertEdge(edges, edge(from, to, 'delegate', status));
+  } else if (name === 'chat.turn_result' && event.agent) {
+    // The backend identifies the responsible final agent. This is the
+    // only evidence-backed association between execution and the answer.
+    nodes = upsertNode(nodes, completed(concise(event.agent), 'agent', agentId, 'observed'));
+    edges = upsertEdge(edges, edge(agentId, 'answer', 'result', 'observed'));
   } else if (name === 'skill.selected' && event.skill) {
     // Selection proves intended skill, not the execution of that skill.
     const owner = activeAgent || nodes.findLast(n => n.kind === 'agent');
@@ -135,15 +140,11 @@ export function finishGraph(state: GraphState, ok: boolean): GraphState {
     { ...e, status: 'observed' as const } : e);
   nodes = upsertNode(nodes, {id:'request',label:'User request',kind:'request',
     status:ok?'completed':'failed'});
-  const terminal = nodes.findLast(n => n.kind === 'tool' || n.kind === 'mcp' ||
-    n.kind === 'agent' || n.kind === 'subagent');
   if (ok) {
     nodes = upsertNode(nodes, {id:'answer',label:'Response delivered',
       kind:'output',status:'completed'});
-    // This association is inferred from the terminal observation and final
-    // result event, not an observed agent-to-agent handoff.
-    if (terminal) edges = upsertEdge(edges, edge(terminal.id,'answer','result','observed'));
-    else edges = upsertEdge(edges,edge('request','answer','result','observed'));
+    // No invented dependency: without an observed chat.turn_result agent,
+    // output deliberately has no incoming edge.
   }
   return { ...state, nodes, edges, phase:ok?'complete':'failed' };
 }
