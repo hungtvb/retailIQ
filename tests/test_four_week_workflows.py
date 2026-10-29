@@ -36,7 +36,7 @@ def test_definitions_accurate_and_graph_connected(client):
         ids = {node["id"] for node in scenario["nodes"]}
         assert scenario["edges"]
         assert all(e["from"] in ids and e["to"] in ids for e in scenario["edges"])
-        assert len(scenario["edges"]) == len(ids) - 1
+        assert len(scenario["edges"]) >= len(ids) - 1
         assert scenario["execution"] == "deterministic_local_simulation"
     assert len([node for node in scenarios["week4"]["nodes"] if node["kind"] == "agent"]) == 5
     assert "not authentication" in response.json()["role_notice"]
@@ -184,3 +184,31 @@ def test_approval_report_reflects_final_state(client):
     assert "Manager decision: approved_simulated" in reviewed["report"]
     assert "review pending" not in reviewed["report"]
     assert reviewed["events"][-1]["from"] == "manager_approval"
+
+
+def test_week4_verification_replans_split_stock_once(client):
+    api, data = client
+    with sqlite3.connect(data) as db:
+        db.execute("UPDATE inventory SET on_hand=reserved+8 WHERE sku='EL-003'")
+    run = submit(api, "week4", quantity=20).json()
+    assert run["status"] == "pending_manager"
+    checks = [e for e in run["events"] if e["node"] == "verification"]
+    assert [e["status"] for e in checks] == ["running", "completed"]
+    assert "replan" in checks[0]["detail"]
+    assert "allocation " in run["report"]
+    assert any(e["from"] == "verification" and
+               e["node"] == "fulfilment_optimisation_agent" for e in run["events"])
+    assert any(e["from"] == "fulfilment_optimisation_agent" and
+               e["node"] == "order_management_agent" for e in run["events"])
+    graph = run["graph"]
+    assert {"from":"verification","to":"fulfilment_optimisation_agent",
+            "label":"retry"} in graph["edges"]
+
+
+def test_week1_preview_reports_real_sql_not_live_langgraph(client):
+    api, _ = client
+    run = submit(api, "week1").json()
+    assert run["status"] == "completed"
+    assert "Deterministic preview, not live LangGraph" in run["report"]
+    assert [e["node"] for e in run["events"]] == [
+        "request", "router", "sales_agent", "sql_tool", "evidence", "answer"]
