@@ -62,7 +62,9 @@ jobs:
         if: always()
         with:
           name: retailiq-workflow-browser-evidence
-          path: data/workflow_week4_*chromium.png
+          path: |
+            data/workflow_week4_*chromium.png
+            data/retailiq_ui_*chromium.png
           if-no-files-found: ignore
           retention-days: 7
 
