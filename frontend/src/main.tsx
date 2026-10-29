@@ -202,16 +202,19 @@ function EvidenceTable({evidence}: {evidence?:Evidence}) {
   ):[];
   const sources=(evidence?.contexts || []).flatMap(x=>x.source?[x.source]:[]).slice(0,5);
   if (!rows.length && !sources.length) return null;
-  const keys=rows.length?Object.keys(rows[0]).slice(0,5):[];
+  const allKeys=rows.length?Object.keys(rows[0]):[];
+  const keys=allKeys.slice(0,12);
   return <div className="answer-evidence">
     <div className="evidence-top"><span>Source records</span>
-      <span>{rows.length} row{rows.length===1?'':'s'}</span></div>
-    {rows.length>0 && <div className="evidence-table-wrap"><table>
+      <span>{rows.length} row{rows.length===1?'':'s'} · {keys.length} column{keys.length===1?'':'s'}</span></div>
+    {rows.length>0 && <div className="evidence-table-wrap" tabIndex={0}
+      aria-label="Source records table; scroll horizontally for additional columns"><table>
       <thead><tr>{keys.map(key=><th key={key}>{key.replaceAll('_',' ')}</th>)}</tr></thead>
       <tbody>{rows.slice(0,6).map((row,i)=><tr key={i}>{keys.map(key=><td key={key}>
         {typeof row[key]==='number'?Number(row[key]).toLocaleString('en-US'):
           row[key]==null?'—':String(row[key])}</td>)}</tr>)}</tbody>
     </table></div>}
+    {allKeys.length>12&&<p className="evidence-small">Showing first 12 of {allKeys.length} evidence columns</p>}
     {rows.length>6&&<p className="evidence-small">Showing 6 of {rows.length} returned rows</p>}
     {sources.length>0&&<div className="source-tags">{sources.map((source,i)=>
       <span key={i}>{source}</span>)}</div>}
