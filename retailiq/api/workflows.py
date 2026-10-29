@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Literal
 from retailiq.domain.workflow_demo import definitions, run_demo, read_run, review_run
+from retailiq.domain.semantic import contracts
 
 router = APIRouter(prefix="/api/workflows", tags=["workflow-demo"])
 
@@ -23,6 +24,11 @@ class ReviewInput(BaseModel):
 def get_definitions():
     return {"scenarios": definitions(), "scope": "synthetic_local_simulation",
             "role_notice": "Role picker is a teaching aid, not authentication or real RBAC."}
+
+
+@router.get("/semantics")
+def get_semantics():
+    return contracts()
 
 
 @router.post("/run")
