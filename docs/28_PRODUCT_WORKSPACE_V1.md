@@ -14,6 +14,9 @@ This work starts on branch `feature/product-workspace-v1`, based on `feature/fou
 - **Truthful evidence:** Only observed SSE events create active agent/tool/skill/handoff nodes. A selected skill is labeled *selected*, not *executed*. No MCP/subagent node unless a real matching event arrives. A persisted answer does not imply its live trace is available after reload.
 - **Safety:** Only show allowlisted event metadata. UI uses React text rendering; do not inject model HTML. Existing application is local-only and unauthenticated.
 - **Initial state:** Empty conversations show an empty graph, not a fabricated example execution.
+- **Trace durability (v1.1):** Streamed requests save up to 160 allowlisted metadata events per successful assistant turn, keyed by its `request_id` and session. Saved traces reload through `GET /api/sessions/{id}/traces/{request_id}`. Missing legacy traces remain visibly unavailable; truncated traces are labeled partial. Deleting a session cascades to its traces.
+- **Execution attribution:** A handoff is not proof that the source agent completed. Response links are created only when `chat.turn_result` identifies the responsible agent. Display-only connections never imply an unobserved MCP/skill call.
+- **Layout:** Stable multi-row placement without collisions; small screens use a legible zigzag/stack rather than shrinking an 800px diagram. Dense desktop graphs can scroll within the visualization.
 
 ## UX
 
@@ -24,9 +27,9 @@ Visual identity: off-white canvas, crisp typography, low-contrast boundaries, gr
 ## Validation acceptance
 
 1. Build + TS typecheck.
-2. Session new/switch/delete, SSE streamed answer and evidence, no fake historical trace.
-3. Matrix nodes and edge states only from emitted events; no invented MCP/subagent connections.
-4. Desktop/mobile screenshots with no page overflow, working chat input.
+2. Session new/switch/delete, SSE streamed answer and evidence, authenticated-to-session trace selection and exact saved trace replay.
+3. Matrix nodes and edge states only from emitted events; no invented MCP/subagent connections or completion states.
+4. Desktop/mobile/handoff screenshots, collision detection and final-result provenance checks on actual Chromium geometry.
 5. Existing Python business/scenario audits remain green.
 
 ## Run
@@ -40,4 +43,6 @@ Open `http://127.0.0.1:8000/workspace`. For development: run Vite in `frontend` 
 
 ## Next work, not claimed complete
 
-Persist event traces per request; support selecting an answer to replay its real trace; richer skill/MCP metadata; accessible graph summaries; authenticated roles and hardened deployment. These need separate scoped design and testing.
+- Full tracing for non-streamed POST requests (streamed conversations only in v1.1).
+- Graph-side presentation of causal MCP/resource/skill relations based on newly instrumented real events; current test contracts are synthetic and do **not** establish that every runtime can emit those events.
+- User authentication, access control, multi-worker synchronization, larger graphs and deployment hardening. A local-only app is not production-ready.
