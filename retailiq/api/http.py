@@ -18,6 +18,7 @@ from retailiq.observability import bind_context, new_request_id, log_event, log_
 from retailiq.api.roi import router as roi_router
 from retailiq.api.sessions import router as sessions_router
 from retailiq.api.logs import router as logs_router
+from retailiq.api.workflows import router as workflows_router
 from fastapi import Request
 
 # Bound streaming capacity: prevent slow providers or disconnected clients
@@ -25,15 +26,18 @@ from fastapi import Request
 _STREAM_WORKER_SLOTS = threading.BoundedSemaphore(value=8)
 _STREAM_QUEUE_LIMIT = 128
 
-app = FastAPI(title='RetailIQ Copilot - Week 1 Multi-Agent')
+app = FastAPI(title='RetailIQ Copilot - Four-Week Local Demo')
 app.include_router(roi_router)
 app.include_router(sessions_router)
 app.include_router(logs_router)
+app.include_router(workflows_router)
 app.mount('/assets', StaticFiles(directory=Path(__file__).resolve().parents[2] / 'web' / 'assets'), name='assets')
 
 
 def _safe_http_path(path: str) -> str:
     """Canonicalize route labels so customer values embedded in URLs are not logged."""
+    if path.startswith('/api/workflows/'):
+        return '/api/workflows/{operation}'
     if path in ('/ask', '/ask/stream', '/api/sessions', '/api/roi/defaults', '/api/roi/estimate'):
         return path
     if re.fullmatch(r'/api/sessions/[0-9a-fA-F-]{36}', path):
