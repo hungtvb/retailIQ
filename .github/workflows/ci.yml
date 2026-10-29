@@ -35,3 +35,4 @@ jobs:
           node --check web/assets/workflow-ui.js
           node --check web/assets/app.js
           node --test tests/frontend_format.test.cjs
+          node --test tests/workflow_ui_journey.test.cjs
