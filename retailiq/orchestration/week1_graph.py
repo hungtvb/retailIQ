@@ -12,7 +12,8 @@ import atexit
 import threading
 from pathlib import Path
 import sqlite3
-from retailiq.queries import intent, do, product_sku, wants_single_latest_product
+from retailiq.queries import (intent, do, product_sku, wants_single_latest_product,
+                              requested_top_count, is_multi_stock_question, is_price_extreme)
 from retailiq.reply import retailiq_reply
 from retailiq.domain.analytics import month, products, requested_month, top
 from retailiq.core.config import chat_model, configure_langsmith
@@ -52,13 +53,14 @@ def classify(question: str) -> str:
         return 'latest'
     sales = ('top seller', 'best seller', 'bán chạy', 'bestseller', 'selling most')
     stock = ('stock', 'inventory', 'tồn kho', 'available', 'replenish', 'reorder', 'restock', 'bổ sung')
-    if any(x in q for x in sales) and any(x in q for x in stock):
-        # A pure stock lookup mentioning 'top seller' is not a replenishment decision.
-        if any(x in q for x in ('how many', 'what is the stock', 'how much stock', 'bao nhiêu')):
-            return 'stock'
-        return 'decision'
     if any(x in q for x in ('replenishment review', 'inventory decision', 'bổ sung hàng bán chạy')):
         return 'decision'
+    if any(x in q for x in sales) and any(x in q for x in stock):
+        # Stock coverage is not a purchasing/replenishment recommendation.
+        # Explicit action terms retain the supervisor route.
+        if any(x in q for x in ('replenish', 'reorder', 'restock', 'bổ sung')):
+            return 'decision'
+        return 'stock'
     return intent(question)
 
 
@@ -101,9 +103,28 @@ def resolve_followup(question: str, history: list[dict] | None = None,
     q = question.casefold()
     if any(p['sku'].casefold() in q or p['name'].casefold() in q for p in products()):
         return question
+    if is_multi_stock_question(question):
+        # Direct cross-domain question; do() retrieves the ranked group itself.
+        return question
+    # Only user-authored sales questions can define a ranked-stock reference.
+    # Do not extract ambiguous SKUs from assistant-generated prose.
+    previous = _previous_user_question(history)
+    if category == 'stock' and previous and classify(previous) == 'top':
+        ranked_count = requested_top_count(previous)
+        ranked_period = requested_month(previous)
+        rank = re.search(r'(?:đứng\s*thứ|xếp\s*thứ|rank(?:ed)?\s*#?)\s*(\d+)', q)
+        if rank and 1 <= int(rank.group(1)) <= ranked_count:
+            ranked = top(ranked_period)
+            index = int(rank.group(1)) - 1
+            return question + (' ' + ranked[index]['sku'] if index < len(ranked) else '')
+        references_group = any(marker in q for marker in (
+            'các sản phẩm đó', 'các sản phẩm ấy', 'những sản phẩm đó',
+            'those products', 'these products', 'all of them'))
+        if references_group:
+            return f'Stock for top {ranked_count} best sellers in {ranked_period}'
     if 'top seller' in q or 'best seller' in q or 'bán chạy' in q:
-        rows = top()
-        return question + (' ' + rows[0]['sku'] if rows else '')
+        ranked = top(requested_month(question))
+        return question + (' ' + ranked[0]['sku'] if ranked else '')
     # Model answers may contain untrusted RAG text, multiple product names or
     # hallucinated SKUs. Only the user's own explicit reference may anchor a
     # follow-up; a top-seller question above uses reviewed SQL instead.
@@ -122,7 +143,7 @@ def resolve_followup(question: str, history: list[dict] | None = None,
             rows = newest_products(1)
             return question + (' ' + rows[0]['sku'] if rows else '')
         if previous_category == 'top':
-            rows = top()
+            rows = top(requested_month(content))
             return question + (' ' + rows[0]['sku'] if rows else '')
         if previous_category == 'general' and not _referential(content):
             return question
@@ -198,6 +219,9 @@ def product_agent(state: State):
     with observed('agent.product', agent='product_agent', execution_mode='full'):
         if state['intent'] == 'latest':
             result = {'answer': '', 'records': newest_products(1 if wants_single_latest_product(state['question']) else 5), 'contexts': [],
+                      'skill': 'catalog_lookup', 'agent': 'product_agent'}
+        elif is_price_extreme(state['effective_question']):
+            result = {**do(state['effective_question'], 'product'),
                       'skill': 'catalog_lookup', 'agent': 'product_agent'}
         elif any(word in state['question'].casefold() for word in ('giá', 'price', 'cost')) and product_sku(state['effective_question']):
             item = catalog_product(product_sku(state['effective_question']))
