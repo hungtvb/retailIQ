@@ -108,6 +108,7 @@
     } catch(error) {
       status('Cannot load workflow definitions: '+error.message,true);
     }
+    $('workflow-form').addEventListener('submit',e=>{e.preventDefault();execute();});
     $('workflow-scenario').addEventListener('change',preview);
     $('workflow-run').addEventListener('click',execute);
     $('workflow-approve').addEventListener('click',()=>review('approve'));
