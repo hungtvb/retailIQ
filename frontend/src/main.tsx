@@ -18,6 +18,7 @@ type Message = {
   content: string;
   agent?: string;
   evidence?: Evidence;
+  request_id?: string | null;
 };
 type SessionItem = { id: string; title: string; active_agent?: string };
 type Session = SessionItem & { messages: Message[]; messages_truncated?: boolean };
@@ -26,6 +27,12 @@ type AskResult = Evidence & {
   request_id?: string; mode?: string; intent?: string;
 };
 type Phase = 'ready' | 'running' | 'complete' | 'error';
+type StoredTrace = {
+  request_id: string;
+  status: 'complete';
+  truncated: boolean;
+  events: ExecutionEvent[];
+};
 
 const IDEAS = [
   {label:'Top sellers',question:'Which products are top sellers?'},
@@ -62,6 +69,23 @@ function arc(from: PositionedNode, to: PositionedNode, kind: string): string {
   const cy=(y1+y2)/2 + ux*bend;
   return 'M '+x1+' '+y1+' Q '+cx+' '+cy+' '+x2+' '+y2;
 }
+function wrapNodeLabel(label: string, limit = 18): string[] {
+  const words = label.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  for (const word of words) {
+    const index = lines.length - 1;
+    if (index >= 0 && lines[index].length + word.length + 1 <= limit) {
+      lines[index] += ' ' + word;
+    } else if (lines.length < 2) {
+      lines.push(word.slice(0, limit));
+    }
+  }
+  if (lines.length === 0) return ['—'];
+  if (words.join(' ').length > lines.join(' ').length) {
+    lines[lines.length - 1] = lines[lines.length - 1].slice(0, limit - 1) + '…';
+  }
+  return lines;
+}
 function MatrixNode({node}: {node: PositionedNode}) {
   const colors: Record<string,string> = {
     request:'#8095aa',agent:'#895ed2',subagent:'#a77ce4',
@@ -69,28 +93,48 @@ function MatrixNode({node}: {node: PositionedNode}) {
   };
   const c=colors[node.kind] || '#8193a8';
   const isLive=node.status==='running';
+  const labelLines = wrapNodeLabel(node.label);
+  const hasSkill = Boolean(node.skill);
+  const height = hasSkill ? 108 : 87;
   return <g className={'matrix-node matrix-'+node.kind+' state-'+node.status}
-    transform={'translate('+node.x+' '+node.y+')'} aria-label={node.label+', '+formatStatus(node.status)}>
-    <rect className="matrix-node-halo" x="-85" y="-40" width="170" height={node.skill ? 100 : 80} rx="16"
-      fill={c} opacity={isLive?.12:0}/>
-    <rect x="-80" y="-35" width="160" height={node.skill?90:70} rx="12"
-      fill="white" stroke={node.status==='failed'?'#db6567':c} strokeWidth={node.status==='running'?2.5:1.5}/>
-    <rect x="-80" y="-35" width="5" height={node.skill?90:70} rx="3" fill={c}/>
-    <circle cx="-57" cy="-12" r="5" fill={node.status==='failed'?'#e46e6b':
-      node.status==='completed'?'#22af87':isLive?c:'#c3cbd3'}/>
-    <text x="-43" y="-8" fill="#607084" className="matrix-node-type">{node.kind==='mcp'?'MCP TOOL':node.kind.toUpperCase()}</text>
-    <text x="-63" y="14" className="matrix-node-label">{node.label.length>22?node.label.slice(0,21)+'…':node.label}</text>
-    <text x="-63" y="29" className={'matrix-node-state text-'+node.status}>{formatStatus(node.status)}</text>
-    {node.skill && <>
-      <rect x="-65" y="41" width="130" height="18" rx="6" fill="#effaf6" stroke="#b9e5d8"/>
-      <text x="0" y="53.4" textAnchor="middle" className="matrix-skill">
-        {'Skill selected · '+node.skill.slice(0,13)}
+    transform={'translate('+node.x+' '+node.y+')'}
+    aria-label={node.label+', '+formatStatus(node.status)}>
+    <rect className="matrix-node-halo" x="-94" y="-48" width="188" height={height+8}
+      rx="17" fill={c} opacity={isLive?.15:0}/>
+    <rect x="-90" y="-44" width="180" height={height} rx="13"
+      fill="white" stroke={node.status==='failed'?'#db6567':c}
+      strokeWidth={node.status==='running'?2.6:1.8}/>
+    <rect x="-90" y="-44" width="5" height={height} rx="2.5" fill={c}/>
+    <circle cx="-67" cy="-22" r="5" fill={node.status==='failed'?'#e46e6b':
+      node.status==='completed'?'#22af87':isLive?c:'#98a9b5'}/>
+    <text x="-52" y="-18" fill="#607084" className="matrix-node-type">
+      {node.kind==='mcp'?'MCP TOOL':node.kind.toUpperCase()}
+    </text>
+    {labelLines.map((line,i)=><text key={i} x="-70"
+      y={i===0?7:26} className="matrix-node-label">{line}</text>)}
+    <text x="-70" y={labelLines.length>1?41:27}
+      className={'matrix-node-state text-'+node.status}>{formatStatus(node.status)}</text>
+    {hasSkill && <>
+      <rect x="-70" y="48" width="140" height="21" rx="6"
+        fill="#effaf6" stroke="#b9e5d8"/>
+      <text x="0" y="62" textAnchor="middle" className="matrix-skill">
+        {'Selected: '+node.skill!.slice(0,17)}
       </text>
     </>}
   </g>;
 }
 function GraphCanvas({graph}: {graph:GraphState}) {
-  const positioned=positionGraph(graph);
+  const [compact,setCompact]=useState(() => window.matchMedia('(max-width: 670px)').matches);
+  useEffect(()=>{
+    const media=window.matchMedia('(max-width: 670px)');
+    const onChange=()=>setCompact(media.matches);
+    media.addEventListener('change',onChange);
+    return ()=>media.removeEventListener('change',onChange);
+  },[]);
+  const positioned=positionGraph(graph,compact);
+  const canvasHeight = compact ? Math.max(510,...positioned.map(n=>n.y+65)) :
+    Math.max(560,...positioned.map(n=>n.y+75));
+  const canvasWidth = compact ? 360 : 800;
   const lookup=new Map(positioned.map(n=>[n.id,n]));
   const available=graph.phase!=='empty' && graph.phase!=='unavailable';
   return <div className="matrix-wrap" aria-label="Observed agent execution network">
@@ -101,7 +145,8 @@ function GraphCanvas({graph}: {graph:GraphState}) {
         ? 'Saved answers are available, but their execution events are not yet persisted.'
         : 'The network appears when a question starts. Nodes reflect recorded execution events only.'}</p>
     </div> :
-    <svg className="matrix-svg" viewBox="0 0 800 560" role="img"
+    <svg className={'matrix-svg'+(compact?' matrix-svg-mobile':'')}
+      viewBox={'0 0 '+canvasWidth+' '+canvasHeight} role="img"
       aria-label={positioned.length+' observed execution nodes and '+graph.edges.length+' relationships'}>
       <defs>
         <pattern id="matrix-grid" width="24" height="24" patternUnits="userSpaceOnUse">
@@ -120,10 +165,10 @@ function GraphCanvas({graph}: {graph:GraphState}) {
           <path d="M2 2 L10 6 L2 10" fill="none" stroke="#448bd0" strokeWidth="1.8"/>
         </marker>
       </defs>
-      <rect width="800" height="560" rx="16" fill="#f9fcfb"/>
-      <rect width="800" height="560" rx="16" fill="url(#matrix-grid)"/>
-      <circle cx="400" cy="280" r="205" fill="none" stroke="#e8f3f0" strokeWidth="1.2" strokeDasharray="5 7"/>
-      <circle cx="400" cy="280" r="110" fill="none" stroke="#edf5f2" strokeWidth="1" strokeDasharray="3 8"/>
+      <rect width={canvasWidth} height={canvasHeight} rx="16" fill="#f9fcfb"/>
+      <rect width={canvasWidth} height={canvasHeight} rx="16" fill="url(#matrix-grid)"/>
+      <circle cx={canvasWidth/2} cy={canvasHeight/2} r={compact?140:205} fill="none" stroke="#e8f3f0" strokeWidth="1.2" strokeDasharray="5 7"/>
+      <circle cx={canvasWidth/2} cy={canvasHeight/2} r={compact?84:110} fill="none" stroke="#edf5f2" strokeWidth="1" strokeDasharray="3 8"/>
       {graph.edges.map(e=>{
         const a=lookup.get(e.from),b=lookup.get(e.to);
         if(!a || !b) return null;
