@@ -166,6 +166,19 @@ def chat_query_journey(page, fixture_db: Path) -> None:
     rows, answer = submit("Tồn kho của sản phẩm đứng thứ 2?")
     verify_stock(rows, answer, "2026-09", 5, rank=2)
 
+    # An out-of-range reference must NOT silently resolve to the top seller.
+    new_chat()
+    submit("Top 3 sản phẩm bán chạy tháng 9 năm 2026?")
+    rows, answer = submit("Tồn kho của sản phẩm đứng thứ 4?")
+    assert rows == [], "Out-of-range rank silently returned an inventory SKU"
+    assert answer.strip(), "Missing clarification when rank is outside known list"
+
+    # The English plural must preserve all five products, not pick the first.
+    new_chat()
+    submit("Which products are top sellers?")
+    rows, answer = submit("What about their stock?")
+    verify_stock(rows, answer, "2026-10", 5)
+
 
 def workflow_edge_journey(page, db: Path) -> None:
     """Real-browser status, retry, and freshness checks against isolated SQLite."""
