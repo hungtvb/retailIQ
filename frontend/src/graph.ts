@@ -4,7 +4,7 @@
  * No graph framework, random positions, or synthetic execution events.
  */
 export type NodeKind = 'request' | 'agent' | 'subagent' | 'tool' | 'mcp' | 'output';
-export type NodeStatus = 'running' | 'completed' | 'failed' | 'pending';
+export type NodeStatus = 'running' | 'completed' | 'failed' | 'pending' | 'observed';
 export type EdgeKind = 'route' | 'call' | 'handoff' | 'delegate' | 'result' | 'mcp';
 export interface GraphNode {
   id: string;
@@ -124,8 +124,12 @@ export function applyExecutionEvent(state: GraphState, event: ExecutionEvent): G
 export function finishGraph(state: GraphState, ok: boolean): GraphState {
   if (state.phase !== 'running') return state;
   let nodes = state.nodes, edges = state.edges;
+  // A delivered response does not prove every intermediate node completed.
+  // Without an explicit *.completed event, mark that step as observed.
   nodes = nodes.map(n => n.status === 'running' && n.kind !== 'request' ?
-    { ...n, status: ok ? 'completed' as const : 'failed' as const } : n);
+    { ...n, status: 'observed' as const } : n);
+  edges = edges.map(e => e.status === 'running' ?
+    { ...e, status: 'observed' as const } : e);
   nodes = upsertNode(nodes, {id:'request',label:'User request',kind:'request',
     status:ok?'completed':'failed'});
   const terminal = nodes.findLast(n => n.kind === 'tool' || n.kind === 'mcp' ||
