@@ -6,7 +6,11 @@ No LLM provider or external business service is needed for these simulations.
 from __future__ import annotations
 
 import os
+from datetime import date, datetime, timedelta, timezone
+from contextlib import closing
 from pathlib import Path
+import sqlite3
+import tempfile
 import shutil
 import subprocess
 import sys
@@ -86,14 +90,14 @@ def journey(page) -> None:
     )
 
 
-def chat_query_journey(page) -> None:
+def chat_query_journey(page, fixture_db: Path) -> None:
     """Real browser conversational journeys with SQL-independent stock expectations."""
     import json
     from collections import defaultdict
 
     from scripts.audit_queries import Oracle
 
-    oracle = Oracle(Path("data/retailiq.sqlite3"))
+    oracle = Oracle(fixture_db)
 
     page.locator("#tab-assistant").click()
 
@@ -163,37 +167,105 @@ def chat_query_journey(page) -> None:
     verify_stock(rows, answer, "2026-09", 5, rank=2)
 
 
+def workflow_edge_journey(page, db: Path) -> None:
+    """Real-browser status, retry, and freshness checks against isolated SQLite."""
+    def edit(sql: str, params: tuple = ()) -> None:
+        with closing(sqlite3.connect(db)) as conn:
+            with conn:
+                conn.execute(sql, params)
+
+    page.locator("#tab-workflows").click()
+    page.locator("#workflow-sku").fill("EL-003")
+
+    # A single stale location must invalidate the aggregate-stock freshness.
+    fresh = (datetime.now(timezone.utc)-timedelta(seconds=60)).isoformat()
+    stale = (datetime.now(timezone.utc)-timedelta(hours=2)).isoformat()
+    edit("UPDATE inventory SET updated_at=? WHERE sku='EL-003'",(fresh,))
+    edit("UPDATE inventory SET updated_at=? WHERE sku='EL-003' AND location_id='ST-HN'",(stale,))
+    page.locator("#workflow-scenario").select_option("week2")
+    page.locator("#workflow-run").click()
+    expect(page.locator("#workflow-report")).to_contain_text("Target: 15 minutes; STALE")
+    expect(page.locator('.graph-node[data-node="freshness_guard"]')).to_have_attribute(
+        "data-status","completed"
+    )
+    expect(page.locator("#workflow-node-detail")).to_contain_text(
+        "No execution event recorded for this step."
+    )
+
+    # Force a split: 8 + 8 + 4 is exactly the requested 20, not 24 shipped.
+    edit("UPDATE inventory SET on_hand=reserved+8 WHERE sku='EL-003'")
+    page.locator("#workflow-scenario").select_option("week4")
+    page.locator("#workflow-quantity").fill("20")
+    page.locator("#workflow-run").click()
+    expect(page.locator("#workflow-run-id")).to_contain_text("pending manager")
+    expect(page.locator("#workflow-report")).to_contain_text("ST-HCM: 8")
+    expect(page.locator("#workflow-report")).to_contain_text("ST-HN: 8")
+    expect(page.locator("#workflow-report")).to_contain_text("WH-HCM: 4")
+    expect(page.locator("#workflow-timeline .workflow-timeline-item")).to_have_count(11)
+    expect(page.locator(".graph-link-feedback-active")).not_to_have_count(0)
+    page.screenshot(path="data/workflow_week4_retry_chromium.png",full_page=True)
+
+    # Insufficient total stock: no manager gate, no finalization.
+    edit("UPDATE inventory SET on_hand=reserved+1 WHERE sku='EL-003'")
+    page.locator("#workflow-run").click()
+    expect(page.locator("#workflow-run-id")).to_contain_text("blocked")
+    expect(page.locator("#workflow-review-controls")).to_be_hidden()
+    expect(page.locator('.graph-node[data-node="verification"]')).to_have_attribute(
+        "data-status","blocked"
+    )
+    expect(page.locator('.graph-node[data-node="finalize"]')).to_have_attribute(
+        "data-status","skipped"
+    )
+    expect(page.locator("#workflow-report")).to_contain_text("BLOCKED")
+    page.screenshot(path="data/workflow_week4_blocked_chromium.png",full_page=True)
+
+
 def main() -> None:
     chrome = next((p for name in ("google-chrome", "google-chrome-stable", "chromium")
                    if (p := shutil.which(name))), None)
     if not chrome:
         raise RuntimeError("Chromium/Chrome not installed on browser smoke runner")
-    env = dict(os.environ, RETAILIQ_MODE="offline")
-    server = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "retailiq.api:app",
-         "--host", "127.0.0.1", "--port", "8767", "--log-level", "warning"],
-        env=env, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
-    )
-    try:
-        wait_for_app()
-        with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(
-                executable_path=chrome, headless=True,
-                args=["--no-sandbox", "--disable-dev-shm-usage"]
-            )
-            try:
-                page = browser.new_page(viewport={"width": 1440, "height": 960})
-                journey(page)
-                chat_query_journey(page)
-            finally:
-                browser.close()
-    finally:
-        server.terminate()
+    # Never run browser fixtures against the user's retailiq.sqlite3 or
+    # persisted sessions. The real API and browser receive disposable storage.
+    from scripts.seed import seed
+
+    with tempfile.TemporaryDirectory(prefix="ri-browser-e2e-") as workdir:
+        directory = Path(workdir)
+        db = directory/"retail.sqlite3"
+        seed(db,write_support_files=False,reference_date=date(2026,10,28))
+        env = dict(os.environ, RETAILIQ_MODE="offline",
+                   RETAILIQ_AS_OF="2026-10-28",
+                   RETAILIQ_WORKFLOW_USE_MCP="0",
+                   RETAILIQ_DATA_DB=str(db),
+                   RETAILIQ_CHAT_DB=str(directory/"chat.sqlite3"),
+                   RETAILIQ_WORKFLOW_DB=str(directory/"runs.sqlite3"),
+                   RETAILIQ_CHECKPOINT_DB=str(directory/"checkpoints.sqlite3"))
+        server = subprocess.Popen(
+            [sys.executable, "-m", "uvicorn", "retailiq.api:app",
+             "--host", "127.0.0.1", "--port", "8767", "--log-level", "warning"],
+            env=env, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
+        )
         try:
-            server.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            server.kill()
-            server.wait(timeout=5)
+            wait_for_app()
+            with sync_playwright() as playwright:
+                browser = playwright.chromium.launch(
+                    executable_path=chrome, headless=True,
+                    args=["--no-sandbox", "--disable-dev-shm-usage"]
+                )
+                try:
+                    page = browser.new_page(viewport={"width": 1440, "height": 960})
+                    journey(page)
+                    chat_query_journey(page, db)
+                    workflow_edge_journey(page, db)
+                finally:
+                    browser.close()
+        finally:
+            server.terminate()
+            try:
+                server.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                server.kill()
+                server.wait(timeout=5)
 
 
 if __name__ == "__main__":
