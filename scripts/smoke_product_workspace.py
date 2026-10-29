@@ -78,6 +78,9 @@ def run_journey(page):
     expect(page.locator(".chat-state")).to_contain_text("Complete", timeout=25000)
     expect(page.locator(".message-assistant")).to_have_count(2)
     expect(page.locator(".matrix-link-handoff")).to_have_count(1)
+    # The response must be attributed to the observed inventory agent, not
+    # the handoff source or the last node inserted into the frontend map.
+    expect(page.locator('.matrix-link-result[data-from="agent:inventory_agent"][data-to="answer"]')).to_have_count(1)
     assert_no_node_overlap(page)
     page.screenshot(path=str(OUT / "retailiq_product_workspace_handoff.png"), full_page=True)
     handoff_count = page.locator(".matrix-node").count()
