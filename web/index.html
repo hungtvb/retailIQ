@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f7f8fa">
+  <meta name="theme-color" content="#fbfcfd">
   <meta name="description" content="RetailIQ conversational retail analytics with evidence and agent execution.">
   <title>RetailIQ — Conversational Analytics</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="icon" type="image/svg+xml" href="/assets/brand/logo-mark.svg">
   <link rel="stylesheet" href="/assets/styles.css">
   <link rel="stylesheet" href="/assets/data-workspace.css">
@@ -29,7 +29,6 @@
       </div>
       <nav class="workspace-tabs" aria-label="RetailIQ views" role="tablist">
         <button id="tab-assistant" type="button" role="tab" aria-selected="true" aria-controls="assistant-panel">Chat</button>
-        <button id="tab-workflows" type="button" role="tab" aria-selected="false" aria-controls="workflows-panel">Graph</button>
         <button id="tab-roi" type="button" role="tab" aria-selected="false" aria-controls="roi-panel">Costs</button>
         <button id="tab-logs" type="button" role="tab" aria-selected="false" aria-controls="logs-panel">Logs</button>
       </nav>
@@ -82,7 +81,16 @@
                 <p id="chat-error" class="chat-error" role="alert" hidden></p>
               </div>
             </article>
-            <aside class="insights-column" aria-label="Evidence for the latest response">
+            <aside class="insights-column" aria-label="Request execution and workflow scenarios">
+              <div class="graph-pane-header">
+                <div class="graph-pane-title"><span class="graph-pane-orb" aria-hidden="true"></span><strong>Execution graph</strong></div>
+                <div class="graph-mode-switch" role="group" aria-label="Execution graph mode">
+                  <button id="graph-mode-request" type="button" aria-pressed="true">Request</button>
+                  <button id="graph-mode-scenario" type="button" aria-pressed="false">Scenarios</button>
+                </div>
+              </div>
+              <div class="graph-request-panel" id="graph-request-panel">
+
               <div class="insight-summary" aria-label="Agent result metadata">
                 <div><span>Agent</span><strong id="summary-agent">—</strong></div>
                 <div><span>Period</span><strong id="summary-period">—</strong></div>
@@ -96,10 +104,10 @@
             <div id="sources-section" class="sources-section" hidden><strong>Product sources</strong><ul id="source-list"></ul></div>
           </details>
               <article class="paper-card evidence-card" aria-labelledby="trace-title">
-              <div class="card-topline"><h2 id="trace-title">Execution</h2><span id="live-trace-state" class="live-trace-state">IDLE</span></div>
+              <div class="card-topline"><h2 id="trace-title">Request trace</h2><span id="live-trace-state" class="live-trace-state">IDLE</span></div>
               <div class="live-trace" id="live-trace-panel">
-                <div class="live-trace-heading"><span class="live-trace-title"><span id="live-indicator" class="live-indicator"></span> Events</span><span id="live-trace-count">0 events</span></div>
-                <div id="execution-graph" class="execution-graph" aria-label="Live node and edge execution graph"></div>
+                <div class="live-trace-heading"><span class="live-trace-title"><span id="live-indicator" class="live-indicator"></span> Agent → Tool → Data</span><span id="live-trace-count">0 events</span></div>
+                <div id="execution-graph" class="execution-graph" aria-label="Current request execution graph"></div>
                 <details class="workflow-events"><summary>Event log</summary><ol id="live-trace-list" class="live-trace-list" aria-label="Live execution events" aria-live="polite" aria-relevant="additions"><li class="live-trace-empty">No events yet.</li></ol></details>
                 <div class="live-trace-footer"><span>Request</span><code id="live-trace-request">—</code></div>
               </div>
@@ -109,58 +117,58 @@
                 <details class="raw-details"><summary>Raw JSON</summary><pre id="raw">{}</pre></details>
               </details>
             </article>
+              </div>
+          <section id="workflows-panel" class="graph-scenario-panel" aria-label="Simulated workflow scenarios" hidden>
+            <h1 class="sr-only">Workflow graph</h1>
+            <div class="workflow-panel-grid">
+              <article class="paper-card workflow-card workflow-controls-card" aria-label="Workflow controls">
+                <form class="workflow-form" id="workflow-form">
+                  <label>Scenario<select id="workflow-scenario" aria-label="Workflow scenario"><option>Loading…</option></select></label>
+                  <label>SKU<input id="workflow-sku" value="EL-003" maxlength="64" autocomplete="off" aria-label="Product SKU"></label>
+                  <label>Qty<input id="workflow-quantity" type="number" min="1" max="20" step="1" value="2" aria-label="Quantity"></label>
+                  <label>Role<select id="workflow-role" aria-label="Simulated actor"><option value="analyst">Retail analyst</option><option value="manager">Manager</option></select></label>
+                  <button id="workflow-run" class="sunshine-button" type="button">Run <span aria-hidden="true">↗</span></button>
+                </form>
+                <p class="workflow-notice">Simulation · role is not authentication · no business writes</p>
+                <p id="workflow-status" class="workflow-help" role="status" aria-live="polite">Loading workflow definitions…</p>
+                <div id="workflow-review-controls" class="workflow-actions" hidden>
+                  <button type="button" id="workflow-approve">Approve</button>
+                  <button type="button" id="workflow-reject">Reject</button>
+                </div>
+              </article>
+              <article class="paper-card workflow-card workflow-canvas-card" aria-label="Workflow execution graph">
+                <div class="workflow-graph-head"><h2>Execution graph</h2><small id="workflow-run-id">Not run</small></div>
+                <div class="workflow-graph-toolbar" role="group" aria-label="Graph detail level">
+                  <button type="button" data-workflow-view="overview" aria-pressed="true">Overview</button>
+                  <button type="button" data-workflow-view="detailed" aria-pressed="false">Tools &amp; sources</button>
+                  <button type="button" id="workflow-replay" disabled>Replay ↻</button>
+                </div>
+                <div class="workflow-graph-legend" aria-label="Execution state legend">
+                  <span><i class="workflow-legend-dot legend-done"></i>Done</span>
+                  <span><i class="workflow-legend-dot legend-running"></i>Running</span>
+                  <span><i class="workflow-legend-dot legend-awaiting"></i>Approval</span>
+                  <span><i class="workflow-legend-dot legend-blocked"></i>Blocked</span>
+                  <span><i class="workflow-legend-dot legend-idle"></i>Not reached</span>
+                </div>
+                <div id="workflow-graph" class="execution-graph" aria-label="Recorded workflow node graph"></div>
+                <div class="workflow-observation-grid">
+                  <section class="workflow-inspector-card" aria-label="Selected graph node">
+                    <h3>Inspector</h3>
+                    <div id="workflow-node-detail" class="workflow-node-detail" aria-live="polite">Select a node to inspect its evidence.</div>
+                  </section>
+                  <section class="workflow-timeline-card" aria-label="Recorded execution timeline">
+                    <h3>Timeline <small>recorded events</small></h3>
+                    <div id="workflow-timeline" class="workflow-timeline" aria-label="Recorded execution steps"></div>
+                  </section>
+                </div>
+                <details class="workflow-report-details" open>
+                  <summary>Result</summary>
+                  <div id="workflow-report" class="workflow-run-result" role="status">Select a scenario.</div>
+                </details>
+              </article>
+            </div>
+          </section>
             </aside>
-          </div>
-        </section>
-
-        <section id="workflows-panel" class="panel" role="tabpanel" aria-labelledby="tab-workflows" hidden>
-          <h1 class="sr-only">Workflow graph</h1>
-          <div class="workflow-panel-grid">
-            <article class="paper-card workflow-card workflow-controls-card" aria-label="Workflow controls">
-              <form class="workflow-form" id="workflow-form">
-                <label>Scenario<select id="workflow-scenario" aria-label="Workflow scenario"><option>Loading…</option></select></label>
-                <label>SKU<input id="workflow-sku" value="EL-003" maxlength="64" autocomplete="off" aria-label="Product SKU"></label>
-                <label>Qty<input id="workflow-quantity" type="number" min="1" max="20" step="1" value="2" aria-label="Quantity"></label>
-                <label>Role<select id="workflow-role" aria-label="Simulated actor"><option value="analyst">Retail analyst</option><option value="manager">Manager</option></select></label>
-                <button id="workflow-run" class="sunshine-button" type="button">Run <span aria-hidden="true">↗</span></button>
-              </form>
-              <p class="workflow-notice">Simulation · role is not authentication · no business writes</p>
-              <p id="workflow-status" class="workflow-help" role="status" aria-live="polite">Loading workflow definitions…</p>
-              <div id="workflow-review-controls" class="workflow-actions" hidden>
-                <button type="button" id="workflow-approve">Approve</button>
-                <button type="button" id="workflow-reject">Reject</button>
-              </div>
-            </article>
-            <article class="paper-card workflow-card workflow-canvas-card" aria-label="Workflow execution graph">
-              <div class="workflow-graph-head"><h2>Execution graph</h2><small id="workflow-run-id">Not run</small></div>
-              <div class="workflow-graph-toolbar" role="group" aria-label="Graph detail level">
-                <button type="button" data-workflow-view="overview" aria-pressed="true">Overview</button>
-                <button type="button" data-workflow-view="detailed" aria-pressed="false">Tools &amp; sources</button>
-                <button type="button" id="workflow-replay" disabled>Replay ↻</button>
-              </div>
-              <div class="workflow-graph-legend" aria-label="Execution state legend">
-                <span><i class="workflow-legend-dot legend-done"></i>Done</span>
-                <span><i class="workflow-legend-dot legend-running"></i>Running</span>
-                <span><i class="workflow-legend-dot legend-awaiting"></i>Approval</span>
-                <span><i class="workflow-legend-dot legend-blocked"></i>Blocked</span>
-                <span><i class="workflow-legend-dot legend-idle"></i>Not reached</span>
-              </div>
-              <div id="workflow-graph" class="execution-graph" aria-label="Recorded workflow node graph"></div>
-              <div class="workflow-observation-grid">
-                <section class="workflow-inspector-card" aria-label="Selected graph node">
-                  <h3>Inspector</h3>
-                  <div id="workflow-node-detail" class="workflow-node-detail" aria-live="polite">Select a node to inspect its evidence.</div>
-                </section>
-                <section class="workflow-timeline-card" aria-label="Recorded execution timeline">
-                  <h3>Timeline <small>recorded events</small></h3>
-                  <div id="workflow-timeline" class="workflow-timeline" aria-label="Recorded execution steps"></div>
-                </section>
-              </div>
-              <details class="workflow-report-details" open>
-                <summary>Result</summary>
-                <div id="workflow-report" class="workflow-run-result" role="status">Select a scenario.</div>
-              </details>
-            </article>
           </div>
         </section>
 
