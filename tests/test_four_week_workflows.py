@@ -136,7 +136,12 @@ def test_graph_ui_assets_and_sse_link(client):
     assert "document.createElementNS" in graph
     assert "textContent" in graph
     assert "chatEvent(event)" in appjs
-    assert "graph?.replay(result.events)" in ui
+    assert "graph?.showAll(run.events,run.status)" in ui
+    assert "graph?.replay(run.events,run.status)" in ui
+    assert 'data-workflow-view="detailed"' in html
+    assert 'id="workflow-timeline"' in html
+    assert 'id="workflow-node-detail"' in html
+    assert 'lineage' in graph
 
 
 def test_mcp_adapter_is_only_claimed_when_actually_invoked(client, monkeypatch):
