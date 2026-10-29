@@ -249,3 +249,34 @@ button:focus-visible,a:focus-visible,textarea:focus-visible {
 @media(prefers-reduced-motion:reduce) {
   *,*::before,*::after {scroll-behavior:auto!important;animation:none!important;transition:none!important;}
 }
+
+/* Product workspace v1.1: evidence-driven graph and readable nodes. */
+.message-identity {flex-wrap:wrap;}
+.view-execution {
+  margin-left:10px;border:1px solid #dbe9e5;border-radius:7px;
+  background:#fff;color:#548579;padding:4px 8px;font-size:10px;font-weight:700;
+  transition:background .15s ease,border-color .15s ease;
+}
+.view-execution:hover:not(:disabled) {border-color:#73c3ac;background:#eef9f5;}
+.view-execution.selected {background:#ebf8f3;border-color:#9cdbca;color:#067e70;}
+.trace-warning {
+  border-top:1px solid #f1dfb3;background:#fff9e9;padding:8px 16px;
+  color:#946b23;font-size:11px;font-weight:600;
+}
+.matrix-wrap {padding:8px 8px 0;background:radial-gradient(circle at 50% 45%,#effaf6 0%,#fff 72%);}
+.matrix-node-label {font-size:15px;font-weight:750;}
+.matrix-node-type {font-size:11px;letter-spacing:1px;}
+.matrix-node-state {font-size:11px;}
+.matrix-skill {font-size:10px;font-weight:750;}
+.matrix-link-route .matrix-edge-main {stroke:#9ab3b4;stroke-width:2.4;}
+.matrix-link-call .matrix-edge-main {stroke:#4a91ce;stroke-width:3;}
+.matrix-link-result .matrix-edge-main {stroke:#13a591;stroke-width:2.7;stroke-dasharray:6 5;}
+.matrix-link-mcp .matrix-edge-main {stroke:#248aa7;stroke-width:3;}
+.matrix-link.state-observed .matrix-edge-shadow {opacity:.3;}
+.matrix-link.state-running .matrix-edge-main {stroke-dasharray:9 8;animation:flow-edge 2.4s linear infinite;}
+@media(max-width:670px) {
+  .matrix-wrap {min-height:unset;flex:0 0 auto;padding:7px 6px 0;}
+  .matrix-svg-mobile {width:100%;height:auto;max-height:none;min-height:0;flex:none;}
+  .network-pane {min-height:0;}
+  .message-identity .view-execution {margin-left:4px;padding:4px 6px;}
+}
