@@ -22,3 +22,6 @@ data/logs/
 # Synthetic internal usability study exports and volunteer observations
 data/business_pilot*/
 data/pilot_ci_seed.sqlite3*
+
+# Observational query-acceptance audit; may include full-mode answer excerpts
+data/query_audit_report.json
