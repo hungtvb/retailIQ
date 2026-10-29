@@ -23,25 +23,6 @@ SKU = "EL-003"
 ORDER_ID = "ORD-0001"
 
 
-def as_object(value):
-    if hasattr(value, "artifact") and value.artifact:
-        value = value.artifact
-    if hasattr(value, "content") and not isinstance(value, (str, dict, list)):
-        value = value.content
-    if isinstance(value, dict):
-        return value
-    if isinstance(value, str):
-        parsed = json.loads(value)
-        if isinstance(parsed, dict):
-            return parsed
-    if isinstance(value, list):
-        texts = [
-            item.get("text") if isinstance(item, dict) else getattr(item, "text", None)
-            for item in value
-        ]
-        if len(texts) == 1 and isinstance(texts[0], str):
-            return as_object(texts[0])
-    raise ValueError(f"Unrecognized MCP tool result type: {type(value).__name__}")
 
 
 async def read_order() -> dict:
@@ -59,7 +40,8 @@ async def read_order() -> dict:
         f"Expected two real MCP tools; got {sorted(names)}"
     )
     order_tool = next(tool for tool in tools if tool.name == "order_lookup")
-    return as_object(await order_tool.ainvoke({"order_id": ORDER_ID}))
+    from retailiq.mcp_adapter import decode_tool_result
+    return decode_tool_result(await order_tool.ainvoke({"order_id": ORDER_ID}))
 
 
 def main() -> None:
