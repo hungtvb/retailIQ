@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from retailiq.assistant import ask
 from retailiq.rag.indexing import IndexNotReadyError
-from retailiq.infrastructure.sessions import history, add_turn, get_session, session_mutation, SessionBusyError
+from retailiq.infrastructure.sessions import history, add_turn, get_session, session_mutation, SessionBusyError, save_execution_trace
 from pathlib import Path
 from contextlib import nullcontext
 import time
@@ -153,7 +153,7 @@ def _perform_turn(data: AskBody) -> dict:
             else:
                 prior = history(data.session_id, limit=12)
                 result = ask(data.question, history=prior, active_agent=current['active_agent'])
-                add_turn(data.session_id, data.question, result)
+                add_turn(data.session_id, data.question, {**result, 'request_id': request_id()})
     log_event('chat.turn_result', agent=result.get('active_agent'),
               intent=result.get('intent'), skill=result.get('skill'),
               route_fallback=result.get('route_fallback'),
@@ -222,19 +222,32 @@ def stream_answer(data: AskBody, request: Request):
                     continue
 
     def run_agent():
+        trace_events: list[dict] = []
+
         def push_log(payload: dict):
+            # Recording is independent from the browser connection and the
+            # bounded transport queue. Traces remain available after disconnect.
+            if len(trace_events) < 161:
+                trace_events.append(payload)
             if disconnected.is_set():
                 return
             try:
                 events.put_nowait(('log', payload))
             except queue.Full:
-                # Agent execution continues even when the UI cannot keep up.
+                # The durable trace still records the event if transport drops it.
                 pass
 
         try:
             with bind_context(request=rid, session=data.session_id), bind_event_sink(push_log):
                 try:
                     result = _perform_turn(data)
+                    if data.session_id:
+                        try:
+                            save_execution_trace(data.session_id, rid, trace_events)
+                        except Exception as error:
+                            # Telemetry persistence cannot invalidate a saved
+                            # business answer; history will truthfully say no trace.
+                            log_exception('chat.trace_persist_failed', error)
                     enqueue_final('result', result)
                 except SessionBusyError:
                     enqueue_final('error', {'code': 'session_busy',
