@@ -87,6 +87,13 @@ def run_journey(page):
     viewport_width = page.evaluate("document.documentElement.scrollWidth")
     assert viewport_width <= 392, f"Mobile horizontal overflow: {viewport_width}"
     page.screenshot(path=str(OUT / "retailiq_product_workspace_mobile.png"), full_page=True)
+
+    # Deletion is real API-backed session removal, including on narrow screens.
+    page.get_by_role("button", name="Toggle conversations").click()
+    page.once("dialog", lambda dialog: dialog.accept())
+    page.locator(".session-row.selected .session-delete").click()
+    expect(page.locator(".session-row")).to_have_count(old_sessions)
+    expect(page.locator(".chat-onboarding")).to_be_visible()
     assert not js_errors, f"Browser exceptions: {js_errors}"
 
 
