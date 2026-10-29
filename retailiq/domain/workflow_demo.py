@@ -19,6 +19,14 @@ from retailiq.observability import log_event
 
 HCM = timezone(timedelta(hours=7))
 GRAPH = {
+    "week1": [
+        ("request", "Retail question", "input"),
+        ("router", "Intent router", "guard"),
+        ("sales_agent", "Sales Agent", "agent"),
+        ("sql_tool", "Reviewed SQL", "tool"),
+        ("evidence", "SQL evidence", "guard"),
+        ("answer", "Grounded answer", "output"),
+    ],
     "week2": [
         ("request", "Question", "input"),
         ("inventory_mcp", "Inventory API", "tool"),
@@ -56,6 +64,7 @@ GRAPH = {
 }
 
 DESCRIPTIONS = {
+    "week1": "Week 1 · Stock/Sales SQL query preview (for live LangGraph use Assistant)",
     "week2": "Week 2 · Freshness, semantic definitions and inventory read (local MCP-equivalent adapter)",
     "week3": "Week 3 · Governed pricing proposal with manager decision (simulated role)",
     "alerts": "Week 3 · Read-only KPI alert screening",
@@ -64,6 +73,7 @@ DESCRIPTIONS = {
 
 
 EDGE_LABELS = {
+    "week1": ["route", "delegate", "query", "rows", "answer"],
     "week2": ["query", "rows", "KPI", "timestamp"],
     "week3": ["scope", "stock", "proposal", "validate", "review", "decision"],
     "alerts": ["metrics", "query", "threshold", "report"],
@@ -196,7 +206,21 @@ def run_demo(scenario: str, sku: str, quantity: int = 1,
         previous = node
 
     step("request", "Synthetic scenario: " + scenario)
-    if scenario == "week2":
+    if scenario == "week1":
+        step("router", "Top-seller intent selected for synthetic sales query")
+        step("sales_agent", "Sales specialist is responsible for completed orders")
+        leaders = top()
+        step("sql_tool", "Reviewed parameterized completed-order SQL returned " +
+             str(len(leaders)) + " rows")
+        step("evidence", "Product SKUs and completed-order units are grounded in SQLite")
+        step("answer", "Verified top-seller report from source records")
+        report = ("Week 1 SQL preview: " +
+                  "; ".join(row["sku"] + ": " + str(row["units_sold"]) +
+                            " units" for row in leaders) +
+                  ". Deterministic preview, not live LangGraph. "
+                  "Use the Assistant tab for live SSE / full-mode LangGraph.")
+        status = "completed"
+    elif scenario == "week2":
         if os.getenv("RETAILIQ_WORKFLOW_USE_MCP", "0") == "1":
             from retailiq.mcp_adapter import read_inventory
             mcp_stock = read_inventory(product["sku"])
