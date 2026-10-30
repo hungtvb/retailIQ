@@ -90,7 +90,7 @@ def plan_question_sources(question: str) -> dict:
         "realtime", "right now", "live update",
     )):
         tier = "live"
-    elif re.search(r"\\b15\\s*(?:phút|minutes?|mins?)\\b", q):
+    elif re.search(r"\b15\s*(?:phút|minutes?|mins?)\b", q):
         tier = "15_min"
     elif any(term in q for term in ("hourly", "mỗi giờ", "hàng giờ")):
         tier = "hourly"
