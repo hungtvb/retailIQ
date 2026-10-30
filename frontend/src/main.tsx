@@ -95,7 +95,8 @@ function MatrixNode({node}: {node: PositionedNode}) {
   const isLive=node.status==='running';
   const labelLines = wrapNodeLabel(node.label);
   const hasSkill = Boolean(node.skill);
-  const height = hasSkill ? 108 : 87;
+  // Keep the skill chip and the second tool-label line inside the card.
+  const height = hasSkill ? 126 : labelLines.length > 1 ? 102 : 87;
   return <g className={'matrix-node matrix-'+node.kind+' state-'+node.status}
     transform={'translate('+node.x+' '+node.y+')'}
     aria-label={node.label+', '+formatStatus(node.status)}>
