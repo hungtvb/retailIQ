@@ -81,13 +81,16 @@ Build and orchestrate five required specialist agents:
 
 **Scope rule:** A pattern may be demonstrated read-only in Week 1 without implementing its later operational business feature. Never label future-week requirements as Week 1 acceptance blockers unless the Week 1 rubric explicitly requires them. All Week 1 execution remains local and synthetic.
 
-## Team delivery constraints (working agreement; not course rubric)
+## Current independent-development policy (updated 2026-10-30)
 
-- Team size: **5 people**.
-- Working capacity: approximately **60 minutes per person per day total**, including learning and implementation.
-- **Local demonstration every week**; cloud deployment is not required for weekly demos.
-- Synthetic data and mock integrations are permitted for development, but must be labeled and must not be represented as live production data.
-- Keep secrets local: never commit `.env`, keys, customer credentials or private raw traces.
+- **The instructor's Retail / E-commerce four-week brief remains the requirements contract.** Weeks 1–4 now identify capability/acceptance milestones, not timeboxes or deadlines.
+- RetailIQ is continuing as an **independently developed project**. The former five-person, 60-minutes/day course-demo capacity limit is historical and no longer constrains implementation or validation.
+- Complete the *actual* required capabilities for all four milestones with runnable code, independent tests and reproducible evidence. A mock, UI node, role label or configuration alone is not proof of an autonomous agent, MCP call, approval control, RAG evaluation or tracing.
+- Retain source-of-truth SQL and meaningful natural-language business correctness. Fail closed on unsupported or ambiguous multi-constraint questions rather than return another metric's valid-but-wrong SQL aggregate.
+- Local synthetic fixtures are acceptable where the brief permits them; use real transport/model/tool invocations when the requirement specifically calls for such integration. Production/cloud deployment is not implicitly required.
+- Never commit `.env`, keys, customer credentials or private raw traces. Keep implementation and evidence linked to a commit and execution mode.
+
+**Historical course-team constraint:** The project originated as a five-person four-week exercise with approximately 60 minutes/person/day and weekly local demos. Those limits no longer define the active engineering plan.
 
 ## Scope boundaries and progress
 
