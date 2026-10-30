@@ -14,9 +14,15 @@ def offline(q, *, history=None, active_agent=''):
  effective=resolve_followup(q,history,category)
  agent=AGENT_FOR_INTENT[category]
  log_event('agent.routed', intent=category, agent=agent, execution_mode='offline')
- log_event('skill.selected', skill=skill_for(category), execution_mode='offline')
- with observed('tool.offline_lookup', agent=agent, tool='reviewed_sql_or_lexical', execution_mode='offline'):
-  result=replenish_review_offline() if category=='decision' else do(effective,category)
+ log_event('skill.selected', skill=skill_for(category), agent=agent, execution_mode='offline')
+ use_mcp=(category=='stock' and os.getenv('RETAILIQ_INVENTORY_USE_MCP', '').casefold() in ('1','true','yes'))
+ if use_mcp:
+  # Explicit opt-in: real MCP stdio is invoked, but routing remains offline.
+  from .mcp_adapter import read_inventory
+  result=do(effective,category,stock_lookup=read_inventory)
+ else:
+  with observed('tool.offline_lookup', agent=agent, tool='reviewed_sql_or_lexical', execution_mode='offline'):
+   result=replenish_review_offline() if category=='decision' else do(effective,category)
  agent=AGENT_FOR_INTENT[category]
  handoff=({'from':'sales_agent','to':'inventory_agent',
            'reason':'Follow-up inventory question'}
