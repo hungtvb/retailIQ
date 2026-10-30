@@ -203,7 +203,7 @@ _TRACE_FIELDS = frozenset({
     'timestamp', 'event', 'level', 'request_id', 'session_id',
     'agent', 'previous_agent', 'target_agent', 'intent', 'skill', 'tool',
     'status', 'duration_ms', 'route_fallback', 'execution_mode',
-    'error_type', 'subagent'
+    'error_type', 'subagent', 'mcp_server'
 })
 
 
