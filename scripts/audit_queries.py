@@ -308,6 +308,10 @@ def main() -> int:
     print(f"Audit {args.mode}: {summary['pass']} PASS / {summary['fail']} FAIL / {summary['error']} ERROR")
     for row in report['results']:
         print(f"  {row['id']:9} {row['status']:5} predicted={row['hypothesis']:11} layer={row['suspected_layer']}")
+        if row['status'] != 'PASS':
+            # Synthetic fixture only. Do not emit prompt bodies or customer data.
+            print('    expected:', json.dumps(row.get('expected', {}), ensure_ascii=False)[:650])
+            print('    observed:', json.dumps(row.get('observed', {}), ensure_ascii=False)[:650])
     print('Report:',output.resolve())
     return int(args.strict and (summary['fail'] > 0 or summary['error'] > 0))
 
