@@ -4,6 +4,7 @@ import json
 import sys
 
 from retailiq.domain.analytics import _validate_inventory
+from retailiq.observability import observed
 
 
 def decode_tool_result(value) -> dict:
@@ -58,10 +59,14 @@ async def _read(sku: str) -> list[dict]:
     tool = next((tool for tool in tools if tool.name == "inventory_lookup"), None)
     if tool is None:
         raise RuntimeError("Inventory MCP tool missing")
-    response = decode_tool_result(await tool.ainvoke({"sku": sku}))
-    if not isinstance(response.get("records"), list):
-        raise ValueError("Unexpected inventory MCP record schema")
-    return _validate_inventory(response["records"], sku)
+    # The span surrounds a real MCP stdio tool call plus validation, not
+    # discovery or the mere presence of an MCP server in configuration.
+    with observed('mcp.tool', agent='inventory_agent', tool='inventory_lookup',
+                  mcp_server='retailiq', execution_mode='full'):
+        response = decode_tool_result(await tool.ainvoke({"sku": sku}))
+        if not isinstance(response.get("records"), list):
+            raise ValueError("Unexpected inventory MCP record schema")
+        return _validate_inventory(response["records"], sku)
 
 
 def read_inventory(sku: str) -> list[dict]:
