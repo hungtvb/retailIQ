@@ -45,6 +45,7 @@ class State(TypedDict, total=False):
     skill: str
     subagents: list[str]
     route_fallback: bool
+    query_plan: dict
 
 
 def classify(question: str) -> str:
@@ -405,6 +406,19 @@ def validate_graph_result(result: dict) -> dict:
         raise GraphResultError('Graph result has no valid bounded answer')
     if not isinstance(result.get('records', []), list) or not isinstance(result.get('contexts', []), list):
         raise GraphResultError('Graph result has invalid evidence collections')
+    if category == 'revenue' and result.get('query_plan') is not None:
+        from retailiq.domain.revenue_plan import RevenuePlan, verify_revenue_evidence
+        plan_payload = result['query_plan']
+        if not isinstance(plan_payload, dict) or plan_payload.get('metric') != 'net_revenue_vnd':
+            raise GraphResultError('Revenue query plan is malformed')
+        try:
+            plan = RevenuePlan(**{key: value for key, value in plan_payload.items()
+                                  if key != 'metric'})
+            if plan.period != result.get('period'):
+                raise GraphResultError('Revenue period differs from its query plan')
+            verify_revenue_evidence(plan, result.get('records', []))
+        except (TypeError, ValueError) as exc:
+            raise GraphResultError('Revenue result violates its query plan') from exc
     handoff = result.get('handoff')
     if handoff is not None:
         if (not isinstance(handoff, dict) or
@@ -455,4 +469,5 @@ def run(q: str, *, history: list[dict] | None = None, active_agent: str = '') ->
             'handoff': result.get('handoff'),
             'subagents': result.get('subagents', []),
             'skill': result.get('skill', ''),
-            'route_fallback': result.get('route_fallback', False)}
+            'route_fallback': result.get('route_fallback', False),
+            'query_plan': result.get('query_plan')}
