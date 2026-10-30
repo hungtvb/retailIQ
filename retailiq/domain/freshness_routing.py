@@ -104,15 +104,16 @@ def route_freshness(
 
     oldest = min(times) if times else None
     age = (current - oldest).total_seconds() if oldest else None
-    if applied == "live":
+    future_seen = any(stamp > current for stamp in times)
+    if future_seen:
+        status = "STALE"
+        reason = "At least one source update timestamp is in the future"
+    elif applied == "live":
         status = "UNVERIFIED"
         reason = "Live consistency cannot be established from snapshot timestamps"
     elif age is None:
         status = "UNVERIFIED"
         reason = "No trustworthy source-refresh timestamp is available"
-    elif age < 0:
-        status = "STALE"
-        reason = "Source update timestamp is in the future"
     elif age <= FRESHNESS_TIERS[applied]["target_seconds"]:
         status = "PASS"
         reason = "Oldest included source timestamp meets the requested target"
