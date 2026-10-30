@@ -49,6 +49,12 @@ CASES = (
     Case('SALES-02','sales',('Doanh thu tháng 9 năm 2026?',),'revenue','LIKELY_PASS','sales_sql/period','September completed-order revenue',period='2026-09'),
     Case('SALES-03','sales',('Top 5 sản phẩm bán chạy tháng 10 năm 2026?',),'top','LIKELY_PASS','sales_sql/ranking','Top five sold units',n=5),
     Case('SALES-04','sales',('Top 3 sản phẩm bán chạy tháng 10 năm 2026?',),'top','LIKELY_FAIL','query_limit/response','Exactly top three',n=3),
+    Case('SALES-05','sales',('Doanh thu tháng 10 của top 1 seller là bao nhiêu?',),
+         'ranked_revenue','LIKELY_PASS','routing/sales_scope','October revenue of highest-selling SKU',n=1),
+    Case('SALES-06','sales',('What is the October 2026 revenue of the top seller?',),
+         'ranked_revenue','LIKELY_PASS','routing/sales_scope','English revenue of top SKU',n=1),
+    Case('SALES-07','sales',('Doanh thu tháng 9 năm 2026 của sản phẩm bán chạy nhất?',
+         ),'ranked_revenue','LIKELY_PASS','routing/period_scope','September ranking and SKU revenue',period='2026-09',n=1),
     Case('STOCK-01','stock',('Tồn kho AlphaBook Pro 14 hiện có bao nhiêu?',),'stock_sku','LIKELY_PASS','inventory_sql','Single known SKU',sku='EL-001'),
     Case('STOCK-02','stock',('Sản phẩm không xác định còn bao nhiêu trong kho?',),'clarify','LIKELY_PASS','stock_validation','Unknown product must not invent stock'),
     Case('CROSS-01','cross_domain',('Tồn kho của top 5 sản phẩm bán chạy tháng 10 năm 2026?',),'stock_top','LIKELY_FAIL','router/supervisor/multi_sku','Top five inventory, VI',n=5),
@@ -100,6 +106,15 @@ class Oracle:
             WHERE o.status='completed' AND o.ordered_at>=? AND o.ordered_at<?''', (start,end))
         return rows[0]['total'] or 0
 
+    def sku_revenue(self, period: str, sku: str) -> int:
+        """Independent SQL oracle: no application ranking or revenue code."""
+        start, end = self.bounds(period)
+        rows = self.query("""SELECT COALESCE(SUM(li.quantity*li.unit_price_vnd-li.discount_vnd),0) AS total
+            FROM orders o JOIN order_lines li ON li.order_id=o.id
+            WHERE o.status='completed' AND o.ordered_at>=? AND o.ordered_at<? AND li.sku=?""",
+            (start, end, sku))
+        return rows[0]['total']
+
     def available(self, sku: str) -> int:
         return self.query('SELECT COALESCE(SUM(on_hand-reserved),0) AS available FROM inventory WHERE sku=?',(sku,))[0]['available']
 
@@ -127,6 +142,18 @@ def assess(case: Case, response: dict, oracle: Oracle) -> tuple[bool,str,dict]:
         actual = sum(r['net_revenue_vnd'] for r in rows if isinstance(r,dict) and type(r.get('net_revenue_vnd')) is int)
         ok = response.get('intent') == 'revenue' and actual == total and has_number(answer,total)
         return ok,'Revenue sum, time window, and displayed answer',{'period':case.period,'net_revenue_vnd':total}
+    if check == 'ranked_revenue':
+        leader = oracle.top(case.period, case.n)[case.n-1]
+        sku, expected_total = leader['sku'], oracle.sku_revenue(case.period, leader['sku'])
+        actual = sum(r.get('net_revenue_vnd',0) for r in rows
+                     if isinstance(r,dict) and type(r.get('net_revenue_vnd')) is int)
+        skus = {r.get('sku') for r in rows if isinstance(r,dict)}
+        ok = (response.get('intent') == 'revenue' and bool(rows) and
+              skus == {sku} and actual == expected_total and
+              sku in answer and has_number(answer,expected_total) and
+              response.get('as_of') == case.period)
+        return ok,'Product-ranked monthly revenue must retain the exact SKU, period and amount', {
+            'period':case.period,'sku':sku,'net_revenue_vnd':expected_total}
     if check == 'top':
         expected = oracle.top(case.period,case.n)
         actual = [(r.get('sku'),r.get('units_sold')) for r in rows if isinstance(r,dict)]
