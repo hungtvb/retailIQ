@@ -203,7 +203,7 @@ export function positionGraph(graph: GraphState, compact = false): PositionedNod
       let nextY = 215, index = 0;
       for (const n of [...agents,...subagents,...tools]) {
         positions.set(n.id,[index%2===0?left:right,nextY]);
-        nextY+=131;
+        nextY+=155;
         index++;
       }
       if(hasOutput) positions.set('answer',[180,nextY+8]);
