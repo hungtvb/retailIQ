@@ -86,6 +86,14 @@ def run_journey(page):
     expect(page.locator('.matrix-link-result[data-from="agent:inventory_agent"][data-to="answer"]')).to_have_count(1)
     assert_no_node_overlap(page)
     page.screenshot(path=str(OUT / "retailiq_product_workspace_handoff.png"), full_page=True)
+    if os.getenv("RETAILIQ_TEST_MCP") == "1":
+        expect(page.locator(".matrix-node.matrix-mcp-server")).to_have_count(1)
+        expect(page.locator(".matrix-node.matrix-mcp")).to_have_count(1)
+        expect(page.locator('.matrix-link-mcp[data-from="agent:inventory_agent"][data-to="mcp-server:retailiq"]')).to_have_count(1)
+        expect(page.locator('.matrix-link-mcp[data-from="mcp-server:retailiq"][data-to="mcp:inventory_lookup"]')).to_have_count(1)
+        assert page.locator(".matrix-node.matrix-tool").count() == 0, (
+            "MCP stock request must not fabricate a direct SQL tool invocation")
+        page.screenshot(path=str(OUT / "retailiq_product_workspace_mcp.png"), full_page=True)
     handoff_count = page.locator(".matrix-node").count()
     assert handoff_count >= 4
 
@@ -94,6 +102,9 @@ def run_journey(page):
     expect(page.locator(".message-assistant")).to_have_count(2)
     expect(page.locator(".matrix-link-context")).to_have_count(1)
     assert page.locator(".matrix-node").count() == handoff_count
+    if os.getenv("RETAILIQ_TEST_MCP") == "1":
+        expect(page.locator(".matrix-node.matrix-mcp-server")).to_have_count(1)
+        expect(page.locator(".matrix-node.matrix-mcp")).to_have_count(1)
     assert page.locator(".matrix-empty").count() == 0
 
     # Switch between actual saved answer traces; no fabricated handoff on first answer.
