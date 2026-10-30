@@ -8,7 +8,7 @@ import sqlite3
 from fastapi.testclient import TestClient
 import pytest
 
-from retailiq.domain.freshness_routing import route_freshness
+from retailiq.domain.freshness_routing import route_freshness, plan_question_sources
 from retailiq.domain.semantic import contracts
 from retailiq.api import app
 from scripts.seed import seed
@@ -188,3 +188,61 @@ def test_existing_week2_workflow_uses_shared_evidence(client):
     assert r.status_code == 200
     assert 'Target: 15 minutes; STALE' in r.json()['report']
     assert r.json()['graph']['execution'] == 'deterministic_local_simulation'
+
+
+@pytest.mark.parametrize("question,expected,tier", [
+    ("What is stock of EL-003 right now?", ["available_stock"], "live"),
+    ("Tồn kho EL-003 trong 15 phút?", ["available_stock"], "15_min"),
+    ("Doanh thu mỗi giờ?", ["net_revenue"], "hourly"),
+    ("Top seller hàng ngày?", ["top_sellers"], "daily"),
+    ("Tell me the warranty for EL-003", ["product_knowledge"], None),
+    ("What is the order status of ORD-0001?", ["order_state"], None),
+    ("Doanh thu tháng 10 của top seller?", ["net_revenue", "top_sellers"], None),
+    ("Tồn kho của top seller?", ["available_stock", "top_sellers"], None),
+])
+def test_question_to_source_preserves_required_metrics(question, expected, tier):
+    plan = plan_question_sources(question)
+    assert plan['required_metrics'] == expected
+    assert plan['requested_tier'] == tier
+    assert plan['requires_decomposition'] == (len(expected) > 1)
+
+
+def test_question_router_does_not_silently_choose_one_of_two_sources(client):
+    c, _ = client
+    response = c.post('/api/workflows/freshness/question', json={
+        'question': 'Tồn kho của top seller ngay bây giờ là bao nhiêu?'})
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result['status'] == 'REQUIRES_ORCHESTRATION'
+    assert result['required_metrics'] == ['available_stock', 'top_sellers']
+    assert {route['source'] for route in result['routes']} == {'inventory', 'completed_orders'}
+    assert all(route['tool_execution'] == 'not_executed_by_router' for route in result['routes'])
+
+
+def test_question_router_reads_sku_inventory_and_refuses_live_sla(client):
+    c, db = client
+    from datetime import datetime, timezone
+    with sqlite3.connect(db) as con:
+        con.execute("UPDATE inventory SET updated_at=? WHERE sku='EL-003'",
+                    (datetime.now(timezone.utc).isoformat(),))
+    r = c.post('/api/workflows/freshness/question', json={
+        'question': 'What is stock of EL-003 right now?'})
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data['status'] == 'UNVERIFIED'
+    assert data['required_metrics'] == ['available_stock']
+    assert data['routes'][0]['applied_tier'] == 'live'
+    assert data['routes'][0]['tool_execution'] == 'executed_readonly'
+
+
+def test_question_router_requires_product_and_rejects_unknown_source(client):
+    c, _ = client
+    unknown_product = c.post('/api/workflows/freshness/question', json={
+        'question': 'Tồn kho bao nhiêu?'})
+    assert unknown_product.status_code == 200
+    data = unknown_product.json()
+    assert data['status'] == 'NEEDS_PRODUCT'
+    assert data['routes'][0]['tool_execution'] == 'not_executed_by_router'
+    unknown = c.post('/api/workflows/freshness/question', json={
+        'question': 'Please say hello to me'})
+    assert unknown.status_code == 422
