@@ -117,7 +117,6 @@ def do(q,category, *, stock_lookup=None):
   answer=retailiq_reply({'question':q,'intent':'latest','records':rows,'answer':''})['answer']
   return {'answer':answer,'records':rows,'contexts':[]}
  if category=='general':
-  from .language import is_vietnamese
   answer=('Xin chào! Tôi là RetailIQ. Bạn có thể hỏi về tồn kho, doanh thu, hàng bán chạy hoặc thông tin sản phẩm.'
           if is_vietnamese(q) else
           'Hello! I am RetailIQ. You can ask about inventory, revenue, top sellers, or product information.')
