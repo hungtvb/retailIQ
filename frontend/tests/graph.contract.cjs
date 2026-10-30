@@ -104,7 +104,7 @@ test('role-based layout never collides for handoff, MCP, subagents or multiple t
     const nodes=positionGraph(input,compact);
     for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
       const a=nodes[i],b=nodes[j];
-      const heightA=a.skill?108:87,heightB=b.skill?108:87;
+      const heightA=a.skill?126:102,heightB=b.skill?126:102;
       const touchingX=Math.abs(a.x-b.x)<180;
       const touchingY=Math.abs(a.y-b.y)<(heightA+heightB)/2;
       assert.ok(!(touchingX&&touchingY),
