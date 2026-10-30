@@ -206,7 +206,7 @@ export function positionGraph(graph: GraphState, compact = false): PositionedNod
         nextY+=155;
         index++;
       }
-      if(hasOutput) positions.set('answer',[180,nextY+8]);
+      if(hasOutput) positions.set('answer',[right,nextY+8]);
     }
     return graph.nodes.map(n=>({...n,x:positions.get(n.id)?.[0]??180,
       y:positions.get(n.id)?.[1]??190}));
