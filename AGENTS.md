@@ -1,7 +1,7 @@
 # RetailIQ — Repository Working Contract
 
 ## Source of truth
-The instructor's **Domain #15 Retail / E-commerce** four-week assignment is the acceptance contract; start from `docs/00_PROJECT_REQUIREMENTS.md` and `docs/14_Requirements_Traceability.md`. The four "weeks" are now **capability milestones, not delivery deadlines**. RetailIQ is an independently developed project with no former 60-minutes/day or four-week engineering timebox. The business objective remains **Faster, Easier, Reliable**.
+The instructor's **Domain #15 Retail / E-commerce** four-week assignment is the acceptance contract; start from `docs/00_PROJECT_REQUIREMENTS.md`, the active four-milestone ledger `docs/29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md`, and the historical Week 1 matrix `docs/14_Requirements_Traceability.md`. The four "weeks" are now **capability milestones, not delivery deadlines**. RetailIQ is an independently developed project with no former 60-minutes/day or four-week engineering timebox. The business objective remains **Faster, Easier, Reliable**.
 
 ## Four required milestones
 1. **AI Assistant:** LangGraph, reviewed SQL tool use, Product RAG / vector database, RAGAS, LangSmith, demonstrable inventory/sales/product questions.
