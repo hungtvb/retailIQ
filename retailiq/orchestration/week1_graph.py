@@ -46,6 +46,7 @@ class State(TypedDict, total=False):
     subagents: list[str]
     route_fallback: bool
     query_plan: dict
+    customer_memory: dict
 
 
 def classify(question: str) -> str:
@@ -258,6 +259,12 @@ def retail_supervisor(state: State):
 def retailiq(state: State):
     """Handle conversation without sending ordinary chat to product retrieval."""
     from langgraph.types import Command
+    from retailiq.domain.customer_memory import is_memory_question, memory_answer
+    if is_memory_question(state['question']):
+        return Command(update={
+            'answer': memory_answer(state['question'], state.get('customer_memory')),
+            'active_agent': 'retailiq', 'records': [], 'contexts': [],
+        }, goto='retailiq_reply')
     reply = chat_model().invoke([
         ('system', 'You are RetailIQ, a helpful retail assistant. Reply in the language of the user question. '
          'For greetings and ordinary conversation, answer naturally. Do not invent inventory, sales, '
@@ -429,7 +436,8 @@ def validate_graph_result(result: dict) -> dict:
     return result
 
 
-def run(q: str, *, history: list[dict] | None = None, active_agent: str = '') -> dict:
+def run(q: str, *, history: list[dict] | None = None, active_agent: str = '',
+        memory: dict | None = None) -> dict:
     configure_langsmith()
     sid = session_id()
     rid = request_id()
@@ -447,6 +455,7 @@ def run(q: str, *, history: list[dict] | None = None, active_agent: str = '') ->
         'previous_agent': active_agent,
         'answer': '', 'records': [], 'contexts': [],
         'handoff': None, 'subagents': [], 'route_fallback': False,
+        'customer_memory': memory if memory and memory.get('consent') else {},
     }
     graph = _session_graph() if sid else build_graph()
     if os.getenv('RETAILIQ_NATIVE_GRAPH_EVENTS', 'false').lower() in ('1', 'true', 'yes'):
