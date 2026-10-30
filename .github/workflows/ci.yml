@@ -90,7 +90,9 @@ jobs:
         if: always()
         with:
           name: retailiq-real-mcp-browser-evidence
-          path: data/retailiq_product_workspace_mcp.png
+          path: |
+            data/retailiq_product_workspace_mcp.png
+            data/retailiq_product_workspace_mcp_mobile.png
           if-no-files-found: ignore
           retention-days: 7
 
