@@ -44,8 +44,17 @@ jobs:
           path: data/edge_scenario_audit.json
           if-no-files-found: ignore
           retention-days: 7
+      - name: Freshness-aware source routing acceptance (strict)
+        run: python -m scripts.audit_freshness --strict
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: retailiq-freshness-routing
+          path: data/freshness_audit_report.json
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Source reliability report from independent audit evidence
-        run: python -m scripts.report_source_reliability --strict
+        run: python -m scripts.report_source_reliability --strict --freshness data/freshness_audit_report.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
