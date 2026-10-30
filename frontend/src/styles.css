@@ -289,3 +289,9 @@ button:focus-visible,a:focus-visible,textarea:focus-visible {
   .matrix-wrap {overflow:visible;}
   .matrix-svg-mobile {height:auto;}
 }
+
+/* Event semantics: offline context is not a LangGraph handoff. */
+.matrix-link-context .matrix-edge-main {stroke:#9daab3;stroke-width:2.2;stroke-dasharray:4 7;}
+.matrix-link-context .matrix-edge-shadow {opacity:.12;}
+.matrix-edge-caption-context {fill:#64748b;font-size:9px;}
+.matrix-legend .legend-context {background:repeating-linear-gradient(90deg,#9daab3 0 4px,transparent 4px 8px);width:18px;height:2px;border-radius:0;}
