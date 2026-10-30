@@ -128,3 +128,57 @@ test('handoff never implies completion of the sending agent',()=>{
     'The final result must point to the actual responsible agent, not the last inserted node');
   assert.equal(resultEdge.to,'answer');
 });
+
+test('offline legacy handoff telemetry is context, never autonomous handoff',()=>{
+  let state=startGraph('req-1');
+  state=log(state,'agent.routed',{agent:'inventory_agent',execution_mode:'offline'});
+  state=log(state,'agent.handoff',{
+    previous_agent:'sales_agent',target_agent:'inventory_agent',
+    execution_mode:'offline'
+  });
+  assert.equal(state.edges.filter(e=>e.kind==='handoff').length,0);
+  assert.equal(state.edges.filter(e=>e.kind==='context').length,1);
+  assert.equal(state.nodes.find(n=>n.id==='agent:sales_agent').status,'observed');
+});
+test('real MCP tool span creates explicitly named server, MCP tool and attributable edges',()=>{
+  let state=startGraph('req-1');
+  state=log(state,'agent.routed',{agent:'inventory_agent',execution_mode:'offline'});
+  state=log(state,'skill.selected',{
+    skill:'inventory_availability',agent:'inventory_agent'
+  });
+  state=log(state,'mcp.tool.started',{
+    agent:'inventory_agent',tool:'inventory_lookup',
+    mcp_server:'retailiq',execution_mode:'full'
+  });
+  assert.equal(state.nodes.filter(n=>n.kind==='mcp-server').length,1);
+  assert.equal(state.nodes.filter(n=>n.kind==='mcp').length,1);
+  assert.equal(state.nodes.find(n=>n.kind==='mcp').status,'running');
+  assert.ok(state.edges.some(e=>e.from==='agent:inventory_agent' &&
+    e.to==='mcp-server:retailiq'));
+  assert.ok(state.edges.some(e=>e.from==='mcp-server:retailiq' &&
+    e.to==='mcp:inventory_lookup'));
+  state=log(state,'mcp.tool.completed',{
+    agent:'inventory_agent',tool:'inventory_lookup',
+    mcp_server:'retailiq',execution_mode:'full'
+  });
+  assert.equal(state.nodes.find(n=>n.kind==='mcp').status,'completed');
+});
+test('skill selected and skill content loaded are different observable states',()=>{
+  let state=startGraph('req-1');
+  state=log(state,'agent.routed',{agent:'product_agent'});
+  state=log(state,'skill.selected',{agent:'product_agent',skill:'product_grounding'});
+  assert.equal(state.nodes.find(n=>n.kind==='agent').skillState,'selected');
+  state=log(state,'skill.loaded',{agent:'product_agent',skill:'product_grounding'});
+  assert.equal(state.nodes.find(n=>n.kind==='agent').skillState,'loaded');
+});
+test('observed subagent owns tool call instead of duplicating child as top-level agent',()=>{
+  let state=startGraph('req-1');
+  state=log(state,'agent.routed',{agent:'retail_supervisor'});
+  state=log(state,'agent.subagent.started',{
+    agent:'retail_supervisor',subagent:'sales_agent',execution_mode:'full'
+  });
+  state=log(state,'tool.sql.started',{agent:'sales_agent',tool:'sales_analytics'});
+  assert.ok(state.edges.some(e=>e.from==='subagent:sales_agent' &&
+    e.to==='tool:sales_analytics'));
+  assert.equal(state.nodes.filter(n=>n.id==='agent:sales_agent').length,0);
+});
