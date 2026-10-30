@@ -119,8 +119,9 @@ export function applyExecutionEvent(state: GraphState, event: ExecutionEvent): G
   } else if ((name === 'skill.selected' || name === 'skill.loaded') && event.skill) {
     // A skill file was loaded or a routing policy selected it. Neither event
     // proves that an LLM followed the skill instructions.
-    const owner = (event.agent && nodes.find(n => n.id === 'agent:' + event.agent)) ||
-      activeAgent || nodes.findLast(n => n.kind === 'agent');
+    const owner = (event.agent && nodes.find(n => n.id === 'subagent:' + event.agent)) ||
+      (event.agent && nodes.find(n => n.id === 'agent:' + event.agent)) ||
+      (!event.agent ? activeAgent || nodes.findLast(n => n.kind === 'agent') : undefined);
     if (owner) nodes = nodes.map(n => n.id === owner.id ? {
       ...n, skill: concise(event.skill),
       skillState: name === 'skill.loaded' ? 'loaded' : (n.skillState ?? 'selected')
