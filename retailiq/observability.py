@@ -41,7 +41,7 @@ SAFE_FIELDS = frozenset({
     'agent', 'previous_agent', 'target_agent', 'intent', 'skill', 'tool',
     'status', 'status_code', 'method', 'path', 'duration_ms', 'route_fallback',
     'execution_mode', 'error_type', 'record_count', 'context_count',
-    'subagent', 'input_tokens', 'output_tokens',
+    'subagent', 'mcp_server', 'input_tokens', 'output_tokens',
     'session_id', 'request_id', 'stack_trace',
 })
 UI_FIELDS = SAFE_FIELDS - {'stack_trace'}
