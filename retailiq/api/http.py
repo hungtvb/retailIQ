@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from retailiq.assistant import ask
 from retailiq.rag.indexing import IndexNotReadyError
-from retailiq.infrastructure.sessions import history, add_turn, get_session, session_mutation, SessionBusyError, save_execution_trace
+from retailiq.infrastructure.sessions import history, add_turn, get_session, session_mutation, SessionBusyError, save_execution_trace, get_customer_memory
 from pathlib import Path
 from contextlib import nullcontext
 import time
@@ -152,7 +152,9 @@ def _perform_turn(data: AskBody) -> dict:
                 result = ask(data.question)
             else:
                 prior = history(data.session_id, limit=12)
-                result = ask(data.question, history=prior, active_agent=current['active_agent'])
+                memory = get_customer_memory(data.session_id)
+                result = ask(data.question, history=prior,
+                             active_agent=current['active_agent'], memory=memory)
                 add_turn(data.session_id, data.question, {**result, 'request_id': request_id()})
     log_event('chat.turn_result', agent=result.get('active_agent'),
               intent=result.get('intent'), skill=result.get('skill'),
