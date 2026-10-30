@@ -49,14 +49,19 @@ def inspect_markdown(path: Path, root: Path) -> tuple[int, list[str]]:
             continue
 
         # Ignore links in HTML comments and inline code.
-        if "<!--" in line:
-            in_comment = True
-            line = line.split("<!--", 1)[0]
         if in_comment:
-            if "-->" in line:
-                in_comment = False
-            else:
+            if "-->" not in line:
                 continue
+            line = line.split("-->", 1)[1]
+            in_comment = False
+        while "<!--" in line:
+            before, comment = line.split("<!--", 1)
+            if "-->" in comment:
+                line = before + comment.split("-->", 1)[1]
+            else:
+                line = before
+                in_comment = True
+                break
         line = INLINE_CODE_RE.sub("", line)
 
         for match in LINK_RE.finditer(line):
