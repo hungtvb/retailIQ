@@ -195,9 +195,9 @@ export function positionGraph(graph: GraphState, compact = false): PositionedNod
     const left = 95, right = 265;
     if (onePath) {
       positions.set('request', [left,82]);
-      if (agents[0]) positions.set(agents[0].id,[right,183]);
-      if (tools[0]) positions.set(tools[0].id,[left,300]);
-      if (hasOutput) positions.set('answer',[right,420]);
+      if (agents[0]) positions.set(agents[0].id,[right,198]);
+      if (tools[0]) positions.set(tools[0].id,[left,350]);
+      if (hasOutput) positions.set('answer',[right,490]);
     } else {
       positions.set('request',[180,80]);
       let nextY = 215, index = 0;
