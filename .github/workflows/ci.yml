@@ -44,6 +44,15 @@ jobs:
           path: data/edge_scenario_audit.json
           if-no-files-found: ignore
           retention-days: 7
+      - name: Source reliability report from independent audit evidence
+        run: python -m scripts.report_source_reliability --strict
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: retailiq-source-reliability
+          path: data/source_reliability_report.json
+          if-no-files-found: ignore
+          retention-days: 7
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
