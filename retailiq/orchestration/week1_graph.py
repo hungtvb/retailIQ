@@ -199,8 +199,13 @@ def route(state: State):
     if previous == 'sales_agent' and category == 'stock':
         target = 'sales_agent'
     log_event('agent.routed', agent=target, intent=category, route_fallback=fallback, execution_mode='full')
+    selected_skill = skill_for(category)
+    if selected_skill:
+        # Routing/selection is not proof of loading or executing a skill.
+        log_event('skill.selected', agent=AGENT_FOR_INTENT[category],
+                  skill=selected_skill, execution_mode='full')
     return Command(update={'effective_question': effective, 'intent': category,
-                           'route_fallback': fallback, 'skill': skill_for(category)}, goto=target)
+                           'route_fallback': fallback, 'skill': selected_skill}, goto=target)
 
 
 def sales_agent(state: State):
