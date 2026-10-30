@@ -72,7 +72,9 @@ def wants_single_latest_product(q: str) -> bool:
  if re.search(r'\b(top\s*[2-9]|top\s*10|latest products|newest products|new products)\b',text):
   return False
  return 'mới nhất' in text or bool(re.search(r'\b(latest product|newest product|top\s*1)\b',text))
-def do(q,category):
+def do(q,category, *, stock_lookup=None):
+ # Optional trusted read-only inventory adapter. Default stays reviewed SQL.
+ stock_read = stock_lookup if stock_lookup is not None else inventory
  if category=='latest':
   from .domain.analytics import newest_products
   rows=newest_products(1 if wants_single_latest_product(q) else 5)
@@ -88,7 +90,7 @@ def do(q,category):
   if is_multi_stock_question(q):
    period=requested_month(q)
    ranked=top(period)[:requested_top_count(q)]
-   rows=[record for item in ranked for record in inventory(item['sku'])]
+   rows=[record for item in ranked for record in stock_read(item['sku'])]
    by_sku={item['sku']:sum(row['available'] for row in rows
                            if row['sku']==item['sku']) for item in ranked}
    answer=('Available stock for ranked completed-order products in '+period+': '+
@@ -98,7 +100,7 @@ def do(q,category):
    return {'answer':answer,'records':rows,'contexts':[],'period':period}
   sku=product_sku(q)
   if not sku:return {'answer':'Please specify a known product name or SKU.','records':[],'contexts':[]}
-  rows=inventory(sku)
+  rows=stock_read(sku)
   if not rows:
    return {'answer':f'No inventory records are available for SKU {sku}.', 'records':[], 'contexts':[]}
   total=sum(r['available'] for r in rows)
