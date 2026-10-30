@@ -20,8 +20,14 @@ def sales_analysis(question: str, category: str = 'top') -> dict:
 
 
 def inventory_analysis(question: str) -> dict:
-    with observed('tool.sql', agent='inventory_agent', tool='inventory_analytics', execution_mode='full'):
-        result = do(question, 'stock')
+    if os.getenv('RETAILIQ_INVENTORY_USE_MCP', '').casefold() in ('1', 'true', 'yes'):
+        from retailiq.mcp_adapter import read_inventory
+        # Actual MCP invocation is instrumented inside the adapter. No
+        # fictional SQL-tool event should be emitted by this caller.
+        result = do(question, 'stock', stock_lookup=read_inventory)
+    else:
+        with observed('tool.sql', agent='inventory_agent', tool='inventory_analytics', execution_mode='full'):
+            result = do(question, 'stock')
     return {**result, 'skill': 'inventory_availability', 'agent': 'inventory_agent'}
 
 
