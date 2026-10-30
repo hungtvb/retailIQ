@@ -140,6 +140,9 @@ def run_journey(page):
     page.evaluate("window.scrollTo(0,0)")
     assert_no_node_overlap(page)
     page.screenshot(path=str(OUT / "retailiq_product_workspace_mobile_live.png"), full_page=True)
+    if os.getenv("RETAILIQ_TEST_MCP") == "1":
+        shutil.copyfile(OUT / "retailiq_product_workspace_mobile_live.png",
+                        OUT / "retailiq_product_workspace_mcp_mobile.png")
     page.reload(wait_until="domcontentloaded")
     expect(page.locator(".chat-pane")).to_be_visible()
     expect(page.locator(".network-pane")).to_be_visible()
