@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from typing import Literal
 from retailiq.domain.workflow_demo import definitions, run_demo, read_run, review_run
 from retailiq.domain.semantic import contracts
-from retailiq.domain.freshness_routing import route_freshness
+from retailiq.domain.freshness_routing import route_freshness, plan_question_sources
 
 router = APIRouter(prefix="/api/workflows", tags=["workflow-demo"])
 
@@ -65,6 +65,45 @@ def freshness_route(data: FreshnessRouteInput):
         from retailiq.observability import log_exception
         log_exception("workflow.freshness_failed", error)
         raise HTTPException(status_code=503, detail="Freshness source unavailable") from None
+
+
+class FreshnessQuestionInput(BaseModel):
+    question: str = Field(min_length=3, max_length=500)
+
+
+@router.post("/freshness/question")
+def freshness_question(data: FreshnessQuestionInput):
+    """Explain a natural-language query's required sources and freshness tier.
+
+    This is a read-only W2 routing/evidence API, not a replacement for the
+    multi-agent query executor. Multi-source requirements are never reduced
+    to an arbitrary single source. Actual MCP transport is opt-in.
+    """
+    try:
+        plan = plan_question_sources(data.question)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from None
+    metrics = plan["required_metrics"]
+    tier = plan["requested_tier"]
+    if plan["requires_decomposition"]:
+        return {**plan, "status": "REQUIRES_ORCHESTRATION",
+                "routes": [route_freshness(metric, requested_tier=tier)
+                           for metric in metrics],
+                "notice": "Each source must be executed and verified separately; no tool was invoked"}
+    metric = metrics[0]
+    if metric == "available_stock":
+        from retailiq.queries import product_sku
+        sku = product_sku(data.question)
+        if not sku:
+            return {**plan, "status": "NEEDS_PRODUCT",
+                    "routes": [route_freshness(metric, requested_tier=tier)],
+                    "notice": "Known SKU or exact product name required before stock is read"}
+        result = freshness_route(FreshnessRouteInput(
+            metric="available_stock", sku=sku, requested_tier=tier))
+        return {**plan, "status": result["status"], "routes": [result]}
+    result = route_freshness(metric, requested_tier=tier)
+    return {**plan, "status": result["status"], "routes": [result],
+            "notice": "Route selected; the synthetic source does not supply a verified refresh timestamp"}
 
 
 @router.get("/definitions")
