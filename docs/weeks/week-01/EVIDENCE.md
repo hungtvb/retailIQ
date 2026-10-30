@@ -29,7 +29,7 @@ Original details: [2026-10-28 compliance](../../archive/2026-10-30/legacy/13_WEE
 
 Stock: available = on_hand − reserved by location; no fabricated zero for missing rows. Revenue: completed orders in selected month, line discount applied; top sellers by completed units sold, deterministic SKU tie-break. Product knowledge is sourced from documents; never substitute it for inventory. The [14 historical golden scenario IDs](../../archive/2026-10-30/legacy/22_BUSINESS_GOLDEN_SCENARIOS.md) cover period/status exclusions, thresholds, invalid data, ambiguity and exact SKU matching.
 
-An early product retrieval missed AlphaBook at 0.430 versus threshold 0.45; the local demo threshold changed to 0.40 and was retested. This **does not** establish a globally optimal cutoff. The query acceptance audit includes predicted failures (price rankings, arbitrary top-N, contextual stock), but **predictions are not measured PASS/FAIL**; run `python -m scripts.audit_queries --mode offline` for observed evidence.
+An early product retrieval missed AlphaBook at 0.430 versus threshold 0.45; the local demo threshold changed to 0.40 and was retested. This **does not** establish a globally optimal cutoff. The query acceptance audit initially contained predictions for price rankings, arbitrary top-N and contextual stock. The **2026-10-30 Python 3.12 CI** on `e90376be` ran the audit in offline mode and **observed 9 PASS / 11 FAIL / 0 ERROR**. These business-case failures are not pytest failures, and offline results do not establish full-mode LLM quality. Reproduce with `python -m scripts.audit_queries --mode offline` and inspect the CI report artifact for individual cases.
 
 ### Gaps, limitations and future work
 
@@ -47,3 +47,10 @@ Follow [RUNBOOK.md](RUNBOOK.md). For every run, capture source SHA, OS, Python, 
 ## Documentation maintenance gate
 
 The canonical active Markdown links are checked by `python -m scripts.check_docs_links` in the Python 3.12 regression workflow. Archived historical snapshots are excluded intentionally; this checker requires **a fresh passing CI run on the commit introducing it**. This maintenance check does not certify RAGAS, LangSmith or live-provider execution.
+
+## 2026-10-30 documentation guard and Python 3.12 verification
+
+- **Tested SHA:** `e90376be9b883b8095944461c15bf18747d3e1f3` · GitHub Actions Python **3.12**, [Week 1 regression run 40997220849](https://github.com/hungtvb/retailIQ/actions/runs/40997220849).
+- **CI result:** **303 pytest PASS**; link checker validated **11 active Markdown files / 94 local links / 0 errors** (root README, nine core project/Week 1 documents, archive index). This is verified for the specified SHA only.
+- **Business query acceptance:** **9 PASS / 11 FAIL / 0 ERROR** in offline mode. The CI workflow intentionally records business coverage gaps without failing the unit-test gate.
+- **Remaining limits:** no new provider-backed RAGAS/LangSmith run on the consolidation HEAD, no broad open-ended accuracy certification and no observed user productivity gain. This evidence update itself does not retroactively certify a newer commit.
