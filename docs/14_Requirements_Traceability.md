@@ -1,5 +1,7 @@
 # RetailIQ Copilot — Requirements Traceability and Acceptance Plan
 
+> For **current requirements coverage across all four milestones**, use [29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md). This older matrix preserves the original Week 1 audit and is not an up-to-date cross-week completion certificate.
+
 > **Version:** 0.1 · **Status:** Working matrix; live gates remain open · **Last updated:** 2026-10-28
 > **Accountable role:** QA · **PO acceptance:** Pending
 > Implementation and mocked tests are not live integration evidence.
