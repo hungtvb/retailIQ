@@ -29,9 +29,9 @@ not full provider quality or the entire course requirement.
 | W2-01 | Freshness-aware routing: live/15-min/hourly/daily | `retailiq/domain/semantic.py`, `domain/workflow_demo.py` | PARTIAL: freshness timestamps and local scenarios | Query-to-source choice plus per-source reliability/freshness report |
 | W2-02 | Governed semantic metrics | `retailiq/domain/semantic.py` | LOCAL PASS: metric definition and freshness contracts | Include order-state contract and verify use in all workflow paths |
 | W2-03 | MCP Inventory and Order APIs + LangChain adapter | `retailiq/mcp_server.py`, `mcp_adapter.py` | LOCAL PASS: real stdio subprocess + browser-backed MCP calls | Evidence is local stdio, not a hosted MCP or enterprise API |
-| W2-04 | Customer context memory (short & long term strategy) | SQLite sessions / bounded history / LangGraph checkpoint | PARTIAL: short-term context isolation tested | Explicit consent/scope, persistent customer context policy and tests |
+| W2-04 | Customer context memory (short & long term strategy) | `retailiq/infrastructure/sessions.py`, `domain/customer_memory.py`, `api/sessions.py`, `assistant.py`, `orchestration/week1_graph.py` | PARTIAL: explicit opt-in, durable session-scoped preference store and deterministic recall; `tests/test_customer_memory.py` local acceptance | True cross-session/customer long-term memory requires authenticated owner identity, consent management and isolation; do not reuse UUID as customer identity |
 | W2-05 | Hybrid retrieval, reranking, query rewriting | `retailiq/rag/advanced_retrieval.py`, `retrieval.py`, `scripts/eval_retrieval.py` | LOCAL/MOCKED: index-backed lexical + fake-vector test; deterministic term expansion; metric harness implemented | Provider-backed embedding retrieval evaluation against held-out queries; prove retrieval quality (Recall@k/MRR or equivalent), not just code presence |
-| W2-06 | Source reliability and accuracy report | Existing 20+/19/14 synthetic suites | PARTIAL: synthetic SQL/MCP reliability evidence | Consolidated per-source breakdown, freshness results and retrieval quality |
+| W2-06 | Source reliability and accuracy report | `scripts/report_source_reliability.py`, `scripts/eval_retrieval.py`, independent query/workflow/edge audits | PARTIAL: automated fixture report by source, strict summary verification, no invented live metrics; CI artifact `retailiq-source-reliability` | Source-level live freshness and provider-backed retrieval quality still require measured reports |
 | W3-01 | HITL approval | `retailiq/domain/workflow_demo.py` | PARTIAL: simulation of gate with persisted local review | LangGraph interrupt/resume, authorized reviewer boundary, negative tests |
 | W3-02 | Row-level security | Role-sensitive simulated location scope | PARTIAL: not authenticated RBAC | Authenticated principal and enforced read scope + isolation tests |
 | W3-03 | KPI alerts | Workflow screening | LOCAL PASS for threshold fixtures; PARTIAL overall | Audited alert policy, authorized destination and failure behavior |
@@ -65,3 +65,20 @@ not full provider quality or the entire course requirement.
 - Safety: changed/deleted/unindexed documents, recovery journal, vector timeout and injected source are covered by tests. Never claim these as provider quality metrics.
 - Reproduction: `python -m pytest -q tests/test_advanced_retrieval.py tests/test_rag_module_hardening.py`; project CI also runs strict behavioral gates.
 - Provider acceptance (still open): index actual product docs, then run `python -m scripts.eval_retrieval --confirm-live --out data/retrieval_eval_report.json` with actual embedding credentials. The script measures source Recall@3, MRR, per-source accuracy and mean retrieval latency for vector-only versus hybrid. It **must not** be marked PASS until the JSON report is produced and reviewed. Run `scripts/eval_ragas.py` separately for grounded answer faithfulness; retrieval accuracy is not a substitute.
+
+## W2-04 Customer Context Memory: implemented local contract
+
+- **Session-only, explicit opt-in:** `PUT /api/sessions/{session_id}/memory` requires `{"consent":true,"preferences":{"preferred_category":"Accessory","preferred_channel":"online"}}`.
+- **Read/forget:** `GET /api/sessions/{session_id}/memory`; `DELETE /api/sessions/{session_id}/memory`. `PUT` with `consent:false` and empty preferences also revokes consent. Deleting a chat cascades removal of its memory.
+- **Allowed attributes only:** category and purchase channel from fixed retail enums. No personal identifiers, free text, medical/financial data, model-generated memories, automatic chat extraction or user instructions are stored.
+- **Actual chat use:** a direct question such as "What are my saved preferences?" reads the consented SQLite value in both offline assistant and full LangGraph's general-node path. Recall is deterministic, not invented by the LLM.
+- **Security boundary:** localhost-only unauthenticated demo; session UUID is not customer authentication. Preferences cannot be accessed across sessions by an agent. A customer-wide long-term profile and RBAC remain OPEN until authenticated ownership/consent policy is implemented in Week 3.
+- **Acceptance:** `python -m pytest -q tests/test_customer_memory.py` checks persistence, refusal without consent, scoped recall, isolation, revocation, chat deletion and invalid input.
+
+## W2-06 Source reliability report: implemented local contract
+
+- After `scripts.audit_queries --strict`, `scripts.audit_workflows --strict`, and `scripts.audit_edge_scenarios --strict`, run `python -m scripts.report_source_reliability --strict`.
+- The report groups measured business cases by contributing `catalog`, `orders`, `inventory`, `conversation_context` and `product_knowledge` sources, preserving FAIL/ERROR counts and independent suite results.
+- Retrieval quality remains `NOT_MEASURED` unless an explicit actual-provider report is passed via `--retrieval`. No fabricated recall/MRR/RAGAS. Freshness targets remain `TARGETS_ONLY_NOT_LIVE_VERIFIED`, with local timestamp behavior shown separately in workflow/edge acceptance.
+- CI publishes `data/source_reliability_report.json` as `retailiq-source-reliability`. This is **synthetic test coverage evidence**, not measured end-user task success or production SLA.
+- **Acceptance:** `tests/test_source_reliability_report.py` validates summary integrity, grouping, reject-fake-provider behavior and strict failure reporting.
