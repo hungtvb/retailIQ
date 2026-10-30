@@ -101,7 +101,7 @@ export function applyExecutionEvent(state: GraphState, event: ExecutionEvent): G
     // Offline mode's legacy handoff event is a deterministic context change.
     // Only the full LangGraph Command transfer is an actual handoff.
     edges = upsertEdge(edges, edge(from, to,
-      event.execution_mode === 'offline' ? 'context' : 'handoff','observed'));
+      event.execution_mode === 'full' ? 'handoff' : 'context','observed'));
   } else if (name.startsWith('agent.subagent.') && event.agent && event.subagent) {
     const from = 'agent:' + event.agent;
     const to = 'subagent:' + event.subagent;
