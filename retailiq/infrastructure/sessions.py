@@ -100,6 +100,12 @@ def _connect():
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY(session_id,request_id)
         );
+        CREATE TABLE IF NOT EXISTS customer_session_memory (
+            session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+            preferences_json TEXT NOT NULL,
+            consented_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
         ''')
         message_columns = {row['name'] for row in connection.execute('PRAGMA table_info(messages)')}
         if 'evidence_json' not in message_columns:
@@ -190,6 +196,48 @@ def add_turn(sid: str, question: str, response: dict) -> None:
         title = question.strip()[:80] if row['title'] == 'New conversation' else row['title']
         c.execute('''UPDATE sessions SET title=?,active_agent=?,updated_at=CURRENT_TIMESTAMP
                      WHERE id=?''', (title, agent, sid))
+
+
+def get_customer_memory(sid: str) -> dict:
+    """Return explicitly consented preferences, limited to this exact session."""
+    from retailiq.domain.customer_memory import validate_preferences
+    with _connect() as c:
+        if c.execute('SELECT 1 FROM sessions WHERE id=?', (sid,)).fetchone() is None:
+            raise KeyError('Unknown session')
+        row = c.execute(
+            'SELECT preferences_json FROM customer_session_memory WHERE session_id=?',
+            (sid,)).fetchone()
+        if row is None:
+            return {'consent': False, 'preferences': {}, 'scope': 'session_only'}
+        values = validate_preferences(json.loads(row['preferences_json']))
+        return {'consent': True, 'preferences': values, 'scope': 'session_only'}
+
+
+def save_customer_memory(sid: str, *, consent: bool, preferences: dict) -> dict:
+    """Opt-in persistence; opting out also deletes prior values transactionally.
+
+    Caller must use session_mutation(sid) for consistency with chat/delete.
+    """
+    from retailiq.domain.customer_memory import validate_preferences
+    if not isinstance(consent, bool):
+        raise ValueError('Memory consent must be explicitly true or false')
+    safe = validate_preferences(preferences)
+    with _connect() as c:
+        if c.execute('SELECT 1 FROM sessions WHERE id=?', (sid,)).fetchone() is None:
+            raise KeyError('Unknown session')
+        if not consent:
+            if safe:
+                raise ValueError('Cannot save preferences without consent')
+            c.execute('DELETE FROM customer_session_memory WHERE session_id=?', (sid,))
+            return {'consent': False, 'preferences': {}, 'scope': 'session_only'}
+        if not safe:
+            raise ValueError('Consent requires at least one selected preference')
+        payload = json.dumps(safe, sort_keys=True, ensure_ascii=False, separators=(',', ':'))
+        c.execute('''INSERT INTO customer_session_memory (session_id,preferences_json)
+                     VALUES (?,?) ON CONFLICT(session_id) DO UPDATE
+                     SET preferences_json=excluded.preferences_json,
+                         updated_at=CURRENT_TIMESTAMP''', (sid, payload))
+        return {'consent': True, 'preferences': safe, 'scope': 'session_only'}
 
 
 def delete_session(sid: str) -> bool:
