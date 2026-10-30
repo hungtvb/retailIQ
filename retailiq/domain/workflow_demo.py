@@ -14,7 +14,8 @@ import sqlite3
 import uuid
 
 from retailiq.domain.analytics import catalog_product, inventory, revenue, top, month
-from retailiq.domain.semantic import semantic_summary, FRESHNESS_TIERS
+from retailiq.domain.semantic import semantic_summary
+from retailiq.domain.freshness_routing import route_freshness
 from retailiq.observability import log_event
 
 HCM = timezone(timedelta(hours=7))
@@ -312,13 +313,17 @@ def review_run(run_id: str, role: str, decision: str) -> dict:
 
 
 def _freshness(rows: list[dict]) -> dict:
-    updates = [datetime.fromisoformat(row["updated_at"]) for row in rows]
-    oldest = min(updates) if updates else None
-    # A SKU's aggregate stock combines ALL locations; one stale location makes
-    # the complete result stale even if another location updated just now.
-    age = int((datetime.now(timezone.utc) - oldest.astimezone(timezone.utc)).total_seconds()) if oldest else None
-    return {"tier": "15 minutes", "observed_at": oldest.isoformat() if oldest else None,
-            "age_seconds": age, "meets_target": bool(age is not None and 0 <= age <= FRESHNESS_TIERS["15_min"]["target_seconds"])}
+    """Backwards-compatible Week 2 view of the shared source router.
+
+    This uses observed stock timestamps, not merely a source's declared SLA.
+    """
+    result = route_freshness("available_stock", inventory_rows=rows,
+                             use_mcp=os.getenv("RETAILIQ_WORKFLOW_USE_MCP", "0") == "1")
+    return {"tier": "15 minutes", "observed_at": result["observed_at"],
+            "age_seconds": result["age_seconds"],
+            "meets_target": result["meets_target"],
+            "selected_tool": result["selected_tool"],
+            "status": result["status"]}
 
 
 def run_demo(scenario: str, sku: str, quantity: int = 1,
