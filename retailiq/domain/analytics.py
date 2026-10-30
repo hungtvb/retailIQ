@@ -32,6 +32,13 @@ def requested_month(question: str) -> str:
     if 'tháng trước' in text or 'last month' in text:
         previous = reference.replace(day=1) - timedelta(days=1)
         return previous.strftime('%Y-%m')
+    english_months = ('january', 'february', 'march', 'april', 'may', 'june',
+                      'july', 'august', 'september', 'october', 'november', 'december')
+    english = re.search(
+        r'\b(' + '|'.join(english_months) + r')\s*(20\d{2})?\b', text
+    )
+    if english:
+        return f'{int(english.group(2) or reference.year):04d}-{english_months.index(english.group(1)) + 1:02d}'
     match = re.search(r'tháng\s+(1[0-2]|0?[1-9])(?:\s*(?:năm|/|-)\s*(20\d{2}))?', text)
     if not match:
         match = re.search(r'\b(20\d{2})[-/](1[0-2]|0?[1-9])\b', text)
