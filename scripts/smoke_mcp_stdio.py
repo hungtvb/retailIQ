@@ -91,10 +91,10 @@ def main() -> None:
             })
             assert reply.status_code == 200
             frames = []
-            for raw in reply.text.split('\\n\\n'):
+            for raw in reply.text.split('\n\n'):
                 if not raw.startswith('event: '):
                     continue
-                lines = raw.split('\\n')
+                lines = raw.split('\n')
                 kind = lines[0][len('event: '):]
                 data_line = next((line for line in lines if line.startswith('data: ')), None)
                 if data_line:
