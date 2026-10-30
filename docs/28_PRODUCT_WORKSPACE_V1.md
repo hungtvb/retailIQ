@@ -41,6 +41,16 @@ python -m uvicorn retailiq.api:app --host 127.0.0.1 --port 8000
 
 Open `http://127.0.0.1:8000/workspace`. For development: run Vite in `frontend` with `npm run dev`; it proxies `/api` and `/ask` to localhost port 8000.
 
+## Execution instrumentation v1.2
+
+- Offline follow-up context may emit the legacy `agent.handoff` log for compatibility, but the workspace renders an **OFFLINE CONTEXT** edge. This is not evidence of a LangGraph `Command` handoff.
+- Full LangGraph `agent.handoff` from `sales_agent` to `inventory_agent` remains a true control-transfer event.
+- `skill.selected` means the router chose a skill; `skill.loaded` means an allowlisted file was read and attributed to an agent. Neither alone proves the model obeyed the skill.
+- `agent.subagent.started/completed` are emitted by actual delegated SQL subgraph invocations; tool events inside the subgraph are attached to that subagent.
+- `mcp.tool.started/completed` are emitted at real local MCP stdio tool invocation, with explicit allowlisted `mcp_server=retailiq`. The Tool/Server nodes are not generated from a configured-but-unused integration.
+- Optional `RETAILIQ_INVENTORY_USE_MCP=true` routes stock reads through the existing inventory MCP adapter. Default remains the reviewed direct SQL lookup. Install `requirements-mcp.txt` before enabling it.
+- CI now validates Python subagent execution, real MCP stdio + FastAPI SSE + durable trace and the MCP network in desktop/mobile Chromium. This is evidence of *local* transport, not production service readiness.
+
 ## Next work, not claimed complete
 
 - Full tracing for non-streamed POST requests (streamed conversations only in v1.1).
