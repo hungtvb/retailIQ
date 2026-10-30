@@ -20,7 +20,7 @@ means source files or the working directory are out of sync; update the project
 and restart instead of installing a similarly named external package.
 
 
-Requires Python 3.11+ and an OpenAI-compatible chat and embedding provider.
+Requires Python 3.12 and an OpenAI-compatible chat and embedding provider.
 
 `requirements-full.txt` installs the application runtime (chat, agents, LangGraph,
 Chroma, LangSmith) **without RAGAS**. For the separate course evaluation step,
@@ -65,19 +65,8 @@ Sales and top-seller questions use the month named in the question; when no mont
 
 Install `requirements-offline.txt` and set `RETAILIQ_MODE=offline` in `.env`. Offline mode supports deterministic SQL and lexical retrieval; it does not prove full LangGraph, Chroma, RAGAS, or LangSmith execution.
 
-## Project documents
+## Project documentation
 
-| Need | Start here |
-|---|---|
-| Scope and rubric | [Requirements](docs/00_PROJECT_REQUIREMENTS.md) · [Week 1 checklist](docs/00_WEEK1_OFFICIAL_CHECKLIST.md) · [Lesson references](docs/00_WEEK1_LESSON_REFERENCES.md) |
-| Business problem and roadmap | [Business problem & goals](docs/01_Domain_Selection_and_Business_Problem.md) · [Scope & featured scenarios](docs/21_INVENTORY_SALES_BUSINESS_SCOPE.md) · [Synthetic pilot and its limits](docs/23_INTERNAL_SYNTHETIC_BUSINESS_PILOT.md) · [PRD](docs/12_Product_Brief_and_PRD.md) · [Four-week timeline](docs/16_Roadmap_and_Timeline.md) |
-| Setup and demo | [Runbook](docs/03_Week1_Demo_Runbook.md) · [OpenAI-compatible setup](docs/05_Huong_dan_OpenAI_Compatible_VI.md) · [Slides](docs/slides/README.md) |
-| Data, API, and acceptance | [Data/API contract](docs/13_Data_and_API_Contract.md) · [Traceability](docs/14_Requirements_Traceability.md) · [Test evidence](docs/06_Test_Evidence.md) |
-| Engineering and operations | [Quality standard](docs/15_MODULE_QUALITY_STANDARD.md) · [Inventory/Sales](docs/16_INVENTORY_SALES_HARDENING.md) · [Product RAG](docs/17_PRODUCT_RAG_MODULE_HARDENING.md) · [Agent harness](docs/18_AGENT_HARNESS_HARDENING.md) · [Risk register](docs/15_Risk_Register_and_Document_Governance.md) |
-| Presentation | [Slide guide and deck](docs/slides/README.md) |
+Begin with the [documentation index](docs/README.md): [Business Problem](docs/PROJECT.md) · [Course scope and four-week roadmap](docs/COURSE_PLAN.md) · [Architecture](docs/ARCHITECTURE.md) · [Data & API](docs/DATA_API.md) · [Week 1 checklist](docs/weeks/week-01/README.md) · [Runbook](docs/weeks/week-01/RUNBOOK.md) · [Evidence](docs/weeks/week-01/EVIDENCE.md).
 
-## Verification status
-
-Use [test evidence](docs/06_Test_Evidence.md) and [traceability](docs/14_Requirements_Traceability.md) for dated results. The dated 2026-10-29 demo-machine evidence records five scripted full-mode cases, three provider-backed RAGAS samples, and remote LangSmith traces; see [Week 1 evidence](docs/09_Week1_Checklist_and_Evidence.md). CI regression and mocked-provider E2E results are separate from those live checks. None of these establishes open-ended conversational correctness or real business ROI.
-
-**Security:** `.env` is gitignored. Use synthetic data, bind to `127.0.0.1`, and do not expose this unauthenticated demo publicly.
+**Evidence boundary:** Five scripted provider-backed flows, RAGAS (3 cases), and LangSmith remote traces were reported for 2026-10-29. Historical evidence does not automatically certify newer code, arbitrary retail questions or user productivity. Week 2–4 requirements remain planned. Archived prior notes and test artifacts are preserved at [docs/archive](docs/archive/README.md).

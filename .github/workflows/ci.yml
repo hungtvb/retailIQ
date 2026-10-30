@@ -9,7 +9,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
       - name: Install offline suite + LangGraph runtime
         run: |
           python -m pip install -r requirements-offline.txt 'langgraph>=1,<2' 'langchain-core>=1,<2' 'langchain>=1,<2' 'langgraph-checkpoint-sqlite>=3,<4'
