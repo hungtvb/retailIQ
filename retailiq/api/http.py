@@ -153,8 +153,12 @@ def _perform_turn(data: AskBody) -> dict:
             else:
                 prior = history(data.session_id, limit=12)
                 memory = get_customer_memory(data.session_id)
-                result = ask(data.question, history=prior,
-                             active_agent=current['active_agent'], memory=memory)
+                if memory['consent']:
+                    result = ask(data.question, history=prior,
+                                 active_agent=current['active_agent'], memory=memory)
+                else:
+                    result = ask(data.question, history=prior,
+                                 active_agent=current['active_agent'])
                 add_turn(data.session_id, data.question, {**result, 'request_id': request_id()})
     log_event('chat.turn_result', agent=result.get('active_agent'),
               intent=result.get('intent'), skill=result.get('skill'),
