@@ -25,3 +25,4 @@ def test_product_ranked_revenue_uses_exact_month_not_current_month():
     assert ranked_revenue_sku_rank('Doanh thu tháng 10 của top 1 seller?') == 1
     assert ranked_revenue_sku_rank('Revenue of the top seller in September 2026?') == 1
     assert ranked_revenue_sku_rank('Revenue of the top 3 sellers?') is None
+    assert ranked_revenue_sku_rank('Revenue of the top 5 best sellers?') is None
