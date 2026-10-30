@@ -51,6 +51,59 @@ def _timestamp(raw: str) -> datetime:
     return stamp.astimezone(timezone.utc)
 
 
+
+def plan_question_sources(question: str) -> dict:
+    """Extract a bounded source/freshness plan without silently dropping intents.
+
+    This is an explainable deterministic classifier, not an LLM planner and
+    not proof any selected source was called. Cross-domain questions require
+    orchestration before one can verify a final joined result.
+    """
+    import re
+
+    if not isinstance(question, str) or not 3 <= len(question.strip()) <= 500:
+        raise ValueError("Question must be 3–500 characters")
+    q = question.casefold()
+    detectors = (
+        ("order_state", (
+            "trạng thái đơn hàng", "đơn hàng", "order status",
+            "order tracking", "delivery status",
+        )),
+        ("available_stock", (
+            "tồn kho", "còn hàng", "còn bao nhiêu", "trong kho",
+            "stock", "inventory", "available units",
+        )),
+        ("net_revenue", ("doanh thu", "revenue", "net sales")),
+        ("top_sellers", ("bán chạy", "top seller", "best seller", "bestseller")),
+        ("product_knowledge", (
+            "thông số", "bảo hành", "tính năng", "đặc điểm", "tương thích",
+            "specification", "warranty", "features", "compatibility", "manual",
+            "product details",
+        )),
+    )
+    metrics = [metric for metric, terms in detectors if any(term in q for term in terms)]
+    if not metrics:
+        raise ValueError("Cannot identify a supported retail source from the question")
+    tier = None
+    if any(term in q for term in (
+        "thời gian thực", "ngay bây giờ", "ngay lúc này", "real-time",
+        "realtime", "right now", "live update",
+    )):
+        tier = "live"
+    elif re.search(r"\\b15\\s*(?:phút|minutes?|mins?)\\b", q):
+        tier = "15_min"
+    elif any(term in q for term in ("hourly", "mỗi giờ", "hàng giờ")):
+        tier = "hourly"
+    elif any(term in q for term in ("daily", "hàng ngày", "mỗi ngày")):
+        tier = "daily"
+    return {
+        "required_metrics": metrics,
+        "requested_tier": tier,
+        "requires_decomposition": len(metrics) > 1,
+        "planning_mode": "deterministic_source_classification",
+    }
+
+
 def route_freshness(
     metric: Metric, *,
     requested_tier: Tier | None = None,
