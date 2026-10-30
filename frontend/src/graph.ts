@@ -3,15 +3,16 @@
  * Do not infer MCP usage, skill execution, or subagents from architecture.
  * No graph framework, random positions, or synthetic execution events.
  */
-export type NodeKind = 'request' | 'agent' | 'subagent' | 'tool' | 'mcp' | 'output';
+export type NodeKind = 'request' | 'agent' | 'subagent' | 'tool' | 'mcp' | 'mcp-server' | 'output';
 export type NodeStatus = 'running' | 'completed' | 'failed' | 'pending' | 'observed';
-export type EdgeKind = 'route' | 'call' | 'handoff' | 'delegate' | 'result' | 'mcp';
+export type EdgeKind = 'route' | 'call' | 'handoff' | 'context' | 'delegate' | 'result' | 'mcp';
 export interface GraphNode {
   id: string;
   label: string;
   kind: NodeKind;
   status: NodeStatus;
   skill?: string;
+  skillState?: 'selected' | 'loaded';
 }
 export interface GraphEdge {
   id: string;
@@ -34,6 +35,7 @@ export interface ExecutionEvent {
   previous_agent?: string;
   target_agent?: string;
   tool?: string;
+  mcp_server?: string;
   skill?: string;
   subagent?: string;
   status?: string;
@@ -56,7 +58,8 @@ function upsertNode(nodes: GraphNode[], next: GraphNode): GraphNode[] {
   const index = nodes.findIndex(node => node.id === next.id);
   if (index < 0) return [...nodes, next].slice(0, 28);
   return nodes.map((node, i) => i === index ? {
-    ...node, ...next, skill: next.skill ?? node.skill
+    ...node, ...next, skill: next.skill ?? node.skill,
+    skillState: next.skillState ?? node.skillState
   } : node);
 }
 function upsertEdge(edges: GraphEdge[], edge: GraphEdge): GraphEdge[] {
@@ -95,7 +98,10 @@ export function applyExecutionEvent(state: GraphState, event: ExecutionEvent): G
       source?.status === 'completed' || source?.status === 'failed' ?
         source.status : 'observed'));
     nodes = upsertNode(nodes, completed(concise(event.target_agent), 'agent', to, 'running'));
-    edges = upsertEdge(edges, edge(from, to, 'handoff', 'completed'));
+    // Offline mode's legacy handoff event is a deterministic context change.
+    // Only the full LangGraph Command transfer is an actual handoff.
+    edges = upsertEdge(edges, edge(from, to,
+      event.execution_mode === 'offline' ? 'context' : 'handoff','observed'));
   } else if (name.startsWith('agent.subagent.') && event.agent && event.subagent) {
     const from = 'agent:' + event.agent;
     const to = 'subagent:' + event.subagent;
@@ -110,21 +116,37 @@ export function applyExecutionEvent(state: GraphState, event: ExecutionEvent): G
       owner?.status === 'completed' || owner?.status === 'failed' ?
         owner.status : 'observed'));
     edges = upsertEdge(edges, edge(agentId, 'answer', 'result', 'observed'));
-  } else if (name === 'skill.selected' && event.skill) {
-    // Selection proves intended skill, not the execution of that skill.
-    const owner = activeAgent || nodes.findLast(n => n.kind === 'agent');
-    if (owner) nodes = nodes.map(n => n.id === owner.id ?
-      { ...n, skill: concise(event.skill) } : n);
+  } else if ((name === 'skill.selected' || name === 'skill.loaded') && event.skill) {
+    // A skill file was loaded or a routing policy selected it. Neither event
+    // proves that an LLM followed the skill instructions.
+    const owner = (event.agent && nodes.find(n => n.id === 'agent:' + event.agent)) ||
+      activeAgent || nodes.findLast(n => n.kind === 'agent');
+    if (owner) nodes = nodes.map(n => n.id === owner.id ? {
+      ...n, skill: concise(event.skill),
+      skillState: name === 'skill.loaded' ? 'loaded' : (n.skillState ?? 'selected')
+    } : n);
   } else if ((name.startsWith('tool.') || name.startsWith('mcp.tool.')) && event.tool) {
     const isMcp = name.startsWith('mcp.');
-    const from = agentId || activeAgent?.id;
+    // A tool called inside an observed subagent belongs to that subagent,
+    // not to an invented second top-level agent.
+    const childId = event.agent ? 'subagent:' + event.agent : '';
+    const hasChild = childId && nodes.some(n => n.id === childId);
+    const from = hasChild ? childId : (agentId || activeAgent?.id);
     const id = (isMcp ? 'mcp:' : 'tool:') + event.tool;
-    if (agentId && !existingAgent) {
+    if (agentId && !existingAgent && !hasChild) {
       nodes = upsertNode(nodes, completed(concise(event.agent), 'agent', agentId, 'running'));
-      edges = upsertEdge(edges, edge('request', agentId, 'route', 'completed'));
+      edges = upsertEdge(edges, edge('request', agentId, 'route', 'observed'));
+    }
+    if (isMcp && event.mcp_server) {
+      const serverId = 'mcp-server:' + event.mcp_server;
+      nodes = upsertNode(nodes, completed(concise(event.mcp_server),
+        'mcp-server', serverId, status));
+      if (from) edges = upsertEdge(edges,edge(from,serverId,'mcp','observed'));
+      edges = upsertEdge(edges,edge(serverId,id,'mcp',status));
+    } else if (from) {
+      edges = upsertEdge(edges, edge(from,id,isMcp?'mcp':'call',status));
     }
     nodes = upsertNode(nodes, completed(concise(event.tool), isMcp ? 'mcp' : 'tool', id, status));
-    if (from) edges = upsertEdge(edges, edge(from, id, isMcp ? 'mcp' : 'call', status));
   } else if (name.startsWith('agent.') && (name.endsWith('.started') ||
     name.endsWith('.completed') || name.endsWith('.failed')) && event.agent) {
     nodes = upsertNode(nodes, completed(concise(event.agent), 'agent', agentId, status));
@@ -160,7 +182,7 @@ export interface PositionedNode extends GraphNode { x: number; y: number; }
 export function positionGraph(graph: GraphState, compact = false): PositionedNode[] {
   const agents = graph.nodes.filter(n => n.kind === 'agent');
   const subagents = graph.nodes.filter(n => n.kind === 'subagent');
-  const tools = graph.nodes.filter(n => n.kind === 'tool' || n.kind === 'mcp');
+  const tools = graph.nodes.filter(n => n.kind === 'tool' || n.kind === 'mcp' || n.kind === 'mcp-server');
   const positions = new Map<string, [number, number]>();
   const onePath = agents.length <= 1 && tools.length <= 1 && subagents.length === 0;
   const hasOutput = graph.nodes.some(n => n.id === 'answer');
