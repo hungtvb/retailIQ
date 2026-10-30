@@ -168,6 +168,42 @@ def revenue(period: str | None = None) -> list[dict]:
     return rows
 
 
+
+def revenue_for_sku(sku: str, period: str | None = None) -> list[dict]:
+    """Revenue for exactly one verified SKU in a reporting month.
+
+    Product selection/ranking is done separately by top(period), always using
+    the same period. Never substitute store-wide revenue for a ranked SKU.
+    """
+    normalized = _sku(sku)
+    start, end = _month_bounds(period)
+    _ensure_sales_lines_valid(start, end)
+    rows = query("""
+        SELECT p.sku, p.name, o.channel, COUNT(DISTINCT o.id) AS orders,
+               SUM(li.quantity) AS units_sold,
+               SUM(li.quantity * li.unit_price_vnd - li.discount_vnd) AS net_revenue_vnd
+        FROM orders AS o
+        JOIN order_lines AS li ON li.order_id = o.id
+        JOIN products AS p ON p.sku = li.sku
+        WHERE o.status = 'completed'
+          AND o.ordered_at >= ? AND o.ordered_at < ?
+          AND li.sku = ?
+        GROUP BY p.sku, p.name, o.channel
+        ORDER BY o.channel
+    """, (start, end, normalized))
+    for row in rows:
+        if row.get('sku') != normalized:
+            raise DomainDataError('Revenue evidence SKU mismatch')
+        if not isinstance(row.get('name'), str) or not row['name'].strip():
+            raise DomainDataError('Revenue product name is missing')
+        if not isinstance(row.get('channel'), str) or not row['channel'].strip():
+            raise DomainDataError('Sales channel is missing')
+        _nonnegative_int(row.get('orders'), field='orders')
+        _nonnegative_int(row.get('units_sold'), field='units_sold')
+        _nonnegative_int(row.get('net_revenue_vnd'), field='net_revenue_vnd')
+    return rows
+
+
 def top(period: str | None = None) -> list[dict]:
     start, end = _month_bounds(period)
     _ensure_sales_lines_valid(start, end)
