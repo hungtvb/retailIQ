@@ -89,7 +89,7 @@ function wrapNodeLabel(label: string, limit = 18): string[] {
 function MatrixNode({node}: {node: PositionedNode}) {
   const colors: Record<string,string> = {
     request:'#8095aa',agent:'#895ed2',subagent:'#a77ce4',
-    tool:'#448bd0',mcp:'#2989aa',output:'#10a38b'
+    tool:'#448bd0',mcp:'#2989aa','mcp-server':'#177b95',output:'#10a38b'
   };
   const c=colors[node.kind] || '#8193a8';
   const isLive=node.status==='running';
@@ -108,7 +108,7 @@ function MatrixNode({node}: {node: PositionedNode}) {
     <circle cx="-67" cy="-22" r="5" fill={node.status==='failed'?'#e46e6b':
       node.status==='completed'?'#22af87':isLive?c:'#98a9b5'}/>
     <text x="-52" y="-18" fill="#607084" className="matrix-node-type">
-      {node.kind==='mcp'?'MCP TOOL':node.kind.toUpperCase()}
+      {node.kind==='mcp'?'MCP TOOL':node.kind==='mcp-server'?'MCP SERVER':node.kind.toUpperCase()}
     </text>
     {labelLines.map((line,i)=><text key={i} x="-70"
       y={i===0?7:26} className="matrix-node-label">{line}</text>)}
@@ -118,7 +118,7 @@ function MatrixNode({node}: {node: PositionedNode}) {
       <rect x="-70" y="48" width="140" height="21" rx="6"
         fill="#effaf6" stroke="#b9e5d8"/>
       <text x="0" y="62" textAnchor="middle" className="matrix-skill">
-        {'Selected: '+node.skill!.slice(0,17)}
+        {(node.skillState==='loaded'?'Loaded: ':'Selected: ')+node.skill!.slice(0,17)}
       </text>
     </>}
   </g>;
@@ -182,6 +182,8 @@ function GraphCanvas({graph}: {graph:GraphState}) {
               e.kind==='handoff'?'handoff':e.kind==='delegate'?'delegate':'route')+')'}/>
           {e.kind==='handoff' && <text x={(a.x+b.x)/2} y={(a.y+b.y)/2-11}
             textAnchor="middle" className="matrix-edge-caption">HANDOFF</text>}
+          {e.kind==='context' && <text x={(a.x+b.x)/2} y={(a.y+b.y)/2-11}
+            textAnchor="middle" className="matrix-edge-caption matrix-edge-caption-context">OFFLINE CONTEXT</text>}
           {e.kind==='delegate' && <text x={(a.x+b.x)/2} y={(a.y+b.y)/2-11}
             textAnchor="middle" className="matrix-edge-caption">DELEGATE</text>}
         </g>;
@@ -192,6 +194,7 @@ function GraphCanvas({graph}: {graph:GraphState}) {
       <span><i className="legend-agent"/>Agent</span>
       <span><i className="legend-tool"/>Tool / MCP</span>
       <span><i className="legend-handoff"/>Handoff</span>
+      <span><i className="legend-context"/>Offline context</span>
       <span><i className="legend-active"/>Running</span>
     </div>
   </div>;
