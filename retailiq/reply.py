@@ -44,20 +44,25 @@ def retailiq_reply(state: dict) -> dict:
         total = sum(row['available'] for row in rows)
         detail = '; '.join(f"{row['location']}: {row['available']} có thể bán" for row in rows)
         return {'answer': f"{rows[0]['name']} ({rows[0]['sku']}) hiện có {total} sản phẩm có thể bán. {detail}."}
-    if category == 'revenue' and rows and all('sku' in row for row in rows):
-        sku = rows[0]['sku']
-        if any(row['sku'] != sku for row in rows):
-            raise ValueError('Revenue evidence mixes different SKUs')
+    if category == 'revenue':
+        plan = state.get('query_plan') or {}
+        if not rows:
+            return {'answer': state.get('answer') or
+                    f"Không có dữ liệu doanh thu từ đơn hoàn tất trong tháng {state.get('period', month())}."}
+        if any('sku' in row for row in rows):
+            sku = rows[0].get('sku')
+            if not sku or any(row.get('sku') != sku for row in rows):
+                raise ValueError('Revenue evidence mixes product and store scopes')
+            subject = f"của {rows[0]['name']} ({sku})"
+            if plan.get('scope') == 'ranked_product':
+                subject += f", đứng thứ {plan.get('rank')} theo số lượng bán"
+        else:
+            subject = 'toàn cửa hàng'
+        channel = f" trên kênh {plan['channel']}" if plan.get('channel') else ''
         total = sum(row['net_revenue_vnd'] for row in rows)
-        return {'answer': f"Doanh thu thuần tháng {state.get('period', month())} của {rows[0]['name']} ({sku}), "
-                f"sản phẩm được chọn theo xếp hạng số lượng bán: {total:,} VND từ đơn hoàn tất, "
-                "sau giảm giá và trước hàng trả. "
+        return {'answer': f"Doanh thu thuần tháng {state.get('period', month())} {subject}{channel}: "
+                f"{total:,} VND từ đơn hoàn tất, sau giảm giá và trước hàng trả. "
                 + '; '.join(f"{row['channel']}: {row['net_revenue_vnd']:,} VND" for row in rows) + '.'}
-    if category == 'revenue' and rows:
-        total = sum(row['net_revenue_vnd'] for row in rows)
-        return {'answer': f"Doanh thu thuần tháng {state.get('period', month())}: {total:,} VND từ đơn hoàn tất, sau giảm giá và trước hàng trả. " + '; '.join(f"{row['channel']}: {row['net_revenue_vnd']:,} VND" for row in rows) + '.'}
-    if category == 'revenue' and not rows:
-        return {'answer': f"Không có dữ liệu doanh thu từ đơn hoàn tất trong tháng {state.get('period', month())}."}
     if category == 'top' and rows:
         return {'answer': f"Sản phẩm bán chạy theo số lượng trong tháng {state.get('period', month())}: " + '; '.join(f"{i+1}. {row['name']} ({row['sku']}): {row['units_sold']} sản phẩm" for i, row in enumerate(rows)) + '.'}
     if category == 'top' and not rows:
