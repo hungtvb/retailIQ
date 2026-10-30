@@ -6,17 +6,20 @@ import os
 # Load project .env at application import, before RETAILIQ_MODE is first checked.
 from .core import config as _provider_config
 
-def offline(q, *, history=None, active_agent=''):
+def offline(q, *, history=None, active_agent='', memory=None):
  from .orchestration.week1_graph import followup_intent, resolve_followup, AGENT_FOR_INTENT
  from .orchestration.agents import replenish_review
  from .skills import skill_for
+ from .domain.customer_memory import is_memory_question, memory_answer
  category=followup_intent(q,history)
  effective=resolve_followup(q,history,category)
  agent=AGENT_FOR_INTENT[category]
  log_event('agent.routed', intent=category, agent=agent, execution_mode='offline')
  log_event('skill.selected', skill=skill_for(category), agent=agent, execution_mode='offline')
  use_mcp=(category=='stock' and os.getenv('RETAILIQ_INVENTORY_USE_MCP', '').casefold() in ('1','true','yes'))
- if use_mcp:
+ if category=='general' and is_memory_question(q):
+  result={'answer':memory_answer(q,memory),'records':[],'contexts':[]}
+ elif use_mcp:
   # Explicit opt-in: real MCP stdio is invoked, but routing remains offline.
   from .mcp_adapter import read_inventory
   result=do(effective,category,stock_lookup=read_inventory)
@@ -49,11 +52,13 @@ def replenish_review_offline():
  return {'answer':f"Synthetic {month()} decision review: {leader['name']} sold {leader['units_sold']} units; {available} available. {priority}. Not a forecast or purchase order.",
          'records':[leader,*stocks],'contexts':[]}
 
-def ask(q, *, history=None, active_agent=''):
+def ask(q, *, history=None, active_agent='', memory=None):
  if os.getenv('RETAILIQ_MODE')=='full':
   from .graph import run
+  if memory and memory.get('consent'):
+   return run(q,history=history or [],active_agent=active_agent,memory=memory)
   if history or active_agent:
    return run(q,history=history or [],active_agent=active_agent)
   return run(q)
- return offline(q,history=history,active_agent=active_agent)
+ return offline(q,history=history,active_agent=active_agent,memory=memory)
 
