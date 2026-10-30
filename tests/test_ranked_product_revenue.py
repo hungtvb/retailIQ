@@ -17,7 +17,7 @@ def test_ambiguous_group_revenue_never_falls_back_to_store_total():
     assert ranked_revenue_sku_rank(question) is None
     result = do(question, 'revenue')
     assert result['records'] == []
-    assert 'specify' in result['answer'].casefold()
+    assert 'làm rõ' in result['answer'].casefold()
 
 
 def test_product_ranked_revenue_uses_exact_month_not_current_month():
