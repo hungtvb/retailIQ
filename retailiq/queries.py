@@ -16,6 +16,38 @@ def is_price_extreme(question: str) -> bool:
      'least expensive', 'highest priced', 'lowest priced'))
 
 
+
+def has_ranked_revenue_reference(question: str) -> bool:
+ """Avoid silently converting a product-ranking revenue request to store revenue."""
+ text=question.casefold()
+ has_metric=any(x in text for x in ('doanh thu', 'revenue'))
+ has_ranking=any(x in text for x in (
+     'top seller', 'top 1 seller', 'best seller', 'bán chạy',
+     'number one seller', '#1 seller')) or bool(__import__('re').search(
+         r'\btop\s*[1-9]\d*\b', text))
+ return has_metric and has_ranking
+
+
+def ranked_revenue_sku_rank(question: str) -> int | None:
+ """Return a single product rank only when the user's wording is unambiguous.
+
+ 'Top 5 sellers' denotes a group, not fifth place; ask for clarification
+ rather than silently returning the total store revenue.
+ """
+ import re
+ text=question.casefold()
+ if not has_ranked_revenue_reference(question):
+  return None
+ if ('bán chạy nhất' in text or 'top seller' in text or 'best seller' in text or
+     'number one seller' in text or '#1 seller' in text or
+     re.search(r'\btop\s*1(?:\s|$)', text)):
+  return 1
+ rank=re.search(r'(?:đứng|xếp)\s*thứ\s*([1-5])', text)
+ if rank and 'bán chạy' in text:
+  return int(rank.group(1))
+ return None
+
+
 def highest_price(question: str) -> bool:
  text = question.casefold()
  return any(term in text for term in ('mắc nhất', 'đắt nhất', 'most expensive', 'highest priced'))
@@ -44,6 +76,7 @@ def is_multi_stock_question(question: str) -> bool:
 def intent(q):
  q=q.lower()
  if is_price_extreme(q):return 'product'
+ if has_ranked_revenue_reference(q):return 'revenue'
  if any(x in q for x in ['top seller','best seller','bán chạy']):return 'top'
  if any(x in q for x in ['revenue','doanh thu','sales performance']):return 'revenue'
  if any(x in q for x in ['stock','inventory','tồn kho','in stock','available units','còn hàng','còn bao nhiêu']):return 'stock'
@@ -107,6 +140,23 @@ def do(q,category, *, stock_lookup=None):
   return {'answer':f"{rows[0]['name']} ({sku}): {total} available units across locations. "+'; '.join(f"{r['location']}: {r['available']} available (on hand {r['on_hand']}, reserved {r['reserved']})" for r in rows)+'.','records':rows,'contexts':[]}
  if category=='revenue':
   period=requested_month(q)
+  if has_ranked_revenue_reference(q):
+   from .domain.analytics import revenue_for_sku
+   position=ranked_revenue_sku_rank(q)
+   if position is None:
+    return {'answer':'Please specify one ranked product (for example, top 1 seller or the second best seller); a top-N group is not one product.', 'records':[], 'contexts':[], 'period':period}
+   ranking=top(period)
+   if position > len(ranking):
+    return {'answer':'No completed-order product exists at the requested rank for '+period+'.', 'records':[], 'contexts':[], 'period':period}
+   leader=ranking[position-1]
+   rows=revenue_for_sku(leader['sku'],period)
+   if not rows:
+    return {'answer':'No completed-order revenue found for ranked product '+leader['sku']+' in '+period+'.','records':[], 'contexts':[], 'period':period}
+   total=sum(row['net_revenue_vnd'] for row in rows)
+   answer=('Net revenue in '+period+' for #'+str(position)+' best-selling product '
+           +leader['name']+' ('+leader['sku']+'): '+f'{total:,}'+' VND '
+           '(completed orders, net of line discounts, before returns).')
+   return {'answer':answer,'records':rows,'contexts':[],'period':period}
   rows=revenue(period) if period!=month() else revenue()
   if not rows:
    return {'answer':f'No completed-order sales records for {period}.', 'records':[], 'contexts':[], 'period':period}
