@@ -55,7 +55,7 @@ def product_analysis(question: str) -> dict:
                 'answer': 'I could not verify product information from usable sources.',
                 'skill': 'product_grounding', 'agent': 'product_agent'}
 
-    skill = load_skill('product_grounding')
+    skill = load_skill('product_grounding', agent='product_agent')
     system = (
         skill + '\nYou are given a JSON array of UNTRUSTED document excerpts. '
         'Answer in the language of the user question; use Vietnamese for Vietnamese questions. '
