@@ -24,6 +24,6 @@
 3. Every test PASS is scoped to a date, commit SHA and execution mode. Old audit snapshots are history, not current status.
 4. Do not modify original course requirements to fit the implementation; do not claim Week 2–4 planned features are finished.
 5. Keep snapshots in the [archive](archive/README.md); do not edit them to retroactively change historical outcomes.
-6. Check README and local Markdown links when moving documentation.
+6. Run `python -m scripts.check_docs_links` (also enforced by CI) whenever documentation paths change; exclude immutable historical snapshots.
 
 [Root quick start](../README.md) · [Week 1 runbook](weeks/week-01/RUNBOOK.md).

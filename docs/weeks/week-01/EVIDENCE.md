@@ -17,7 +17,7 @@
 | LangSmith tracing | **2026-10-29** | [Stock trace](https://smith.langchain.com/o/b2b60b66-94a2-4ec4-9bde-f3659243404f/projects/p/c0a76076-9285-45b3-96e0-aaef05d427e9/r/01a185c2-932a-74fd-9a6a-35e86bb3a267) · [Product trace](https://smith.langchain.com/o/b2b60b66-94a2-4ec4-9bde-f3659243404f/projects/p/c0a76076-9285-45b3-96e0-aaef05d427e9/r/01a185c2-b113-70ef-991c-ea9bba0b002b) | **PASS (dated remote traces)**, private-project access required |
 | Cost & ROI | Illustrative model | [DESIGN](DESIGN.md) and `scripts.cost_roi` | **ESTIMATE**, not savings or billed cost |
 | Testing/risk SD-4 | Golden cases and RAGAS; UX evidence missing | `tests/test_business_golden_scenarios.py`, `scripts.audit_queries`, [pilot protocol](../../archive/2026-10-30/legacy/23_INTERNAL_SYNTHETIC_BUSINESS_PILOT.md) | **PARTIAL**; broad queries and genuine user task measurement not established |
-| Python 3.12 / current HEAD | Consolidation commit | CI workflows updated to request Python 3.12 | **NOT VERIFIED** until new workflow completes |
+| Python 3.12 migration baseline | **2026-10-30**, commit `a72ad50024fbf5bd5ed6f31725a2d1785cd00012` | [Python regression run](https://github.com/hungtvb/retailIQ/actions/runs/40996894622) and [local E2E/benchmark](https://github.com/hungtvb/retailIQ/actions/runs/40996894553) both completed successfully | **PASS (dated SHA)**; does not certify commits after `a72ad50` |
 
 ### Evidence interpretation: avoid conflicting status
 
@@ -43,3 +43,7 @@ An early product retrieval missed AlphaBook at 0.430 versus threshold 0.45; the 
 ## Reproduction and reporting
 
 Follow [RUNBOOK.md](RUNBOOK.md). For every run, capture source SHA, OS, Python, mode (offline / mocked / provider), provider versions, date, inputs, expected/observed outcomes, artifact and limitations. Never count a documentation update alone as execution evidence.
+
+## Documentation maintenance gate
+
+The canonical active Markdown links are checked by `python -m scripts.check_docs_links` in the Python 3.12 regression workflow. Archived historical snapshots are excluded intentionally; this checker requires **a fresh passing CI run on the commit introducing it**. This maintenance check does not certify RAGAS, LangSmith or live-provider execution.
