@@ -48,6 +48,7 @@ def build_reliability_report(
     workflows: dict,
     edges: dict,
     retrieval: dict | None = None,
+    freshness: dict | None = None,
 ) -> dict:
     query_rows = _checked_rows(queries, "business_queries")
     workflow_rows = _checked_rows(workflows, "workflows")
@@ -96,6 +97,35 @@ def build_reliability_report(
             },
         }
 
+    freshness_summary = {
+        "status": "TARGETS_ONLY_NOT_LIVE_VERIFIED",
+        "policy": "retailiq/domain/semantic.py",
+        "note": "No standalone freshness policy audit supplied; live SLA not verified.",
+        "production_sla_guaranteed": False,
+    }
+    freshness_statuses = None
+    if freshness is not None:
+        if freshness.get("mode") != "offline_synthetic":
+            raise ValueError("Freshness evidence must declare offline synthetic mode")
+        verified = _checked_rows(freshness, "freshness")
+        by_source = defaultdict(list)
+        for item in verified:
+            source = item.get("source")
+            if source not in ("inventory", "orders", "orders_mcp",
+                              "product_documents", "cross_domain"):
+                raise ValueError("Unrecognized freshness audit source")
+            by_source[source].append(item["status"])
+        freshness_statuses = [item["status"] for item in verified]
+        freshness_summary = {
+            "status": "LOCAL_FIXTURE_POLICY_CHECKED",
+            "policy": "retailiq/domain/freshness_routing.py",
+            "scenarios": sample_quality(freshness_statuses),
+            "by_source": {source: sample_quality(values)
+                          for source, values in sorted(by_source.items())},
+            "production_sla_guaranteed": False,
+            "note": "These PASS counts validate routing/fail-closed rules on synthetic timestamps, not source uptime or actual freshness SLA.",
+        }
+
     return {
         "report_type": "retailiq_source_reliability",
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -106,13 +136,11 @@ def build_reliability_report(
             "business_queries": sample_quality([r["status"] for r in query_rows]),
             "workflow": sample_quality([r["status"] for r in workflow_rows]),
             "adversarial": sample_quality([r["status"] for r in edge_rows]),
+            **({"freshness_policy": sample_quality(freshness_statuses)}
+               if freshness_statuses is not None else {}),
         },
         "retrieval": retrieval_summary,
-        "freshness": {
-            "status": "TARGETS_ONLY_NOT_LIVE_VERIFIED",
-            "policy": "retailiq/domain/semantic.py",
-            "note": "Synthetic timestamp checks are in workflow/edge suites, not a live source SLA.",
-        },
+        "freshness": freshness_summary,
         "mcp": {
             "status": "NOT_ASSERTED_FROM_THESE_REPORTS",
             "note": "Actual MCP stdio evidence is a separate CI acceptance gate.",
@@ -142,13 +170,16 @@ def main() -> int:
     parser.add_argument("--edges", default="data/edge_scenario_audit.json")
     parser.add_argument("--retrieval", default=None,
                         help="Optional actual provider report; omit rather than fabricate")
+    parser.add_argument("--freshness", default=None,
+                        help="Optional audited local freshness routing policy artifact")
     parser.add_argument("--out", default="data/source_reliability_report.json")
     parser.add_argument("--strict", action="store_true",
                         help="Fail if any supplied independent scenario fails")
     args = parser.parse_args()
     report = build_reliability_report(
         _read(Path(args.queries)), _read(Path(args.workflows)),
-        _read(Path(args.edges)), _read(Path(args.retrieval)) if args.retrieval else None)
+        _read(Path(args.edges)), _read(Path(args.retrieval)) if args.retrieval else None,
+        _read(Path(args.freshness)) if args.freshness else None)
     target = Path(args.out)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n",
