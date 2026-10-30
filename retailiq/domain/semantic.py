@@ -23,6 +23,18 @@ METRICS = {
         "unit": "units",
         "source_of_truth": "SQLite completed orders and order_lines",
     },
+    "order_state": {
+        "source": "orders",
+        "definition": "The recorded state of one order ID; created/ordered timestamps do not prove last refresh",
+        "unit": "status",
+        "source_of_truth": "Read-only Order MCP tool backed by SQLite orders",
+    },
+    "product_knowledge": {
+        "source": "product_documents",
+        "definition": "Source-cited product details retrieved from indexed documentation; catalog-added date is not refresh time",
+        "unit": "text",
+        "source_of_truth": "Manifest-verified Chroma product documents",
+    },
 }
 FRESHNESS_TIERS = {
     "live": {"target_seconds": 0, "purpose": "live order state", "guaranteed": False},
