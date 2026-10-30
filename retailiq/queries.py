@@ -38,8 +38,11 @@ def ranked_revenue_sku_rank(question: str) -> int | None:
  text=question.casefold()
  if not has_ranked_revenue_reference(question):
   return None
- if ('bán chạy nhất' in text or 'top seller' in text or 'best seller' in text or
-     'number one seller' in text or '#1 seller' in text or
+ if re.search(r'\btop\s*([2-9]\d*)\b', text):
+  return None  # A top-N group is not an Nth-place product
+ if ('bán chạy nhất' in text or 'number one seller' in text or
+     '#1 seller' in text or
+     re.search(r'\b(?:top|best)\s+seller\b(?!s)', text) or
      re.search(r'\btop\s*1(?:\s|$)', text)):
   return 1
  rank=re.search(r'(?:đứng|xếp)\s*thứ\s*([1-5])', text)
