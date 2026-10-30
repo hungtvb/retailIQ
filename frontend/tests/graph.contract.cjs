@@ -49,7 +49,7 @@ test('handoff, child delegation and MCP require explicit event metadata',()=>{
   let state=startGraph('req-1');
   state=log(state,'agent.routed',{agent:'sales_agent'});
   state=log(state,'agent.handoff',
-    {previous_agent:'sales_agent',target_agent:'inventory_agent'});
+    {previous_agent:'sales_agent',target_agent:'inventory_agent',execution_mode:'full'});
   state=log(state,'agent.subagent.started',
     {agent:'inventory_agent',subagent:'stock_verifier'});
   state=log(state,'mcp.tool.started',
@@ -116,7 +116,7 @@ test('handoff never implies completion of the sending agent',()=>{
   let state=startGraph('req-1');
   state=log(state,'agent.routed',{agent:'sales_agent'});
   state=log(state,'agent.handoff',{
-    previous_agent:'sales_agent',target_agent:'inventory_agent'});
+    previous_agent:'sales_agent',target_agent:'inventory_agent',execution_mode:'full'});
   assert.equal(state.nodes.find(n=>n.id==='agent:sales_agent').status,'observed');
   assert.equal(state.nodes.find(n=>n.id==='agent:inventory_agent').status,'running');
   state=log(state,'chat.turn_result',{agent:'inventory_agent'});
