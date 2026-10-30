@@ -142,29 +142,53 @@ def do(q,category, *, stock_lookup=None):
   total=sum(r['available'] for r in rows)
   return {'answer':f"{rows[0]['name']} ({sku}): {total} available units across locations. "+'; '.join(f"{r['location']}: {r['available']} available (on hand {r['on_hand']}, reserved {r['reserved']})" for r in rows)+'.','records':rows,'contexts':[]}
  if category=='revenue':
-  period=requested_month(q)
-  if has_ranked_revenue_reference(q):
-   from .domain.analytics import revenue_for_sku
-   position=ranked_revenue_sku_rank(q)
-   if position is None:
-    return {'answer':'Please specify one ranked product (for example, top 1 seller or the second best seller); a top-N group is not one product.', 'records':[], 'contexts':[], 'period':period}
-   ranking=top(period)
-   if position > len(ranking):
-    return {'answer':'No completed-order product exists at the requested rank for '+period+'.', 'records':[], 'contexts':[], 'period':period}
-   leader=ranking[position-1]
-   rows=revenue_for_sku(leader['sku'],period)
-   if not rows:
-    return {'answer':'No completed-order revenue found for ranked product '+leader['sku']+' in '+period+'.','records':[], 'contexts':[], 'period':period}
-   total=sum(row['net_revenue_vnd'] for row in rows)
-   answer=('Net revenue in '+period+' for #'+str(position)+' best-selling product '
-           +leader['name']+' ('+leader['sku']+'): '+f'{total:,}'+' VND '
-           '(completed orders, net of line discounts, before returns).')
-   return {'answer':answer,'records':rows,'contexts':[],'period':period}
-  rows=revenue(period) if period!=month() else revenue()
+  from .domain.analytics import revenue_for_sku
+  from .domain.revenue_plan import build_revenue_plan, with_selected_sku, verify_revenue_evidence
+  plan=build_revenue_plan(
+   q,resolve_sku=product_sku,
+   is_ranked=has_ranked_revenue_reference,
+   ranked_position=ranked_revenue_sku_rank)
+  period=plan.period
+  if plan.scope=='clarify':
+   answer=('Cần làm rõ yêu cầu doanh thu: '+plan.reason+'.'
+           if is_vietnamese(q) else 'Please clarify the revenue request: '+plan.reason+'.')
+   verify_revenue_evidence(plan,[])
+   return {'answer':answer,'records':[],'contexts':[],'period':period,
+           'query_plan':plan.to_dict()}
+
+  if plan.scope=='ranked_product':
+   ranked=top(period)
+   if plan.rank is None or plan.rank>len(ranked):
+    return {'answer':'Không có sản phẩm ở thứ hạng này trong '+period+'.'
+            if is_vietnamese(q) else 'No product exists at this rank in '+period+'.',
+            'records':[],'contexts':[],'period':period,'query_plan':plan.to_dict()}
+   plan=with_selected_sku(plan,ranked[plan.rank-1]['sku'])
+
+  rows=(revenue_for_sku(plan.sku,period)
+        if plan.scope in ('product','ranked_product')
+        else revenue(period))
+  if plan.channel:
+   rows=[row for row in rows if row['channel']==plan.channel]
+  verify_revenue_evidence(plan,rows)
   if not rows:
-   return {'answer':f'No completed-order sales records for {period}.', 'records':[], 'contexts':[], 'period':period}
-  total=sum(r['net_revenue_vnd'] for r in rows)
-  return {'answer':f'Net sales revenue in {period}: {total:,} VND (completed orders, after line discounts, before returns). '+'; '.join(f"{r['channel']}: {r['net_revenue_vnd']:,} VND" for r in rows)+'.','records':rows,'contexts':[], 'period':period}
+   answer=('Không có doanh thu từ đơn hoàn tất trong '+period+
+           (' của '+plan.sku if plan.sku else '')+
+           (' trên kênh '+plan.channel if plan.channel else '')+'.'
+           if is_vietnamese(q) else
+           'No completed-order revenue for '+period+
+           (' and SKU '+plan.sku if plan.sku else '')+
+           (' on channel '+plan.channel if plan.channel else '')+'.')
+   return {'answer':answer,'records':[],'contexts':[],'period':period,
+           'query_plan':plan.to_dict()}
+
+  total=sum(row['net_revenue_vnd'] for row in rows)
+  subject= ('product '+rows[0]['name']+' ('+plan.sku+')'
+            if plan.sku else 'store')
+  answer=('Net sales revenue in '+period+' for '+subject+
+          (' via '+plan.channel if plan.channel else '')+
+          ': '+f'{total:,}'+' VND (completed orders, after line discounts, before returns).')
+  return {'answer':answer,'records':rows,'contexts':[],'period':period,
+          'query_plan':plan.to_dict()}
  if category=='top':
   period=requested_month(q)
   ranked=top(period) if period!=month() else top()
