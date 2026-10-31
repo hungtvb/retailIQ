@@ -71,6 +71,8 @@ The `CAP-*` IDs are **stable product requirement identifiers**. The existing `W*
 | CAP-14 — five specialist agents | W4-01 through W4-05 |
 | CAP-15 — A2A, verification, approved order flow | W4-06 through W4-08 |
 
+**Coverage caveat:** Some CAP details (for example skill selection, handoff behavior and conversational reference resolution) do not have a dedicated W-ID row. The closest related course ID above is for navigation only; acceptance still requires the complete CAP criteria and independent scenario evidence. Do not interpret this table as a complete test-case matrix.
+
 `BR-01`–`BR-04` are **cross-capability business goals**, and `QUAL-01`–`QUAL-07` are **quality constraints** on every relevant task. Neither set receives artificial W-IDs merely to fill the table; reference the applicable BR/QUAL IDs in the task and its scenario. Actual task status belongs to [GitHub Issues and PRs](COURSE_PLAN.md#planning-and-task-traceability); requirement acceptance belongs only to the ledger. A merged PR is not itself a passing capability.
 
 Representative acceptance must cover **single-source** queries, **multi-source** joins, **conversational follow-ups**, **data errors**, **retrieval grounding**, **source freshness**, **MCP transport**, **approval/access controls** and **multi-agent execution**. Check exact expected results and negative cases, not just whether an API returned success.
