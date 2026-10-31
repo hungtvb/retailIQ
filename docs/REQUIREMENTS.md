@@ -49,6 +49,30 @@ Course-required technologies and five specialist roles remain required even wher
 
 ## Acceptance and traceability
 
+### Requirement-to-course-ledger crosswalk
+
+The `CAP-*` IDs are **stable product requirement identifiers**. The existing `W*-*` identifiers in the [Capability Ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md) preserve the original course acceptance vocabulary. This is a **navigation mapping only**: it does not assign tasks/owners, assert feature completion or replace the ledger's evidence status.
+
+| Product requirement | Existing course acceptance ID(s) |
+|---|---|
+| CAP-01 — structured inventory/sales analytics | W1-01 |
+| CAP-02 — product RAG | W1-02 |
+| CAP-03 — routing, subagents, handoff, skill | W1-01, W4-06 (coordination extension) |
+| CAP-04 — conversational follow-ups | W1-01 (chat path), W2-04 (session context) |
+| CAP-05 — RAGAS / LangSmith | W1-03, W1-04 |
+| CAP-06 — source freshness | W2-01 |
+| CAP-07 — governed semantic definitions | W2-02 |
+| CAP-08 — MCP inventory/order | W2-03 |
+| CAP-09 — customer-context memory | W2-04 |
+| CAP-10 — retrieval quality / source reliability | W2-05, W2-06 |
+| CAP-11 — governed approval and row access | W3-01, W3-02 |
+| CAP-12 — alerts and measured costs | W3-03, W3-04 |
+| CAP-13 — observability, evaluation, security | W3-05, W3-06, W3-07 |
+| CAP-14 — five specialist agents | W4-01 through W4-05 |
+| CAP-15 — A2A, verification, approved order flow | W4-06 through W4-08 |
+
+`BR-01`–`BR-04` are **cross-capability business goals**, and `QUAL-01`–`QUAL-07` are **quality constraints** on every relevant task. Neither set receives artificial W-IDs merely to fill the table; reference the applicable BR/QUAL IDs in the task and its scenario. Actual task status belongs to [GitHub Issues and PRs](COURSE_PLAN.md#planning-and-task-traceability); requirement acceptance belongs only to the ledger. A merged PR is not itself a passing capability.
+
 Representative acceptance must cover **single-source** queries, **multi-source** joins, **conversational follow-ups**, **data errors**, **retrieval grounding**, **source freshness**, **MCP transport**, **approval/access controls** and **multi-agent execution**. Check exact expected results and negative cases, not just whether an API returned success.
 
 - [Business questions and intended outcomes](PROJECT.md)
