@@ -109,11 +109,11 @@ an independent SQL oracle; it does **not** use a simulated chat response.
 **First adversarial audit:** 10/14 PASS, 4 actual defects:
 - Prior top-3 rank 4 (or rank 0) incorrectly fell back to top seller.
 - An English plural pronoun incorrectly selected only top seller.
-- Corrupted source price \`-1 VND\` created an approval-ready pricing proposal.
+- Corrupted source price `-1 VND` created an approval-ready pricing proposal.
 
 The routing/context resolution now preserves invalid references for
 clarification; English plural phrases resolve to the prior ranked group;
-\`catalog_product\` rejects invalid negative, null and non-integer prices
+`catalog_product` rejects invalid negative, null and non-integer prices
 before price/order proposals. Two additional real Chromium conversations
 check out-of-range ordinal clarification and plural-reference stock against SQL.
 
