@@ -2,7 +2,7 @@
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
 from retailiq.observability import log_event, bind_context
-from retailiq.infrastructure.sessions import create_session, get_session, list_sessions, delete_session, session_mutation, SessionBusyError
+from retailiq.infrastructure.sessions import create_session, get_session, list_sessions, delete_session, session_mutation, SessionBusyError, get_execution_trace, get_customer_memory, save_customer_memory
 
 router = APIRouter(prefix='/api/sessions', tags=['conversations'])
 
@@ -26,6 +26,56 @@ def session(session_id: str):
     if result is None:
         raise HTTPException(status_code=404, detail='Session not found')
     return result
+
+class CustomerMemoryBody(BaseModel):
+    # Explicit opt-in: no implicit extraction from arbitrary chat messages.
+    consent: bool
+    preferences: dict[str, str] = Field(default_factory=dict, max_length=2)
+
+
+@router.get('/{session_id}/memory')
+def customer_memory(session_id: str):
+    try:
+        return get_customer_memory(session_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail='Session not found') from None
+
+
+@router.put('/{session_id}/memory')
+def update_customer_memory(session_id: str, body: CustomerMemoryBody):
+    try:
+        with session_mutation(session_id):
+            return save_customer_memory(session_id, consent=body.consent,
+                                        preferences=body.preferences)
+    except KeyError:
+        raise HTTPException(status_code=404, detail='Session not found') from None
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from None
+    except SessionBusyError:
+        raise HTTPException(status_code=409, detail='Session is processing another request') from None
+
+
+@router.delete('/{session_id}/memory', status_code=204)
+def clear_customer_memory(session_id: str):
+    try:
+        with session_mutation(session_id):
+            save_customer_memory(session_id, consent=False, preferences={})
+    except KeyError:
+        raise HTTPException(status_code=404, detail='Session not found') from None
+    except SessionBusyError:
+        raise HTTPException(status_code=409, detail='Session is processing another request') from None
+    return Response(status_code=204)
+
+
+@router.get('/{session_id}/traces/{request_id}')
+def execution_trace(session_id: str, request_id: str):
+    if get_session(session_id, include_messages=False) is None:
+        raise HTTPException(status_code=404, detail='Session not found')
+    result = get_execution_trace(session_id, request_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail='Execution trace not recorded')
+    return result
+
 
 @router.delete('/{session_id}', status_code=204)
 def remove_session(session_id: str):

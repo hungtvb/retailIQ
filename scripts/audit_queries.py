@@ -34,6 +34,7 @@ class Case:
     n: int = 0
     sku: str = ''
     category: str = ''
+    channel: str = ''
 
 
 # Predictions are from reading the current source, NOT recorded test results.
@@ -49,6 +50,30 @@ CASES = (
     Case('SALES-02','sales',('Doanh thu tháng 9 năm 2026?',),'revenue','LIKELY_PASS','sales_sql/period','September completed-order revenue',period='2026-09'),
     Case('SALES-03','sales',('Top 5 sản phẩm bán chạy tháng 10 năm 2026?',),'top','LIKELY_PASS','sales_sql/ranking','Top five sold units',n=5),
     Case('SALES-04','sales',('Top 3 sản phẩm bán chạy tháng 10 năm 2026?',),'top','LIKELY_FAIL','query_limit/response','Exactly top three',n=3),
+    Case('SALES-05','sales',('Doanh thu tháng 10 của top 1 seller là bao nhiêu?',),
+         'ranked_revenue','LIKELY_PASS','routing/sales_scope','October revenue of highest-selling SKU',n=1),
+    Case('SALES-06','sales',('What is the October 2026 revenue of the top seller?',),
+         'ranked_revenue','LIKELY_PASS','routing/sales_scope','English revenue of top SKU',n=1),
+    Case('SALES-07','sales',('Doanh thu tháng 9 năm 2026 của sản phẩm bán chạy nhất?',
+         ),'ranked_revenue','LIKELY_PASS','routing/period_scope','September ranking and SKU revenue',period='2026-09',n=1),
+    Case('SALES-08','sales',('Doanh thu tháng 10 của sản phẩm EL-002 là bao nhiêu?',),
+         'sku_revenue','LIKELY_PASS','sales/product_scope','Explicit product SKU revenue',sku='EL-002'),
+    Case('SALES-09','sales',('Revenue of NovaPhone X in September 2026?',),
+         'sku_revenue','LIKELY_PASS','sales/english_period','Named product and English month',period='2026-09',sku='EL-002'),
+    Case('SALES-10','sales',('Doanh thu tháng 10 của top 1 seller trên kênh online?',),
+         'ranked_revenue','LIKELY_PASS','sales/ranking/channel','Product ranking and channel revenue',n=1,channel='online'),
+    Case('SALES-11','sales',('Doanh thu kênh online tháng 10 năm 2026?',
+         ),'channel_revenue','LIKELY_PASS','sales/channel_filter','Online revenue only',channel='online'),
+    Case('SALES-12','sales',('Doanh thu tháng 10 của sản phẩm XYZ-999?',),
+         'revenue_clarify','LIKELY_PASS','sales/product_identity','Unknown product must clarify'),
+    Case('SALES-13','sales',('Doanh thu tháng 10 tại Hà Nội?',),
+         'revenue_clarify','LIKELY_PASS','sales/location_filter','Unsupported city filter must clarify'),
+    Case('SALES-14','sales',('Doanh thu tháng 13 là bao nhiêu?',),
+         'revenue_clarify','LIKELY_PASS','sales/invalid_period','Invalid month must clarify'),
+    Case('SALES-15','sales',('Doanh thu tháng 10 của sản phẩm đứng thứ 2 bán chạy?',
+         ),'ranked_revenue','LIKELY_PASS','sales/nth_rank','Second highest seller revenue',n=2),
+    Case('SALES-16','sales',('Revenue of EL-002 on online channel in October 2026?',),
+         'sku_revenue','LIKELY_PASS','sales/product_channel','Specific SKU and online channel',sku='EL-002',channel='online'),
     Case('STOCK-01','stock',('Tồn kho AlphaBook Pro 14 hiện có bao nhiêu?',),'stock_sku','LIKELY_PASS','inventory_sql','Single known SKU',sku='EL-001'),
     Case('STOCK-02','stock',('Sản phẩm không xác định còn bao nhiêu trong kho?',),'clarify','LIKELY_PASS','stock_validation','Unknown product must not invent stock'),
     Case('CROSS-01','cross_domain',('Tồn kho của top 5 sản phẩm bán chạy tháng 10 năm 2026?',),'stock_top','LIKELY_FAIL','router/supervisor/multi_sku','Top five inventory, VI',n=5),
@@ -100,6 +125,24 @@ class Oracle:
             WHERE o.status='completed' AND o.ordered_at>=? AND o.ordered_at<?''', (start,end))
         return rows[0]['total'] or 0
 
+    def revenue_filtered(self, period: str, *, sku: str = '', channel: str = '') -> int:
+        """Independent SQL oracle for optional SKU and channel scope."""
+        start, end = self.bounds(period)
+        sql = """SELECT COALESCE(SUM(li.quantity*li.unit_price_vnd-li.discount_vnd),0) AS total
+            FROM orders o JOIN order_lines li ON li.order_id=o.id
+            WHERE o.status='completed' AND o.ordered_at>=? AND o.ordered_at<?"""
+        params = [start, end]
+        if sku:
+            sql += ' AND li.sku=?'
+            params.append(sku)
+        if channel:
+            sql += ' AND o.channel=?'
+            params.append(channel)
+        return self.query(sql, tuple(params))[0]['total']
+
+    def sku_revenue(self, period: str, sku: str) -> int:
+        return self.revenue_filtered(period, sku=sku)
+
     def available(self, sku: str) -> int:
         return self.query('SELECT COALESCE(SUM(on_hand-reserved),0) AS available FROM inventory WHERE sku=?',(sku,))[0]['available']
 
@@ -127,6 +170,36 @@ def assess(case: Case, response: dict, oracle: Oracle) -> tuple[bool,str,dict]:
         actual = sum(r['net_revenue_vnd'] for r in rows if isinstance(r,dict) and type(r.get('net_revenue_vnd')) is int)
         ok = response.get('intent') == 'revenue' and actual == total and has_number(answer,total)
         return ok,'Revenue sum, time window, and displayed answer',{'period':case.period,'net_revenue_vnd':total}
+    if check in ('sku_revenue', 'ranked_revenue', 'channel_revenue'):
+        product = (oracle.top(case.period, case.n)[case.n-1] if check == 'ranked_revenue'
+                   else None)
+        sku = product['sku'] if product else case.sku
+        expected_total = oracle.revenue_filtered(case.period, sku=sku, channel=case.channel)
+        actual = sum(r.get('net_revenue_vnd', 0) for r in rows
+                     if isinstance(r, dict) and type(r.get('net_revenue_vnd')) is int)
+        skus = {r.get('sku') for r in rows if isinstance(r, dict)}
+        channels = {r.get('channel') for r in rows if isinstance(r, dict)}
+        plan = response.get('query_plan') or {}
+        good_skus = skus == {sku} if sku else skus == {None}
+        good_channel = channels == {case.channel} if case.channel else True
+        good_plan = (plan.get('period') == case.period and
+                     plan.get('sku') == (sku or None) and
+                     plan.get('channel') == (case.channel or None) and
+                     plan.get('scope') == ('ranked_product' if product else
+                                            'product' if sku else 'store'))
+        ok = (response.get('intent') == 'revenue' and bool(rows) and
+              good_skus and good_channel and good_plan and
+              actual == expected_total and has_number(answer, expected_total) and
+              (sku in answer if sku else True) and response.get('as_of') == case.period)
+        return ok, 'Revenue scope, exact SKU/channel/period and independent sum', {
+            'period': case.period, 'sku': sku, 'channel': case.channel,
+            'net_revenue_vnd': expected_total}
+    if check == 'revenue_clarify':
+        plan = response.get('query_plan') or {}
+        ok = (response.get('intent') == 'revenue' and not rows and
+              plan.get('scope') == 'clarify' and bool(answer.strip()))
+        return ok, 'Unsupported revenue scope must clarify without store totals', {
+            'records': [], 'scope': 'clarify'}
     if check == 'top':
         expected = oracle.top(case.period,case.n)
         actual = [(r.get('sku'),r.get('units_sold')) for r in rows if isinstance(r,dict)]
@@ -235,6 +308,10 @@ def main() -> int:
     print(f"Audit {args.mode}: {summary['pass']} PASS / {summary['fail']} FAIL / {summary['error']} ERROR")
     for row in report['results']:
         print(f"  {row['id']:9} {row['status']:5} predicted={row['hypothesis']:11} layer={row['suspected_layer']}")
+        if row['status'] != 'PASS':
+            # Synthetic fixture only. Do not emit prompt bodies or customer data.
+            print('    expected:', json.dumps(row.get('expected', {}), ensure_ascii=False)[:650])
+            print('    observed:', json.dumps(row.get('observed', {}), ensure_ascii=False)[:650])
     print('Report:',output.resolve())
     return int(args.strict and (summary['fail'] > 0 or summary['error'] > 0))
 

@@ -22,14 +22,97 @@ jobs:
           RETAILIQ_REQUIRE_LANGGRAPH: 'true'
         run: python -m pytest -q -rs
       - name: Business query acceptance audit (report gaps, do not hide them)
-        run: python -m scripts.audit_queries --mode offline
+        run: python -m scripts.audit_queries --mode offline --strict
       - uses: actions/upload-artifact@v4
         with:
           name: retailiq-query-acceptance
           path: data/query_audit_report.json
           retention-days: 7
+      - name: Four-week behavioral scenario audit (strict)
+        run: python -m scripts.audit_workflows --strict
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: retailiq-workflow-scenarios
+          path: data/workflow_audit_report.json
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Adversarial edge scenarios (strict)
+        run: python -m scripts.audit_edge_scenarios --strict
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: retailiq-edge-scenarios
+          path: data/edge_scenario_audit.json
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Freshness-aware source routing acceptance (strict)
+        run: python -m scripts.audit_freshness --strict
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: retailiq-freshness-routing
+          path: data/freshness_audit_report.json
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Source reliability report from independent audit evidence
+        run: python -m scripts.report_source_reliability --strict --freshness data/freshness_audit_report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: retailiq-source-reliability
+          path: data/source_reliability_report.json
+          if-no-files-found: ignore
+          retention-days: 7
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Frontend safe-rendering and agent-branding tests
-        run: node --test tests/frontend_format.test.cjs
+      - name: Frontend safe-rendering, graph JS syntax and agent-branding tests
+        run: |
+          node --check web/assets/workflow-graph.js
+          node --check web/assets/workflow-ui.js
+          node --check web/assets/app.js
+          node --test tests/frontend_format.test.cjs
+          node --test tests/workflow_ui_journey.test.cjs
+      - name: Typecheck and build product workspace (React + TypeScript)
+        run: |
+          cd frontend
+          npm install --no-audit --no-fund
+          npm run build
+          node --test tests/graph.contract.cjs
+      - name: Browser E2E smoke (real Chromium + local FastAPI)
+        run: |
+          python -m pip install 'playwright>=1.52,<2'
+          python -m scripts.smoke_workflow_browser
+      - name: Product workspace E2E (real SSE + sessions + canvas)
+        run: python -m scripts.smoke_product_workspace
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: retailiq-workflow-browser-evidence
+          path: |
+            data/workflow_week4_*chromium.png
+            data/retailiq_ui_*chromium.png
+            data/retailiq_product_workspace_*.png
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Real MCP stdio transport acceptance (Inventory + Order)
+        run: |
+          python -m pip install 'mcp>=1.28,<2' 'langchain-mcp-adapters>=0.1,<1'
+          python -m scripts.smoke_mcp_stdio
+      - name: MCP live agent network E2E (real Chromium)
+        env:
+          RETAILIQ_INVENTORY_USE_MCP: '1'
+          RETAILIQ_TEST_MCP: '1'
+        run: python -m scripts.smoke_product_workspace
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: retailiq-real-mcp-browser-evidence
+          path: |
+            data/retailiq_product_workspace_mcp.png
+            data/retailiq_product_workspace_mcp_mobile.png
+          if-no-files-found: ignore
+          retention-days: 7
+

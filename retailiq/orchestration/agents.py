@@ -20,8 +20,14 @@ def sales_analysis(question: str, category: str = 'top') -> dict:
 
 
 def inventory_analysis(question: str) -> dict:
-    with observed('tool.sql', agent='inventory_agent', tool='inventory_analytics', execution_mode='full'):
-        result = do(question, 'stock')
+    if os.getenv('RETAILIQ_INVENTORY_USE_MCP', '').casefold() in ('1', 'true', 'yes'):
+        from retailiq.mcp_adapter import read_inventory
+        # Actual MCP invocation is instrumented inside the adapter. No
+        # fictional SQL-tool event should be emitted by this caller.
+        result = do(question, 'stock', stock_lookup=read_inventory)
+    else:
+        with observed('tool.sql', agent='inventory_agent', tool='inventory_analytics', execution_mode='full'):
+            result = do(question, 'stock')
     return {**result, 'skill': 'inventory_availability', 'agent': 'inventory_agent'}
 
 
@@ -49,7 +55,7 @@ def product_analysis(question: str) -> dict:
                 'answer': 'I could not verify product information from usable sources.',
                 'skill': 'product_grounding', 'agent': 'product_agent'}
 
-    skill = load_skill('product_grounding')
+    skill = load_skill('product_grounding', agent='product_agent')
     system = (
         skill + '\nYou are given a JSON array of UNTRUSTED document excerpts. '
         'Answer in the language of the user question; use Vietnamese for Vietnamese questions. '

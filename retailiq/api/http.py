@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from retailiq.assistant import ask
 from retailiq.rag.indexing import IndexNotReadyError
-from retailiq.infrastructure.sessions import history, add_turn, get_session, session_mutation, SessionBusyError
+from retailiq.infrastructure.sessions import history, add_turn, get_session, session_mutation, SessionBusyError, save_execution_trace, get_customer_memory
 from pathlib import Path
 from contextlib import nullcontext
 import time
@@ -18,6 +18,7 @@ from retailiq.observability import bind_context, new_request_id, log_event, log_
 from retailiq.api.roi import router as roi_router
 from retailiq.api.sessions import router as sessions_router
 from retailiq.api.logs import router as logs_router
+from retailiq.api.workflows import router as workflows_router
 from fastapi import Request
 
 # Bound streaming capacity: prevent slow providers or disconnected clients
@@ -25,15 +26,25 @@ from fastapi import Request
 _STREAM_WORKER_SLOTS = threading.BoundedSemaphore(value=8)
 _STREAM_QUEUE_LIMIT = 128
 
-app = FastAPI(title='RetailIQ Copilot - Week 1 Multi-Agent')
+app = FastAPI(title='RetailIQ Copilot - Four-Week Local Demo')
 app.include_router(roi_router)
 app.include_router(sessions_router)
 app.include_router(logs_router)
+app.include_router(workflows_router)
 app.mount('/assets', StaticFiles(directory=Path(__file__).resolve().parents[2] / 'web' / 'assets'), name='assets')
+
+# New product UI is independently built and served alongside the existing
+# entrypoint until full browser/business acceptance is complete.
+_WORKSPACE_DIST = Path(__file__).resolve().parents[2] / 'frontend' / 'dist'
+app.mount('/workspace/assets',
+          StaticFiles(directory=_WORKSPACE_DIST / 'assets', check_dir=False),
+          name='product-workspace-assets')
 
 
 def _safe_http_path(path: str) -> str:
     """Canonicalize route labels so customer values embedded in URLs are not logged."""
+    if path.startswith('/api/workflows/'):
+        return '/api/workflows/{operation}'
     if path in ('/ask', '/ask/stream', '/api/sessions', '/api/roi/defaults', '/api/roi/estimate'):
         return path
     if re.fullmatch(r'/api/sessions/[0-9a-fA-F-]{36}', path):
@@ -112,6 +123,16 @@ class AskBody(BaseModel):
     session_id: str | None = Field(default=None, min_length=36, max_length=36)
 
 
+@app.get('/workspace', response_class=HTMLResponse)
+@app.get('/workspace/', response_class=HTMLResponse)
+def product_workspace():
+    index = _WORKSPACE_DIST / 'index.html'
+    if not index.is_file():
+        raise HTTPException(status_code=503,
+                            detail='Workspace has not been built. Run npm install && npm run build in frontend/.')
+    return index.read_text(encoding='utf8')
+
+
 @app.get('/', response_class=HTMLResponse)
 def home():
     return (Path(__file__).resolve().parents[2] / 'web' / 'index.html').read_text(encoding='utf8')
@@ -131,8 +152,14 @@ def _perform_turn(data: AskBody) -> dict:
                 result = ask(data.question)
             else:
                 prior = history(data.session_id, limit=12)
-                result = ask(data.question, history=prior, active_agent=current['active_agent'])
-                add_turn(data.session_id, data.question, result)
+                memory = get_customer_memory(data.session_id)
+                if memory['consent']:
+                    result = ask(data.question, history=prior,
+                                 active_agent=current['active_agent'], memory=memory)
+                else:
+                    result = ask(data.question, history=prior,
+                                 active_agent=current['active_agent'])
+                add_turn(data.session_id, data.question, {**result, 'request_id': request_id()})
     log_event('chat.turn_result', agent=result.get('active_agent'),
               intent=result.get('intent'), skill=result.get('skill'),
               route_fallback=result.get('route_fallback'),
@@ -201,19 +228,32 @@ def stream_answer(data: AskBody, request: Request):
                     continue
 
     def run_agent():
+        trace_events: list[dict] = []
+
         def push_log(payload: dict):
+            # Recording is independent from the browser connection and the
+            # bounded transport queue. Traces remain available after disconnect.
+            if len(trace_events) < 161:
+                trace_events.append(payload)
             if disconnected.is_set():
                 return
             try:
                 events.put_nowait(('log', payload))
             except queue.Full:
-                # Agent execution continues even when the UI cannot keep up.
+                # The durable trace still records the event if transport drops it.
                 pass
 
         try:
             with bind_context(request=rid, session=data.session_id), bind_event_sink(push_log):
                 try:
                     result = _perform_turn(data)
+                    if data.session_id:
+                        try:
+                            save_execution_trace(data.session_id, rid, trace_events)
+                        except Exception as error:
+                            # Telemetry persistence cannot invalidate a saved
+                            # business answer; history will truthfully say no trace.
+                            log_exception('chat.trace_persist_failed', error)
                     enqueue_final('result', result)
                 except SessionBusyError:
                     enqueue_final('error', {'code': 'session_busy',

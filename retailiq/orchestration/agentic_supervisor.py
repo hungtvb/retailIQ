@@ -37,7 +37,7 @@ def agentic_replenish_review(question: str) -> dict:
             raise ValueError('Sales specialist returned an invalid top-selling SKU')
         outputs['sales'] = result
         return json.dumps({'records': records[:5],
-                           'instruction': load_skill('sales_kpi')}, ensure_ascii=False)
+                           'instruction': load_skill('sales_kpi', agent='sales_agent')}, ensure_ascii=False)
 
     @tool
     def inventory_subagent(sku: str) -> str:
@@ -61,13 +61,13 @@ def agentic_replenish_review(question: str) -> dict:
             raise ValueError('Inventory specialist returned a mismatched SKU')
         outputs['inventory'] = result
         return json.dumps({'records': records[:100],
-                           'instruction': load_skill('inventory_availability')},
+                           'instruction': load_skill('inventory_availability', agent='inventory_agent')},
                           ensure_ascii=False)
 
     agent = create_agent(
         model=chat_model(),
         tools=[sales_subagent, inventory_subagent],
-        system_prompt=(load_skill('replenishment_review') + '\n'
+        system_prompt=(load_skill('replenishment_review', agent='retail_supervisor') + '\n'
                        'You coordinate two read-only specialists. For a '
                        'replenishment review, first call sales_subagent to '
                        'identify the top-selling SKU, then call '

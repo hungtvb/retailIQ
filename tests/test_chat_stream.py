@@ -112,7 +112,8 @@ def test_chat_ui_uses_sse_with_in_place_live_trace(client):
     html = client.get('/').text
     js = client.get('/assets/app.js').text
     assert 'live-trace-list' in html
-    assert 'LIVE AGENT ACTIVITY' in html
+    assert 'class="live-trace-title"' in html
+    assert 'id="live-trace-count"' in html
     assert "fetch('/ask/stream'" in js
     assert "type === 'log'" in js
     assert 'ReadableStream' not in js
