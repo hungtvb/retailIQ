@@ -16,7 +16,7 @@ Use this index to load **only the documentation needed for the task**.
 ## Reference material
 
 - [Dated Week 1 execution evidence](weeks/week-01/EVIDENCE.md) — historical results only; do not treat as current-commit acceptance
-- [Dated project assessment](RETAILIQ_HIGH_LEVEL_OVERVIEW.md) — historical snapshot, **not** a second canonical Product document
+- [Dated project assessment](archive/2026-10-31/RETAILIQ_HIGH_LEVEL_OVERVIEW.md) — historical snapshot; Product, Design and Acceptance now have canonical owners
 - [Older notes and records](archive/README.md)
 
 The original course-week structure belongs to the [roadmap](COURSE_PLAN.md), not the permanent product or source architecture. Some older documents and module filenames are preserved until they can be migrated without losing references or behavior.
