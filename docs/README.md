@@ -1,6 +1,6 @@
 # RetailIQ Documentation
 
-This index points to the **current documentation**. Read the pages relevant to your task rather than loading everything.
+Read only the pages relevant to your task; this is a navigation index, not a second project overview.
 
 | Need | Source |
 |---|---|
@@ -9,17 +9,15 @@ This index points to the **current documentation**. Read the pages relevant to y
 | Architecture and technology choices | [Architecture](ARCHITECTURE.md) |
 | Business metrics, data and API contracts | [Data & API](DATA_API.md) |
 | Overall product assessment and identified gaps | [Project overview](RETAILIQ_HIGH_LEVEL_OVERVIEW.md) |
-| Documentation migration and next engineering steps | [Engineering baseline plan](planning/ENGINEERING_BASELINE.md) |
 
-## During consolidation
+## Reference material
 
-Some historical or feature-specific documents still use course-week names. **Course weeks belong to planning, not to the permanent source architecture.** No functionality is removed solely to eliminate week-based naming. The migration plan tracks which documents will be consolidated, renamed or archived.
+Some existing documents still use course-week names. These are legacy references; course weeks belong to planning, **not** the permanent source architecture.
 
-Existing reference material:
-- [Course capability acceptance checklist](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md) (historical scope and status; not live evidence).
-- [Behavioral scenarios](27_BEHAVIORAL_ACCEPTANCE_MATRIX.md) (scenario definitions).
-- [Historical documentation](archive/README.md).
+- [Course capability checklist](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md) — requirements and historical status, not current-run evidence.
+- [Behavioral scenarios](27_BEHAVIORAL_ACCEPTANCE_MATRIX.md) — scenario definitions.
+- [Historical documents](archive/README.md).
 
-**Evidence policy:** Test definitions, evaluation methodology and CI configuration belong in the repo. Generated test results, run logs, trace exports, benchmarks and screenshots are managed **outside** the repository, with commit/run references when needed. Historical evidence already committed is not silently deleted before preservation is verified.
+**Evidence policy:** test definitions and CI configuration remain in Git; generated results, traces, screenshots and benchmark reports belong outside the repository. Preserve already committed historical evidence before any future removal.
 
 [Quick start](../README.md) · [Coding agent rules](../AGENTS.md).
