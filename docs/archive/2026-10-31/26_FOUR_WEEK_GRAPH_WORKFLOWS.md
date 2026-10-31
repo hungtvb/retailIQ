@@ -1,3 +1,5 @@
+> **ARCHIVED HISTORICAL SNAPSHOT (2026-10-31).** Retained for historical context only. Do not treat dated status, branch names or CI results as current-commit acceptance; use [documentation index](../../README.md). Original analysis preserved; internal links rebased for archive location.
+
 # RetailIQ — Four-Week Graph Workflow Demo
 
 > Scope: **local synthetic teaching demo**, not a production Retail OS. Code and tests are on

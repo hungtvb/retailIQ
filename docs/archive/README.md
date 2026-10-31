@@ -1,17 +1,25 @@
 # Historical documentation archive
 
-All **34 original Markdown files** from the flat `docs/` layout were preserved **byte-for-byte** under [2026-10-30/legacy/](2026-10-30/legacy/). This is a migration snapshot, **not** a second source of current status. Some relative links within old snapshots still use their original locations; navigate via the [active index](../README.md).
+This directory contains **dated records**, not a second source of current requirements, implementation status or quality evidence. For current guidance, start at the [documentation index](../README.md).
 
-All five original non-Markdown artifacts were moved unchanged to [Week 1 assets](../weeks/week-01/assets/), including dated RAGAS results, the old PPTX/DOCX and two UI screenshots. They are evidence/history, **not proof of current UI or seven-checkpoint presentation compliance**.
+## Preserved records
 
-| Former topic | Current owner |
+- [2026-10-30 legacy snapshot](2026-10-30/legacy/): **34 original Markdown files** from the former flat `docs/` layout, preserved byte-for-byte. Internal links in these files may retain old relative paths.
+- [2026-10-31 high-level assessment](2026-10-31/RETAILIQ_HIGH_LEVEL_OVERVIEW.md): dated project overview and gap review, superseded by canonical Product, Design and capability-status documents.
+- [2026-10-31 workflow prototype](2026-10-31/26_FOUR_WEEK_GRAPH_WORKFLOWS.md): original local scenario-graph proposal and validation notes; not the current overall architecture.
+- [2026-10-31 Workspace first slice](2026-10-31/28_PRODUCT_WORKSPACE_V1.md): original UI decisions and staged acceptance notes; code and current [Design](../DESIGN.md) are authoritative.
+- [Course evidence and handout assets](../weeks/week-01/): original rubric, learning notes, runbook, dated execution evidence and five preserved non-Markdown artifacts (including PPTX/DOCX, RAGAS result and screenshots). They remain **course history**, not evidence for the current revision.
+
+## Current authoritative documents
+
+| Topic | Use this current source |
 |---|---|
-| Business problem, retail scope and PRD | [PROJECT](../PROJECT.md) |
-| Course scope, timeline and governance | [COURSE_PLAN](../COURSE_PLAN.md) |
-| Architecture, tool agents and quality rules | [ARCHITECTURE](../ARCHITECTURE.md) |
-| Data, KPI and HTTP contracts | [DATA_API](../DATA_API.md) |
-| FDE, harness, costs and patterns | [Week 1 DESIGN](../weeks/week-01/DESIGN.md) |
-| Setup, provider config and presentation | [Week 1 RUNBOOK](../weeks/week-01/RUNBOOK.md) |
-| Run outcomes, traces and evaluations | [Week 1 EVIDENCE](../weeks/week-01/EVIDENCE.md) |
+| Business problem, users, product scope | [Product](../PROJECT.md) |
+| Required capabilities and success criteria | [Requirements](../REQUIREMENTS.md) |
+| Course milestone mapping and historical timeline | [Roadmap](../COURSE_PLAN.md) |
+| System responsibility and technology decisions | [Architecture](../ARCHITECTURE.md) and [Basic/Detail Design](../DESIGN.md) |
+| Schema, KPI semantics, HTTP and MCP contracts | [Data & API](../DATA_API.md) |
+| Scenario definitions and executable checks | [Testing & Scenario Acceptance](../27_BEHAVIORAL_ACCEPTANCE_MATRIX.md) |
+| Acceptance status and unresolved evidence | [Capability Ledger](../29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md) |
 
-Historical reports keep their original execution dates and language, including obsolete NOT TESTED statements. For resolved/updated status, compare dates and consult the single Week 1 evidence ledger.
+**Interpretation rule:** dates and execution modes are part of each historical claim. Older “PASS” or “NOT VERIFIED” labels are not automatically true for a newer commit. Preserve relevant source SHA and execution artifacts before reporting current acceptance.
