@@ -3,12 +3,12 @@
 **Baseline:** Domain #15 Retail / E-commerce instructor brief as captured in
 [REQUIREMENTS.md](REQUIREMENTS.md); original teaching sequence: [COURSE_PLAN.md](COURSE_PLAN.md).
 **Development mode:** independent; the four "weeks" are milestones, not deadlines.
-**Integration baseline:** `main` + `feature/product-workspace-v1`.
-**Status date:** 2026-10-30.
+**Integration baseline for recorded checks:** `main` + `feature/product-workspace-v1` (historical; since integrated).
+**Last evidence assessment:** 2026-10-30. **This snapshot has not been re-tested on the latest `main` merely because documentation PRs were merged.**
 
-This is the *active* engineering gate. Status must be supported by code **and**
-reproducible execution. A green CI run establishes only its explicit scenarios,
-not full provider quality or the entire course requirement.
+This is the **single owner of per-capability acceptance and open gaps**. For the reproducible scenario plan and test commands see [Testing & Scenario Acceptance](27_BEHAVIORAL_ACCEPTANCE_MATRIX.md). For dated Week 1 results see [Historical Execution Evidence](weeks/week-01/EVIDENCE.md). Entries below describe the **last documented assessment**, not an automatic claim about untested later commits. A green CI run establishes only its explicit scenarios, not full provider quality or course completion.
+
+**Evidence reconciliation:** The 2026-10-29 limited RAGAS and remote LangSmith observations in the historical ledger do not establish current-commit CAP-05 acceptance. Likewise, old offline scenario runs with 20/20 PASS do not supersede the later recorded 9 PASS / 11 FAIL query audit. Preserve both with date/SHA/mode; require new execution evidence before reporting a current PASS.
 
 ## Evidence status legend
 
@@ -53,8 +53,8 @@ not full provider quality or the entire course requirement.
 1. Select **one instructor requirement ID** as the engineering task. Define intended behavior and failure cases *before* coding.
 2. Integrate with the current components; never create additional agent systems or unrelated business-query features merely to appear complete.
 3. Test independently: correctness oracle, control/edge truth, side effects, malformed input and relevant browser/tool runtime.
-4. Record exact **commit, execution mode, command, counts, artifact/run URL and remaining gaps**. If a provider is not configured, label it LIVE PENDING and do not substitute a fake model.
-5. Keep CI green, then select the next requirement using dependencies: W2 memory/reliability → W3 authenticated governance/HITL/evaluation → W4 real specialist orchestration.
+4. Record exact **commit, execution mode, command, expected-versus-observed results, counts, artifact/run URL and remaining gaps**. If a provider is not configured, label it LIVE PENDING and do not substitute a fake model.
+5. Run relevant scenario gates for **implementation changes** and record failures. For **documentation-only** changes, verify links, terminology and source references; do not require full application CI solely for Markdown. Prioritize remaining course-required evidence by dependency, without adding speculative infrastructure.
 
 ## Week 2 Advanced Retrieval local verification
 
