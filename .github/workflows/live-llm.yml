@@ -1,0 +1,124 @@
+name: RetailIQ - Live LLM Acceptance
+
+# Explicit opt-in only: this workflow consumes paid model/embedding requests.
+# Do not trigger on push or pull_request; only allow main for secret-backed runs.
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: "Cost scope: smoke (chat + embedding) or critical (six business scenarios)"
+        type: choice
+        required: true
+        default: smoke
+        options:
+          - smoke
+          - critical
+
+permissions:
+  contents: read
+
+concurrency:
+  group: retailiq-live-llm
+  cancel-in-progress: false
+
+jobs:
+  provider-acceptance:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: llm-evaluation
+    timeout-minutes: 30
+    env:
+      OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      CHAT_MODEL: ${{ vars.CHAT_MODEL }}
+      EMBEDDING_MODEL: ${{ vars.EMBEDDING_MODEL }}
+      RETAILIQ_MODE: full
+      RETAILIQ_AS_OF: '2026-10-28'
+      RETAILIQ_PROVIDER_TIMEOUT_SECONDS: '20'
+      RETAILIQ_RAG_RETRIEVAL: hybrid
+      LANGSMITH_TRACING: 'false'
+
+    steps:
+      - name: Checkout selected main commit
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate explicit suite and provider configuration
+        shell: bash
+        env:
+          LIVE_SUITE: ${{ inputs.suite }}
+        run: |
+          case "$LIVE_SUITE" in
+            smoke|critical) ;;
+            *) echo "::error::Unsupported live test suite"; exit 1 ;;
+          esac
+          if [[ -z "${OPENAI_BASE_URL:-}" || -z "${OPENAI_API_KEY:-}" ]]; then
+            echo "::error::Set OPENAI_BASE_URL and OPENAI_API_KEY as llm-evaluation environment secrets"
+            exit 1
+          fi
+          echo "Live suite: $LIVE_SUITE (provider-backed, synthetic test data)"
+          echo "Target commit: $GITHUB_SHA"
+
+      - name: Install full-mode runtime dependencies
+        run: python -m pip install -r requirements-full.txt
+
+      - name: Record non-secret execution metadata
+        shell: bash
+        env:
+          LIVE_SUITE: ${{ inputs.suite }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          report = {
+              "commit_sha": os.environ["GITHUB_SHA"],
+              "workflow_run_id": os.environ["GITHUB_RUN_ID"],
+              "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+              "suite": os.environ["LIVE_SUITE"],
+              "mode": "provider-backed",
+              "fixture_as_of": os.environ["RETAILIQ_AS_OF"],
+              "chat_model": os.getenv("CHAT_MODEL") or "default_from_config",
+              "embedding_model": os.getenv("EMBEDDING_MODEL") or "default_from_config",
+              "langsmith_remote_trace_verified": False,
+              "notes": "Only provider smoke/selected synthetic business cases; not security, ROI or production acceptance",
+          }
+          path = Path("data/quality_reports/live_llm_ci_metadata.json")
+          path.parent.mkdir(parents=True, exist_ok=True)
+          path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+          PY
+
+      - name: Verify real chat and embedding connectivity
+        run: python -m scripts.check_openai --live
+
+      - name: Seed synthetic retail fixture
+        if: ${{ inputs.suite == 'critical' }}
+        run: python -m scripts.seed
+
+      - name: Build source-verified Chroma product index
+        if: ${{ inputs.suite == 'critical' }}
+        run: python -m scripts.index_products
+
+      - name: Audit six high-risk business queries using actual model
+        if: ${{ inputs.suite == 'critical' }}
+        run: |
+          python -m scripts.audit_queries --mode full \
+            --ids SALES-05,CROSS-01,CTX-04,CAT-01,SALES-12,RAG-01 \
+            --confirm-live --strict --out data/query_audit_report.json
+
+      - name: Publish reproducible run evidence (no credentials)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: retailiq-live-llm-evidence
+          path: |
+            data/quality_reports/live_llm_ci_metadata.json
+            data/query_audit_report.json
+          retention-days: 7
+          if-no-files-found: ignore
