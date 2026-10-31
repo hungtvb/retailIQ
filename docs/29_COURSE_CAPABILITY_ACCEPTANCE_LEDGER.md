@@ -1,9 +1,9 @@
 # RetailIQ — Instructor Capability Acceptance Ledger
 
 **Baseline:** Domain #15 Retail / E-commerce instructor brief as captured in
-[00_PROJECT_REQUIREMENTS.md](00_PROJECT_REQUIREMENTS.md).
+[COURSE_PLAN.md](COURSE_PLAN.md).
 **Development mode:** independent; the four "weeks" are milestones, not deadlines.
-**Branch:** `feature/product-workspace-v1`.
+**Integration baseline:** `main` + `feature/product-workspace-v1`.
 **Status date:** 2026-10-30.
 
 This is the *active* engineering gate. Status must be supported by code **and**
