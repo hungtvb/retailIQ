@@ -4,6 +4,7 @@
 - `README.md`: quick start.
 - `docs/README.md`: documentation index; read only task-relevant pages.
 - `docs/ARCHITECTURE.md`: current architecture and module responsibilities.
+- `docs/DESIGN.md`: request flows and task-to-source navigation; load only relevant sections.
 - `docs/DATA_API.md`: source-of-truth, KPI and API contracts.
 
 ## Working rules

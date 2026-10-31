@@ -27,6 +27,17 @@ data/pilot_ci_seed.sqlite3*
 # Observational query-acceptance audit; may include full-mode answer excerpts
 data/query_audit_report.json
 
+# Locally generated audit artifacts and browser screenshots (CI uploads separately)
+data/workflow_audit_report.json
+data/edge_scenario_audit.json
+data/freshness_audit_report.json
+data/source_reliability_report.json
+data/retrieval_eval_report.json
+data/quality_reports/
+data/workflow_*chromium.png
+data/retailiq_ui_*chromium.png
+data/retailiq_product_workspace_*.png
+
 # Generated product frontend assets
 frontend/node_modules/
 frontend/dist/

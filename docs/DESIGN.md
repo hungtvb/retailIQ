@@ -45,6 +45,22 @@ flowchart TD
 
 **Execution truth:** the Workspace graph reflects events returned by workflow APIs. A displayed specialist node or control-transfer edge in `workflow_demo.py` is not proof of an independently invoked agent. Actual LangGraph/subagent actions must be evidenced separately.
 
+### Change locality — coding-agent navigation
+
+Read `AGENTS.md` and the [documentation index](README.md) first. Start at the **entrypoint for the requested behavior**, follow its imports, and load only the relevant contract and tests. This table is a source-navigation aid, not a new architectural layer or a claim of test success.
+
+| Task | Inspect first, then follow dependencies | Focused verification |
+|---|---|---|
+| Incorrect stock/revenue/rank or scoped follow-up | `retailiq/queries.py`, `domain/revenue_plan.py` → `domain/analytics.py` → `infrastructure/sqlite.py` | `python -m scripts.audit_queries --mode offline --strict`; compare exact SKU/period/channel with independent SQL oracle |
+| Chat routing, agent handoff, streaming errors | `api/http.py` → `assistant.py` → `orchestration/week1_graph.py` and `orchestration/agents.py` | Relevant `pytest` scenario, then scripted query and SSE/browser acceptance for the affected path; report mode |
+| Product document parsing, RAG or citations | `retrieval.py` → `rag/indexing.py`, `rag/advanced_retrieval.py`, document loaders | Parser/index tests; `scripts/eval_retrieval.py` is a separate quality exercise, not automatic live-provider PASS |
+| Inventory freshness and local MCP | `api/workflows.py` → `domain/freshness_routing.py`, `mcp_adapter.py`, `mcp_server.py` | `python -m scripts.audit_freshness --strict`; local stdio: `python -m scripts.smoke_mcp_stdio` |
+| Workflow graph and simulated approval | `api/workflows.py` → `domain/workflow_demo.py` | `python -m scripts.audit_workflows --strict`; do **not** confuse scenario events with actual LangGraph/A2A execution |
+| Workspace/chat graph display | `frontend/src/main.tsx`, `frontend/src/graph.ts`; **legacy** `web/assets/app.js` belongs to `/`, not `/workspace` | `npm --prefix frontend run build` and applicable Chromium smoke; graph displays observed events only |
+| Session history, consent and traces | `api/sessions.py` → `infrastructure/sessions.py`, `domain/customer_memory.py` | `python -m pytest -q tests/test_customer_memory.py` plus relevant HTTP/session negative case |
+
+**Compatibility boundaries:** `retailiq/analytics.py` re-exports `domain.analytics`; `retailiq/api/__init__.py` preserves the `uvicorn retailiq.api:app` entrypoint. Keep these paths unless callers/tests are explicitly migrated. `orchestration/week1_graph.py` is an existing source filename, **not** a cue to create new `weekN_*` packages. The two frontend implementations and the deterministic workflow simulator are **intentional independent surfaces**; don't merge or rewrite them simply to reduce the file count. Large source files alone are not a reason to add frameworks or abstractions.
+
 ## Detail Design — request and decision flows
 
 ### DD-01 — Structured retail question (CAP-01, CAP-04, CAP-07)
