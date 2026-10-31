@@ -4,6 +4,7 @@
 
 | Question | Canonical document |
 |---|---|
+| Read the complete high-level overview and post-merge assessment? | [RetailIQ High-Level Overview](RETAILIQ_HIGH_LEVEL_OVERVIEW.md) |
 | Why RetailIQ, who uses it, and what value? | [PROJECT — business problem](PROJECT.md) |
 | Four-week required scope, roles and timeline? | [COURSE_PLAN — course baseline](COURSE_PLAN.md) |
 | How does the current application work? | [ARCHITECTURE — runtime design](ARCHITECTURE.md) |
@@ -15,7 +16,7 @@
 
 ## Roadmap ownership
 
-**Week 1:** Ask & Retrieve — [four documents](weeks/week-01/README.md), seven rubric checkpoints. **Week 2:** freshness, semantic layer, MCP and memory — **planned**. **Week 3:** approvals, access, observability/evaluation governance — **planned**. **Week 4:** five specialist agents, verification and manager-approved order flow — **planned**. Create each later week's folder **only when work begins**, not empty placeholder documents.
+**Week 1:** SQL/RAG/graph local baseline; live provider acceptance must be checked per commit. **Week 2:** local freshness/semantic/MCP/memory/retrieval slices exist, with live reliability gaps. **Week 3:** approval, scope and alerts are primarily simulations; real security/Langfuse/DeepEval are open. **Week 4:** five-role deterministic workflow exists, but five autonomous agents and secure approval remain open. See the [capability ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md); create new week folders only when needed.
 
 ## Documentation governance
 
