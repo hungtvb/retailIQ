@@ -68,7 +68,7 @@ The names below describe **proposed domain contracts**, not newly implemented pu
 - **Governance:** Approval, location scope and KPI alerts are primarily deterministic simulations; role selection is not authentication, and Langfuse/DeepEval live gates remain open.
 - **Multi-agent workflow simulations:** Five named specialist roles, stock allocation, verification and manager gate are exercised in a local workflow; this does **not** establish five autonomous agents, interoperable A2A, secure approvals or real order mutations.
 
-The [Capability Acceptance Ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md) is the current requirement-level status source. [RetailIQ High-Level Overview](RETAILIQ_HIGH_LEVEL_OVERVIEW.md) is a dated historical assessment, not a second canonical architecture or status source.
+The [Capability Acceptance Ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md) owns current capability gaps. Dated historical assessments are retained in the [documentation archive](archive/README.md), not as a competing architecture/status source.
 
 ## Limitations
 The 2026-10-29 local full-mode run has scripted LangGraph/Chroma evidence, a three-question RAGAS report, and inspected remote LangSmith traces (see `docs/weeks/week-01/EVIDENCE.md`). Re-run on the demo machine; this does not establish open-ended question reliability or production readiness. No unverified capability is claimed as PASS. No production-grade authentication or authorized order/pricing mutation is established.
