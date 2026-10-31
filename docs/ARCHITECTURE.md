@@ -29,7 +29,7 @@ flowchart LR
 - **LangGraph**: typed state, conditional route, explicit nodes. LangChain `@tool` wraps vetted parameterized SQL.
 - **LangChain ChatOpenAI/OpenAIEmbeddings + Chroma**: one OpenAI-compatible base URL and key, with separate chat and embedding model identifiers; full-mode product vector RAG.
 - **SQLite**: reproducible stock/order sales; read-only query connection, aggregate in SQL.
-- **FastAPI + HTML/JS**: browser demo without React buildchain.
+- **FastAPI + legacy HTML/JS plus React 19/TypeScript/Vite**: the original UI remains at `/`; the merged Product Workspace at `/workspace` visualizes event-grounded execution graphs. Its graph renderer is a view of recorded events, not an orchestration engine.
 - **LangSmith**: enable traces via API key in full mode; telemetry is hosted even though application runs local.
 - **RAGAS**: faithfulness and answer relevancy on product RAG with LLM judge in separate evaluation script.
 - **pytest**: deterministic SQL and business calculation tests distinct from RAGAS.
@@ -60,8 +60,13 @@ The names below describe **proposed domain contracts**, not newly implemented pu
 - **Handoff:** Sales → Inventory follow-up; flexible referents like “the first one” / “what about Hanoi?” are **not yet fully implemented or accepted**.
 - **Business measurement:** compare **end-to-end task time**, **interaction steps**, **post-task ease rating** and **answer correctness** against equivalent human-operated tools. Current synthetic pilot lacks a structured ease-of-use measurement, and there is no real retailer baseline.
 
-## Planned extensions
-**W2** Freshness routing (real time/15min/hourly/daily), governed KPI semantic layer, Inventory/Order MCP, customer memory, hybrid rerank rewrite, per-source answer report. **W3** HITL for pricing, RLS, KPI alerts, LangFuse, DeepEval, cost, PromptOps, governance and security. **W4** Inventory Search, Fulfilment Optimisation, Customer Context, Dynamic Pricing, Order Management, A2A coordinator, verification, deep report and approval workflow.
+## Development status after Product Workspace integration (2026-10-31)
+
+- **Week 2:** Local implementations include freshness policy, semantic KPI layer, real local MCP stdio Inventory/Order, scoped consented memory and hybrid product retrieval. Live freshness, cross-session authenticated identity and provider retrieval-quality acceptance are still open.
+- **Week 3:** Approval, location scope and KPI alerts are primarily deterministic simulations; role selection is not authentication, and Langfuse/DeepEval live gates remain open.
+- **Week 4:** Five named specialist roles, stock allocation, verification and manager gate are exercised in a local workflow; this does **not** establish five autonomous agents, interoperable A2A, secure approvals or real order mutations.
+
+Current whole-project status and business evaluation are summarized in [RetailIQ High-Level Overview](RETAILIQ_HIGH_LEVEL_OVERVIEW.md); requirement-level status is in [Capability Acceptance Ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md).
 
 ## Limitations
 The 2026-10-29 local full-mode run has scripted LangGraph/Chroma evidence, a three-question RAGAS report, and inspected remote LangSmith traces (see `docs/weeks/week-01/EVIDENCE.md`). Re-run on the demo machine; this does not establish open-ended question reliability or production readiness. No unverified capability is claimed as PASS. No auth/security yet. No autonomous order/pricing actions Week 1.
