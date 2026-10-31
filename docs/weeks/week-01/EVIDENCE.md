@@ -1,6 +1,8 @@
-# Week 1 — Single source of acceptance evidence
+# Week 1 — Dated Execution Evidence (Historical)
 
 > **Consolidated:** 2026-10-30 from dated source documents. **HEAD before documentation migration:** `b1274762f939914ef712220e0b1f4299bccf41c6`. Results below apply to their **recorded date, SHA and execution mode**, not automatically to this new HEAD. Evidence and historical notes are preserved in [archive](../../archive/README.md).
+
+**Ownership note:** this page preserves dated course/demo results and their original scope. It is **not** the live status ledger for the latest `main`. For present capability-level gaps consult [Capability Acceptance Ledger](../../29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md), and for test case definitions/reproduction consult [Testing & Scenario Acceptance](../../27_BEHAVIORAL_ACCEPTANCE_MATRIX.md). Do not infer a current PASS from the provider traces or CI outcomes below without matching SHA/mode evidence.
 
 **Status vocabulary:** PASS — local deterministic; PASS — mocked LangGraph; PASS — provider-backed, with real endpoint/model; DOCUMENTED only; NOT VERIFIED for the current revision; PLANNED for later weeks.
 
