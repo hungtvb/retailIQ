@@ -1,7 +1,6 @@
-# RetailIQ — Behavioral Acceptance Matrix (Four Weeks)
+# RetailIQ — Testing & Scenario Acceptance
 
-**Scope:** local deterministic teaching workflows; this is an evidence ledger, not a
-claim of production readiness or completion of every AI Flezi requirement.
+**Document owner:** testing approach, reproducible commands, business/control/safety oracles and scenario coverage. This is **not** the current evidence ledger or a certificate that tests passed on the latest commit. [Capability status and open gates](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md) is the single owner of requirement acceptance; [dated Week 1 execution records](weeks/week-01/EVIDENCE.md) preserve historical evidence. Week-labelled scenario IDs below are existing test identifiers, not a requirement to organize new source code by course weeks.
 
 ## Acceptance principle
 
@@ -34,7 +33,13 @@ not an existing local user database. It needs Chromium/Chrome and Playwright.
 The MCP smoke needs the optional `mcp` and `langchain-mcp-adapters` dependencies.
 Its subprocess gets the same isolated fixture via environment variables.
 
-## Scenario coverage by week
+## Running and interpreting evidence
+
+Use a clean synthetic fixture as required by the individual script. Some commands seed disposable databases; running `scripts.seed` directly can replace local synthetic working data, so use the existing runbook and back up customized fixtures. `--strict` fails when the scenario result contains FAIL/ERROR; a historical report may have used non-strict mode. Full-mode query audits may incur provider calls and require explicit `--confirm-live`; do not run them without configured credentials and a recorded model/version.
+
+**Modes:** `offline_synthetic` (reviewed SQLite and deterministic rules), `mocked` (fake model/adapter), `local_mcp_stdio` (real local subprocess transport), and `provider-backed` (actual LLM/embedding/remote trace). Keep these independent in result reporting. A source-freshness tier or static graph node does not prove fresh data or a real agent invocation.
+
+## Scenario coverage (existing course-labelled IDs)
 
 | Scenario IDs | Observed behavior & independent oracle | Evidence mode |
 |---|---|---|
@@ -58,7 +63,7 @@ An additional 20-scenario natural-language audit covers product extremes,
 cross-domain top-seller stock, previous-month context and document retrieval
 presence. A retrieved document is **not** automatically a valid RAGAS score.
 
-### Faults actually caught by this audit
+### Historical audit findings (not current PASS claims)
 
 1. `W2-FRESH-MIXED` failed: the freshness calculation used the **newest**
    location timestamp, falsely passing stock with another stale location.
@@ -78,9 +83,8 @@ Initial run: **16/19 PASS**; after corrections, the strict audit recorded
 **19/19 PASS** in GitHub Actions run
 https://github.com/hungtvb/retailIQ/actions/runs/40871264052.
 
-A later CI run verified **20/20 business queries**, **19/19 workflow scenarios**,
-real **Chromium E2E**, and **MCP Inventory/Order stdio** together:
-https://github.com/hungtvb/retailIQ/actions/runs/40872427598.
+A later **historical** CI run reported **20/20 business queries**, **19/19 workflow scenarios**, real **Chromium E2E**, and **MCP Inventory/Order stdio** together:
+https://github.com/hungtvb/retailIQ/actions/runs/40872427598. These results apply only to that run and its tested code, not to the present `main`.
 
 ## Additional adversarial acceptance (2026-10-29)
 
@@ -105,38 +109,28 @@ an independent SQL oracle; it does **not** use a simulated chat response.
 **First adversarial audit:** 10/14 PASS, 4 actual defects:
 - Prior top-3 rank 4 (or rank 0) incorrectly fell back to top seller.
 - An English plural pronoun incorrectly selected only top seller.
-- Corrupted source price \`-1 VND\` created an approval-ready pricing proposal.
+- Corrupted source price `-1 VND` created an approval-ready pricing proposal.
 
 The routing/context resolution now preserves invalid references for
 clarification; English plural phrases resolve to the prior ranked group;
-\`catalog_product\` rejects invalid negative, null and non-integer prices
+`catalog_product` rejects invalid negative, null and non-integer prices
 before price/order proposals. Two additional real Chromium conversations
 check out-of-range ordinal clarification and plural-reference stock against SQL.
 
-**Latest strict evidence:** 14/14 edge scenarios, 20/20 existing business
-scenarios, 19/19 workflow scenarios, and browser/MCP integration checks
-all PASS in https://github.com/hungtvb/retailIQ/actions/runs/40878317768.
+**Historical 2026-10-29 strict run:** 14/14 edge scenarios, 20/20 business scenarios, 19/19 workflow scenarios, and browser/MCP integration checks reported PASS in https://github.com/hungtvb/retailIQ/actions/runs/40878317768. **Do not treat this as latest/current acceptance:** a separately documented 2026-10-30 offline query audit reported **9 PASS / 11 FAIL / 0 ERROR** on its recorded commit; see [dated evidence](weeks/week-01/EVIDENCE.md). Re-run the selected suite on the target SHA and inspect each failed case before updating acceptance status.
 
 Each suite remains a bounded sample of user behavior. All three are *offline
 synthetic acceptance*, except the separately verified **actual local MCP stdio**
 transport. No evidence here justifies marking RAGAS, LangSmith live, Langfuse,
 DeepEval, autonomous A2A, or production authorization as complete.
 
-## Required course capability status (do not conflate)
+## Reporting and acceptance ownership
 
-| Course capability | Evidence position |
-|---|---|
-| Week 1 SQL, local chat follow-ups, browser UI | **Offline scenario verified** |
-| Week 1 LangGraph live + actual LLM tool traces | **Not verified by offline audit** |
-| Week 1 RAGAS / LangSmith reports | **No live evidence gate passed here** |
-| Week 2 semantic metrics and freshness checks | **Local behavior verified** |
-| Week 2 MCP Inventory/Order stdio handshake | **Verified with real local stdio subprocess/tool invocation; not a hosted MCP service** |
-| Week 2 long-term memory, hybrid retrieval and reranking quality | **Not demonstrated by these scenarios** |
-| Week 3 manager approval, KPI threshold, location filtering | **Mock behavior verified; NOT real RBAC or notification** |
-| Week 3 Langfuse / DeepEval / security report | **Not verified by these scenarios** |
-| Week 4 five specialist roles, allocation, verification, proposal | **Deterministic local behavior verified** |
-| Week 4 autonomous multi-agent A2A and business write | **NOT implemented/verified as production behavior** |
+For every reported result, record the **test SHA, run date, environment, execution mode, command and input, independent oracle, pass/fail counts, artifact/trace reference and limitations**. A green unit-test suite, a screenshot of the graph, or an API HTTP 200 response alone does not establish business correctness.
 
-**Next decision:** prioritize any course-mandatory missing *live* evidence
-before adding more agents, infrastructure or UI polish. No feature should be
-marked **PASS** without a reproducing scenario and corresponding trace.
+- **Scenario definitions and reproduction:** this document and existing test scripts.
+- **Current capability status and missing gates:** [capability acceptance ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md). Do not duplicate a live status table here.
+- **Historical provider/RAGAS/LangSmith evidence:** [Week 1 evidence](weeks/week-01/EVIDENCE.md); prior dated provider results are not present-commit acceptance.
+- **Run artifacts:** CI artifacts or access-controlled external storage. Keep generated reports, screenshots and traces outside Git (do not delete existing historical artifacts without preserving them).
+
+A locally verified MCP stdio call is not a hosted integration; model-free simulated approvals are not authenticated HITL; provider-backed product RAG is distinct from offline lexical retrieval. Do not label one mode as another.
