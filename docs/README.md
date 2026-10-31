@@ -12,6 +12,7 @@ Use this index to load **only the documentation needed for the task**.
 | KPI definitions, data and API contracts | [Data & API](DATA_API.md) |
 | Testing approach, scenarios and reproducible commands | [Testing & Scenario Acceptance](27_BEHAVIORAL_ACCEPTANCE_MATRIX.md) |
 | Capability-level acceptance status and missing evidence | [Capability Ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md) |
+| Engineering rationale, alternatives, trade-offs and learning references | [Engineering Wiki](wiki/README.md) |
 
 ## Reference material
 
