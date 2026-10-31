@@ -25,4 +25,12 @@ def lexical(question: str) -> list[dict]:
 
 
 def retrieve(question: str) -> list[dict]:
-    return vector_search(question) if os.getenv('RETAILIQ_MODE') == 'full' else lexical(question)
+    if os.getenv('RETAILIQ_MODE') != 'full':
+        return lexical(question)
+    strategy = os.getenv('RETAILIQ_RAG_RETRIEVAL', 'hybrid').strip().lower()
+    if strategy == 'vector':
+        return vector_search(question)
+    if strategy == 'hybrid':
+        from .rag.advanced_retrieval import hybrid_search
+        return hybrid_search(question)
+    raise ValueError('RETAILIQ_RAG_RETRIEVAL must be vector or hybrid')

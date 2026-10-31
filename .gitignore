@@ -12,6 +12,7 @@ data/retailiq.sqlite3-shm
 data/retailiq.sqlite3-wal
 data/retailiq.sqlite3
 data/chat_sessions.sqlite3
+data/workflow_demo.sqlite3*
 data/agent_checkpoints.sqlite3*
 data/full_e2e_report.json
 
@@ -25,3 +26,7 @@ data/pilot_ci_seed.sqlite3*
 
 # Observational query-acceptance audit; may include full-mode answer excerpts
 data/query_audit_report.json
+
+# Generated product frontend assets
+frontend/node_modules/
+frontend/dist/

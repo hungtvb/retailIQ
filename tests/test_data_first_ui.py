@@ -16,7 +16,12 @@ def test_no_landing_hero_and_data_grid_is_primary():
     assert 'role="log"' in html
     assert 'Run query' not in html
     assert 'Conversation history</summary>' not in html
-    assert 'Follow up: stock' in html
+    assert 'data-question="Which products are top sellers?"' in html
+    assert 'id="tab-assistant"' in html
+    assert 'id="tab-workflows"' not in html
+    assert 'id="graph-mode-request"' in html
+    assert 'id="graph-mode-scenario"' in html
+    assert html.index('id="assistant-panel"') < html.index('id="workflows-panel"') < html.index('id="logs-panel"')
     for marker in ('id="records-table-wrap"', 'id="data-count"', 'id="source-list"',
                    'id="export-csv"', 'id="summary-agent"', 'id="summary-period"',
                    'id="summary-mode"', 'id="live-trace-list"', 'id="chat-history"'):

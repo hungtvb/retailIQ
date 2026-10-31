@@ -32,6 +32,13 @@ def requested_month(question: str) -> str:
     if 'tháng trước' in text or 'last month' in text:
         previous = reference.replace(day=1) - timedelta(days=1)
         return previous.strftime('%Y-%m')
+    english_months = ('january', 'february', 'march', 'april', 'may', 'june',
+                      'july', 'august', 'september', 'october', 'november', 'december')
+    english = re.search(
+        r'\b(' + '|'.join(english_months) + r')\s*(20\d{2})?\b', text
+    )
+    if english:
+        return f'{int(english.group(2) or reference.year):04d}-{english_months.index(english.group(1)) + 1:02d}'
     match = re.search(r'tháng\s+(1[0-2]|0?[1-9])(?:\s*(?:năm|/|-)\s*(20\d{2}))?', text)
     if not match:
         match = re.search(r'\b(20\d{2})[-/](1[0-2]|0?[1-9])\b', text)
@@ -62,7 +69,16 @@ def newest_products(limit: int = 5) -> list[dict]:
 def catalog_product(sku: str) -> dict | None:
     rows = query('''SELECT sku, name, category, price_vnd, catalog_added_at
                     FROM products WHERE sku = ? LIMIT 1''', (_sku(sku),))
-    return rows[0] if rows else None
+    if not rows:
+        return None
+    item = rows[0]
+    # Never offer a manager an actionable-looking proposal from corrupt
+    # catalog values. Zero may legitimately represent a free item; negative,
+    # null and non-integer prices are invalid input evidence.
+    _nonnegative_int(item.get('price_vnd'), field='catalog price_vnd')
+    if not isinstance(item.get('name'), str) or not item['name'].strip():
+        raise DomainDataError('Catalog product name is missing')
+    return item
 
 
 def _nonnegative_int(value, *, field: str) -> int:
@@ -159,6 +175,42 @@ def revenue(period: str | None = None) -> list[dict]:
     return rows
 
 
+
+def revenue_for_sku(sku: str, period: str | None = None) -> list[dict]:
+    """Revenue for exactly one verified SKU in a reporting month.
+
+    Product selection/ranking is done separately by top(period), always using
+    the same period. Never substitute store-wide revenue for a ranked SKU.
+    """
+    normalized = _sku(sku)
+    start, end = _month_bounds(period)
+    _ensure_sales_lines_valid(start, end)
+    rows = query("""
+        SELECT p.sku, p.name, o.channel, COUNT(DISTINCT o.id) AS orders,
+               SUM(li.quantity) AS units_sold,
+               SUM(li.quantity * li.unit_price_vnd - li.discount_vnd) AS net_revenue_vnd
+        FROM orders AS o
+        JOIN order_lines AS li ON li.order_id = o.id
+        JOIN products AS p ON p.sku = li.sku
+        WHERE o.status = 'completed'
+          AND o.ordered_at >= ? AND o.ordered_at < ?
+          AND li.sku = ?
+        GROUP BY p.sku, p.name, o.channel
+        ORDER BY o.channel
+    """, (start, end, normalized))
+    for row in rows:
+        if row.get('sku') != normalized:
+            raise DomainDataError('Revenue evidence SKU mismatch')
+        if not isinstance(row.get('name'), str) or not row['name'].strip():
+            raise DomainDataError('Revenue product name is missing')
+        if not isinstance(row.get('channel'), str) or not row['channel'].strip():
+            raise DomainDataError('Sales channel is missing')
+        _nonnegative_int(row.get('orders'), field='orders')
+        _nonnegative_int(row.get('units_sold'), field='units_sold')
+        _nonnegative_int(row.get('net_revenue_vnd'), field='net_revenue_vnd')
+    return rows
+
+
 def top(period: str | None = None) -> list[dict]:
     start, end = _month_bounds(period)
     _ensure_sales_lines_valid(start, end)
@@ -179,3 +231,16 @@ def top(period: str | None = None) -> list[dict]:
             raise DomainDataError('Top-selling product name is missing')
         _nonnegative_int(row.get('units_sold'), field='units_sold')
     return rows
+
+
+def price_extreme(*, highest: bool, category: str | None = None) -> list[dict]:
+    """Rank synthetic list prices with reviewed SQL; only allow known category."""
+    if category is not None and category not in {"Accessory", "Laptop", "Phone", "Audio",
+                                                  "Peripheral", "Display", "Tablet"}:
+        raise ValueError("Unsupported catalog category")
+    direction = "DESC" if highest else "ASC"  # fixed SQL token, never user SQL
+    if category is None:
+        return query("SELECT sku,name,category,price_vnd FROM products "
+                     f"ORDER BY price_vnd {direction},sku LIMIT 1")
+    return query("SELECT sku,name,category,price_vnd FROM products WHERE category=? "
+                 f"ORDER BY price_vnd {direction},sku LIMIT 1", (category,))

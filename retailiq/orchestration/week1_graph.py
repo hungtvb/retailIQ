@@ -12,7 +12,8 @@ import atexit
 import threading
 from pathlib import Path
 import sqlite3
-from retailiq.queries import intent, do, product_sku, wants_single_latest_product
+from retailiq.queries import (intent, do, product_sku, wants_single_latest_product,
+                              requested_top_count, is_multi_stock_question, is_price_extreme)
 from retailiq.reply import retailiq_reply
 from retailiq.domain.analytics import month, products, requested_month, top
 from retailiq.core.config import chat_model, configure_langsmith
@@ -44,6 +45,8 @@ class State(TypedDict, total=False):
     skill: str
     subagents: list[str]
     route_fallback: bool
+    query_plan: dict
+    customer_memory: dict
 
 
 def classify(question: str) -> str:
@@ -52,13 +55,14 @@ def classify(question: str) -> str:
         return 'latest'
     sales = ('top seller', 'best seller', 'bán chạy', 'bestseller', 'selling most')
     stock = ('stock', 'inventory', 'tồn kho', 'available', 'replenish', 'reorder', 'restock', 'bổ sung')
-    if any(x in q for x in sales) and any(x in q for x in stock):
-        # A pure stock lookup mentioning 'top seller' is not a replenishment decision.
-        if any(x in q for x in ('how many', 'what is the stock', 'how much stock', 'bao nhiêu')):
-            return 'stock'
-        return 'decision'
     if any(x in q for x in ('replenishment review', 'inventory decision', 'bổ sung hàng bán chạy')):
         return 'decision'
+    if any(x in q for x in sales) and any(x in q for x in stock):
+        # Stock coverage is not a purchasing/replenishment recommendation.
+        # Explicit action terms retain the supervisor route.
+        if any(x in q for x in ('replenish', 'reorder', 'restock', 'bổ sung')):
+            return 'decision'
+        return 'stock'
     return intent(question)
 
 
@@ -101,9 +105,38 @@ def resolve_followup(question: str, history: list[dict] | None = None,
     q = question.casefold()
     if any(p['sku'].casefold() in q or p['name'].casefold() in q for p in products()):
         return question
+    if is_multi_stock_question(question):
+        # Direct cross-domain question; do() retrieves the ranked group itself.
+        return question
+    # Only user-authored sales questions can define a ranked-stock reference.
+    # Do not extract ambiguous SKUs from assistant-generated prose.
+    previous = _previous_user_question(history)
+    if category == 'stock' and previous and classify(previous) == 'top':
+        ranked_count = requested_top_count(previous)
+        ranked_period = requested_month(previous)
+        rank = re.search(r'(?:đứng\s*thứ|xếp\s*thứ|rank(?:ed)?\s*#?)\s*(\d+)', q)
+        if rank:
+            index = int(rank.group(1)) - 1
+            if not 0 <= index < ranked_count:
+                # Explicitly invalid reference: preserve the question so the
+                # stock lookup asks for clarification. Never fall through to
+                # the first seller from the previous turn.
+                return question
+            ranked = top(ranked_period)
+            if index >= len(ranked):
+                return question
+            return question + ' ' + ranked[index]['sku']
+        references_group = any(marker in q for marker in (
+            'các sản phẩm đó', 'các sản phẩm ấy', 'những sản phẩm đó',
+            'those products', 'these products', 'all of them'))
+        references_group |= bool(re.search(
+            r'\b(their|those|these|them)\b', q
+        ))
+        if references_group:
+            return f'Stock for top {ranked_count} best sellers in {ranked_period}'
     if 'top seller' in q or 'best seller' in q or 'bán chạy' in q:
-        rows = top()
-        return question + (' ' + rows[0]['sku'] if rows else '')
+        ranked = top(requested_month(question))
+        return question + (' ' + ranked[0]['sku'] if ranked else '')
     # Model answers may contain untrusted RAG text, multiple product names or
     # hallucinated SKUs. Only the user's own explicit reference may anchor a
     # follow-up; a top-seller question above uses reviewed SQL instead.
@@ -122,7 +155,7 @@ def resolve_followup(question: str, history: list[dict] | None = None,
             rows = newest_products(1)
             return question + (' ' + rows[0]['sku'] if rows else '')
         if previous_category == 'top':
-            rows = top()
+            rows = top(requested_month(content))
             return question + (' ' + rows[0]['sku'] if rows else '')
         if previous_category == 'general' and not _referential(content):
             return question
@@ -168,8 +201,13 @@ def route(state: State):
     if previous == 'sales_agent' and category == 'stock':
         target = 'sales_agent'
     log_event('agent.routed', agent=target, intent=category, route_fallback=fallback, execution_mode='full')
+    selected_skill = skill_for(category)
+    if selected_skill:
+        # Routing/selection is not proof of loading or executing a skill.
+        log_event('skill.selected', agent=AGENT_FOR_INTENT[category],
+                  skill=selected_skill, execution_mode='full')
     return Command(update={'effective_question': effective, 'intent': category,
-                           'route_fallback': fallback, 'skill': skill_for(category)}, goto=target)
+                           'route_fallback': fallback, 'skill': selected_skill}, goto=target)
 
 
 def sales_agent(state: State):
@@ -199,6 +237,9 @@ def product_agent(state: State):
         if state['intent'] == 'latest':
             result = {'answer': '', 'records': newest_products(1 if wants_single_latest_product(state['question']) else 5), 'contexts': [],
                       'skill': 'catalog_lookup', 'agent': 'product_agent'}
+        elif is_price_extreme(state['effective_question']):
+            result = {**do(state['effective_question'], 'product'),
+                      'skill': 'catalog_lookup', 'agent': 'product_agent'}
         elif any(word in state['question'].casefold() for word in ('giá', 'price', 'cost')) and product_sku(state['effective_question']):
             item = catalog_product(product_sku(state['effective_question']))
             result = {'answer': '', 'records': [item] if item else [], 'contexts': [],
@@ -218,6 +259,12 @@ def retail_supervisor(state: State):
 def retailiq(state: State):
     """Handle conversation without sending ordinary chat to product retrieval."""
     from langgraph.types import Command
+    from retailiq.domain.customer_memory import is_memory_question, memory_answer
+    if is_memory_question(state['question']):
+        return Command(update={
+            'answer': memory_answer(state['question'], state.get('customer_memory')),
+            'active_agent': 'retailiq', 'records': [], 'contexts': [],
+        }, goto='retailiq_reply')
     reply = chat_model().invoke([
         ('system', 'You are RetailIQ, a helpful retail assistant. Reply in the language of the user question. '
          'For greetings and ordinary conversation, answer naturally. Do not invent inventory, sales, '
@@ -366,6 +413,19 @@ def validate_graph_result(result: dict) -> dict:
         raise GraphResultError('Graph result has no valid bounded answer')
     if not isinstance(result.get('records', []), list) or not isinstance(result.get('contexts', []), list):
         raise GraphResultError('Graph result has invalid evidence collections')
+    if category == 'revenue' and result.get('query_plan') is not None:
+        from retailiq.domain.revenue_plan import RevenuePlan, verify_revenue_evidence
+        plan_payload = result['query_plan']
+        if not isinstance(plan_payload, dict) or plan_payload.get('metric') != 'net_revenue_vnd':
+            raise GraphResultError('Revenue query plan is malformed')
+        try:
+            plan = RevenuePlan(**{key: value for key, value in plan_payload.items()
+                                  if key != 'metric'})
+            if plan.period != result.get('period'):
+                raise GraphResultError('Revenue period differs from its query plan')
+            verify_revenue_evidence(plan, result.get('records', []))
+        except (TypeError, ValueError) as exc:
+            raise GraphResultError('Revenue result violates its query plan') from exc
     handoff = result.get('handoff')
     if handoff is not None:
         if (not isinstance(handoff, dict) or
@@ -376,7 +436,8 @@ def validate_graph_result(result: dict) -> dict:
     return result
 
 
-def run(q: str, *, history: list[dict] | None = None, active_agent: str = '') -> dict:
+def run(q: str, *, history: list[dict] | None = None, active_agent: str = '',
+        memory: dict | None = None) -> dict:
     configure_langsmith()
     sid = session_id()
     rid = request_id()
@@ -394,6 +455,7 @@ def run(q: str, *, history: list[dict] | None = None, active_agent: str = '') ->
         'previous_agent': active_agent,
         'answer': '', 'records': [], 'contexts': [],
         'handoff': None, 'subagents': [], 'route_fallback': False,
+        'customer_memory': memory if memory and memory.get('consent') else {},
     }
     graph = _session_graph() if sid else build_graph()
     if os.getenv('RETAILIQ_NATIVE_GRAPH_EVENTS', 'false').lower() in ('1', 'true', 'yes'):
@@ -416,4 +478,5 @@ def run(q: str, *, history: list[dict] | None = None, active_agent: str = '') ->
             'handoff': result.get('handoff'),
             'subagents': result.get('subagents', []),
             'skill': result.get('skill', ''),
-            'route_fallback': result.get('route_fallback', False)}
+            'route_fallback': result.get('route_fallback', False),
+            'query_plan': result.get('query_plan')}

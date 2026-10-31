@@ -158,6 +158,12 @@ async function selectSession(id, preserveEvidence = false) {
     byId('live-trace-state').textContent = 'IDLE';
     byId('live-indicator').className = 'live-indicator';
     byId('live-trace-panel').classList.remove('trace-is-live');
+    byId('live-trace-state').textContent = last ? 'STORED' : 'IDLE';
+    byId('graph-request-notice').hidden = false;
+    byId('graph-request-notice').textContent = last
+      ? 'This saved answer has no replayable execution trace. Ask a new question to inspect its flow.'
+      : 'Send a question to inspect its execution flow.';
+    window.RetailGraph?.chatClear();
     lastRequestId = '';
   }
   byId('summary-agent').textContent = session.active_agent || '—';
@@ -202,6 +208,8 @@ function showEmptyChat() {
   byId('live-trace-count').textContent = '0 events';
   byId('live-trace-request').textContent = '—';
   setLiveTraceState('IDLE');
+  byId('graph-request-notice').hidden = false;
+  byId('graph-request-notice').textContent = 'Send a question to inspect its execution flow.';
   byId('summary-agent').textContent = '—';
   byId('summary-period').textContent = '—';
   byId('summary-mode').textContent = '—';
@@ -213,9 +221,11 @@ function showEmptyChat() {
 async function createNewChat() {
   if (askInProgress) return;
   showEmptyChat();
-  await refreshSessions();
+  // Clear the draft before the asynchronous session refresh. Otherwise a
+  // fast user's new question can be erased after they already started typing.
   byId('q').value = '';
   byId('q').focus();
+  await refreshSessions();
 }
 
 async function deleteCurrentChat() {
@@ -344,6 +354,16 @@ function showAgentEvidence(data) {
   }
 }
 
+// Both graph modes share the Chat workspace; scenario runs remain explicitly
+// simulated and never replace the evidence for a user question.
+function showGraphMode(mode) {
+  const scenario = mode === 'scenario';
+  byId('graph-request-panel').hidden = scenario;
+  byId('workflows-panel').hidden = !scenario;
+  byId('graph-mode-request').setAttribute('aria-pressed', String(!scenario));
+  byId('graph-mode-scenario').setAttribute('aria-pressed', String(scenario));
+  byId('insights-column-mode').dataset.mode = scenario ? 'scenario' : 'request';
+}
 function showPanel(name) {
   const roi = name === 'roi';
   const logs = name === 'logs';
@@ -370,8 +390,10 @@ function resetLiveTrace() {
   byId('live-trace-count').textContent = '0 events';
   byId('live-trace-request').textContent = '—';
   byId('live-trace-state').textContent = 'CONNECTING';
+  byId('graph-request-notice').hidden = true;
   byId('live-indicator').className = 'live-indicator live-indicator-running';
   byId('live-trace-panel').classList.add('trace-is-live');
+  window.RetailGraph?.chatReset();
 }
 
 function setLiveTraceState(status) {
@@ -380,6 +402,7 @@ function setLiveTraceState(status) {
     (status === 'RUNNING' || status === 'CONNECTING' ? ' live-indicator-running' :
     status === 'ERROR' ? ' live-indicator-error' : ' live-indicator-complete');
   byId('live-trace-panel').classList.toggle('trace-is-live', status === 'RUNNING' || status === 'CONNECTING');
+  if (status === 'COMPLETE' || status === 'ERROR') window.RetailGraph?.chatFinished(status === 'COMPLETE');
 }
 
 function appendLiveEvent(event) {
@@ -407,6 +430,7 @@ function appendLiveEvent(event) {
   content.append(title, sub); entry.append(dot, AgentID().icon(identity), content, time); list.appendChild(entry);
   byId('live-trace-count').textContent = String(Number(byId('live-trace-count').textContent.split(' ')[0]) + 1) + ' events';
   list.scrollTop = list.scrollHeight;
+  window.RetailGraph?.chatEvent(event);
 }
 
 // fetch(POST) streaming: EventSource cannot send the chat body/session id.
@@ -477,6 +501,7 @@ async function ask() {
   setChatError();
   if (question.length < 3) { byId('q').reportValidity(); return; }
   askInProgress = true;
+  showGraphMode('request');
   const button = byId('ask-submit');
   const answer = byId('answer');
   const sessionPicker = byId('chat-session-picker');
@@ -576,6 +601,7 @@ async function ask() {
     if (!byId('q').value.trim()) byId('q').value = question;
     byId('response-state').textContent = 'ERROR';
     byId('summary-mode').textContent = 'Error';
+    setLiveTraceState('ERROR');
     scrollChatToBottom();
   } finally {
     askInProgress = false;
@@ -709,6 +735,9 @@ function initRetailIQ() {
   byId('tab-assistant').addEventListener('click', () => showPanel('assistant'));
   byId('tab-roi').addEventListener('click', () => showPanel('roi'));
   byId('tab-logs').addEventListener('click', () => showPanel('logs'));
+  byId('graph-mode-request').addEventListener('click', () => showGraphMode('request'));
+  byId('graph-mode-scenario').addEventListener('click', () => showGraphMode('scenario'));
+  showGraphMode('request');
   byId('logs-refresh').addEventListener('click', loadExecutionLogs);
   byId('export-csv').addEventListener('click', exportRecordsCsv);
   byId('log-scope').addEventListener('change', loadExecutionLogs);
@@ -733,5 +762,6 @@ function initRetailIQ() {
   });
   initializeSessions();
   byId('answer').classList.add('is-placeholder');
+  window.RetailGraph?.chatClear();
 }
 window.addEventListener('DOMContentLoaded', initRetailIQ);
