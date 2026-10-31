@@ -5,7 +5,6 @@
 - `docs/README.md`: documentation index; read only task-relevant pages.
 - `docs/ARCHITECTURE.md`: current architecture and module responsibilities.
 - `docs/DATA_API.md`: source-of-truth, KPI and API contracts.
-- `docs/planning/ENGINEERING_BASELINE.md`: staged documentation/code cleanup plan.
 
 ## Working rules
 - Before substantial coding, inspect existing code and dependency versions; research the **latest relevant official documentation**, release notes and compatibility guidance. Cite or link key sources in the task/PR. Small self-contained fixes need only proportionate verification.
