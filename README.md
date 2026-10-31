@@ -1,5 +1,7 @@
 # RetailIQ Copilot
 
+**Team starting point:** [High-Level Project Overview & post-merge assessment](docs/RETAILIQ_HIGH_LEVEL_OVERVIEW.md). The React/TypeScript workspace is served at `/workspace` after `cd frontend && npm install && npm run build`; the existing UI remains at `/`. Week 2–4 local implementations are partial/simulated where identified in the capability ledger; not production features.
+
 Local Week 1 demo for synthetic retail inventory, sales analytics, product knowledge, and agent routing. The fixture has 10 products, 3 locations, and 120 orders; the reference date defaults to `2026-10-28`.
 
 **Business problem:** Retail staff may need to navigate multiple existing POS/BI/ERP/WMS tools, filters and reports to find and combine data. **RetailIQ's proposed outcome is Faster · Easier · Reliable completion of retail operational information tasks through natural-language conversation**, with trusted evidence. Inventory & Sales are the initial domains; the **top-seller Replenishment Review** is one cross-source *demo scenario*, not the full product purpose. **Faster/Easier are unvalidated hypotheses**, not measured time savings or UX improvements; this is not demand forecasting or automated ordering.
