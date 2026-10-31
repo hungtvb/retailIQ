@@ -10,11 +10,12 @@ Use this index to load **only the documentation needed for the task**.
 | System design and implementation boundaries | [Architecture](ARCHITECTURE.md) |
 | Request paths, component behavior and detailed execution boundaries | [Basic & Detail Design](DESIGN.md) |
 | KPI definitions, data and API contracts | [Data & API](DATA_API.md) |
-| Acceptance status and remaining gaps | [Capability ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md) |
+| Testing approach, scenarios and reproducible commands | [Testing & Scenario Acceptance](27_BEHAVIORAL_ACCEPTANCE_MATRIX.md) |
+| Capability-level acceptance status and missing evidence | [Capability Ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md) |
 
 ## Reference material
 
-- [Behavioral acceptance scenarios](27_BEHAVIORAL_ACCEPTANCE_MATRIX.md)
+- [Dated Week 1 execution evidence](weeks/week-01/EVIDENCE.md) — historical results only; do not treat as current-commit acceptance
 - [Dated project assessment](RETAILIQ_HIGH_LEVEL_OVERVIEW.md) — historical snapshot, **not** a second canonical Product document
 - [Older notes and records](archive/README.md)
 
