@@ -20,7 +20,7 @@ A code path, a UI node, or a passing unit test **does not prove a business scena
 
 | Gate | Command | Purpose |
 |---|---|---|
-| Business questions | `python -m scripts.audit_queries --mode offline --strict` | 20 independent SQL-checked conversation scenarios |
+| Business questions | `python -m scripts.audit_queries --mode offline --strict` | 32 independently checked synthetic business/conversation scenarios (as enumerated in the current script) |
 | Workflow behavior | `python -m scripts.audit_workflows --strict` | 19 per-feature scenarios, API + SQLite oracle |
 | Real browser | `python -m scripts.smoke_workflow_browser` | Week 1–4 UI, evidence, approval, retry/blocked and conversation follow-ups |
 | MCP actual stdio | `python -m scripts.smoke_mcp_stdio` | Real subprocess MCP Inventory + Order calls; verify against SQL, not mock output |
@@ -38,6 +38,25 @@ Its subprocess gets the same isolated fixture via environment variables.
 Use a clean synthetic fixture as required by the individual script. Some commands seed disposable databases; running `scripts.seed` directly can replace local synthetic working data, so use the existing runbook and back up customized fixtures. `--strict` fails when the scenario result contains FAIL/ERROR; a historical report may have used non-strict mode. Full-mode query audits may incur provider calls and require explicit `--confirm-live`; do not run them without configured credentials and a recorded model/version.
 
 **Modes:** `offline_synthetic` (reviewed SQLite and deterministic rules), `mocked` (fake model/adapter), `local_mcp_stdio` (real local subprocess transport), and `provider-backed` (actual LLM/embedding/remote trace). Keep these independent in result reporting. A source-freshness tier or static graph node does not prove fresh data or a real agent invocation.
+
+## Manual live LLM acceptance (opt-in; paid provider calls)
+
+**Separate workflow:** [Live LLM Acceptance](../.github/workflows/live-llm.yml). It uses **only** `workflow_dispatch` on `main`: no scheduled, push or pull-request execution; normal offline CI never needs provider credentials.
+
+**One-time GitHub setup (do not send secrets in chat):**
+
+1. Repository **Settings → Environments → New environment**: name it exactly `llm-evaluation`. Restrict deployment branches to `main`; add a required reviewer if your GitHub plan/environment supports it.
+2. In that **environment**, configure two secrets: `OPENAI_BASE_URL` (**HTTPS API base**, e.g. Azure OpenAI v1 `https://<resource>.openai.azure.com/openai/v1/`, not `/chat/completions`) and `OPENAI_API_KEY`. Configure optional environment variables `CHAT_MODEL` and `EMBEDDING_MODEL` with actual model/deployment names; leave unset to use the code's defaults. Do not paste values in logs, PRs or this document.
+3. Go to **Actions → RetailIQ - Live LLM Acceptance → Run workflow → Branch: main**, select `smoke` first, then `critical` after connectivity works.
+
+| Suite | Execution | Evidence/meaning |
+|---|---|---|
+| `smoke` | Install full runtime; make **one real chat call and one embedding call** with `scripts.check_openai --live` | Provider credentials and two model endpoints respond. Not a business correctness test. |
+| `critical` | Smoke, seed **synthetic** local SQLite, build Chroma with real embeddings, then `audit_queries --mode full --ids SALES-05,CROSS-01,CTX-04,CAT-01,SALES-12,RAG-01 --confirm-live --strict` | Six business cases with actual LLM routing/context/product retrieval, compared to the audit's independent oracles. Failure must fail the job; do not replace with deterministic/fake answers. |
+
+The workflow uses Python 3.12, serialized concurrency and a 30-minute job timeout. It exports a **7-day GitHub Actions artifact** with the strict query report (when created) plus non-secret commit/run/mode metadata. A failed setup can legitimately have no query report. GitHub Environment Secrets are scoped to this job; `LANGSMITH_TRACING=false` unless an independent, explicitly approved remote-tracing gate is added.
+
+**Boundary:** This is provider-backed **smoke and targeted query acceptance** only. It does **not** run RAGAS, establish LangSmith trace acceptance, test arbitrary natural-language requests, prove live retailer freshness or production security. Track these separately in the [Capability Ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md) when artifacts can be reviewed.
 
 ## Scenario coverage (existing course-labelled IDs)
 
