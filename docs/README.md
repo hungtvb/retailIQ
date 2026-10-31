@@ -8,6 +8,7 @@ Use this index to load **only the documentation needed for the task**.
 | Required business and technical capabilities | [Requirements](REQUIREMENTS.md) |
 | Course milestones and original planning sequence | [Roadmap / Course Plan](COURSE_PLAN.md) |
 | System design and implementation boundaries | [Architecture](ARCHITECTURE.md) |
+| Request paths, component behavior and detailed execution boundaries | [Basic & Detail Design](DESIGN.md) |
 | KPI definitions, data and API contracts | [Data & API](DATA_API.md) |
 | Acceptance status and remaining gaps | [Capability ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md) |
 
