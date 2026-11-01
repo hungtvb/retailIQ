@@ -147,7 +147,7 @@ def _perform_turn(data: AskBody) -> dict:
             current = get_session(data.session_id, include_messages=False)
             if current is None:
                 raise KeyError('Session not found')
-        with observed('chat.turn', execution_mode='full' if os.getenv('RETAILIQ_MODE') == 'full' else 'offline'):
+        with observed('chat.turn', execution_mode='fiction_deterministic' if os.getenv('RETAILIQ_DATASET', '').casefold() == 'fiction' else ('full' if os.getenv('RETAILIQ_MODE') == 'full' else 'offline')):
             if data.session_id is None:
                 result = ask(data.question)
             else:
@@ -188,7 +188,7 @@ def answer(data: AskBody):
             # Stack frame locations (not prompt content) are available in local JSONL.
             log_exception('chat.execution_failed', error)
             raise HTTPException(status_code=503,
-                                detail=f'Request failed ({type(error).__name__}); check model configuration') from None
+                                detail=(f'Request failed ({type(error).__name__}); check Fiction source/corpus configuration' if os.getenv('RETAILIQ_DATASET', '').casefold() == 'fiction' else f'Request failed ({type(error).__name__}); check model configuration')) from None
 
 
 def _sse(kind: str, data: dict) -> str:
@@ -272,7 +272,7 @@ def stream_answer(data: AskBody, request: Request):
                 except Exception as error:
                     log_exception('chat.execution_failed', error)
                     enqueue_final('error', {'code': 'execution_failed',
-                                           'message': 'Agent execution failed; check execution logs.',
+                                           'message': ('Fiction data workflow failed; check execution logs.' if os.getenv('RETAILIQ_DATASET', '').casefold() == 'fiction' else 'Agent execution failed; check execution logs.'),
                                            'request_id': rid})
                 finally:
                     enqueue_final('done', {'request_id': rid})
