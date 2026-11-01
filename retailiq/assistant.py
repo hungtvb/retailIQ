@@ -53,6 +53,11 @@ def replenish_review_offline():
          'records':[leader,*stocks],'contexts':[]}
 
 def ask(q, *, history=None, active_agent='', memory=None):
+ # Explicit dataset cutover. Never fall back to the retired fixture if Fiction
+ # is missing; its product identities, currency and KPI rules are incompatible.
+ if os.getenv('RETAILIQ_DATASET', '').strip().casefold() == 'fiction':
+  from .fiction_chat import ask as fiction_ask
+  return fiction_ask(q, history=history)
  if os.getenv('RETAILIQ_MODE')=='full':
   from .graph import run
   if memory and memory.get('consent'):
