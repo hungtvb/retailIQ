@@ -70,7 +70,8 @@ def _review_text(return_reason: str | None, index: int) -> tuple[int, str]:
 
 def generate(source: Path, output: Path, *, max_products: int = 200,
              max_reviews: int = 120, max_tickets: int = 100,
-             category: str | None = None) -> dict:
+             category: str | None = None,
+             selection: str = "returns_first", period: str | None = None) -> dict:
     """Create a fresh, reproducible corpus. Limits 0 mean 'no limit' for products.
 
     Reviews and ticket conversations are synthetic scenarios. Transactional
@@ -83,6 +84,10 @@ def generate(source: Path, output: Path, *, max_products: int = 200,
         raise FileNotFoundError(f"Fiction SQLite source not found: {source}")
     if max_products < 0 or max_reviews < 0 or max_tickets < 0:
         raise ValueError("Limits cannot be negative")
+    if selection not in ("returns_first", "top_delivered"):
+        raise ValueError("Unknown selection strategy")
+    if selection == "top_delivered" and (period is None or not re.fullmatch(r"20\d{2}-(?:0[1-9]|1[0-2])", period)):
+        raise ValueError("top_delivered requires a valid YYYY-MM period")
     if category is not None and (not category.isascii() or not re.fullmatch(r"[a-z_]{2,40}", category)):
         raise ValueError("Invalid category filter")
     if output.exists() and not output.is_dir():
@@ -127,11 +132,26 @@ def generate(source: Path, output: Path, *, max_products: int = 200,
         # 'category' may be None for cross-category sampling.
         clause = "WHERE p.category=? " if category else ""
         params = (category,) if category else ()
-        product_sql = ("SELECT p.product_id,p.name,p.brand,p.category,p.price,p.weight_kg "
-                       "FROM products p " + clause +
-                       "ORDER BY CASE WHEN EXISTS (SELECT 1 FROM returns r "
-                       "WHERE r.product_id=p.product_id) THEN 0 ELSE 1 END, p.product_id" +
-                       (" LIMIT ?" if max_products else ""))
+        if selection == "top_delivered":
+            from datetime import date
+            first = date.fromisoformat(period + "-01")
+            last = (date(first.year + 1, 1, 1) if first.month == 12
+                    else date(first.year, first.month + 1, 1))
+            clause = "AND p.category=? " if category else ""
+            product_sql = (
+                "SELECT p.product_id,p.name,p.brand,p.category,p.price,p.weight_kg "
+                "FROM products p JOIN order_items oi ON oi.product_id=p.product_id "
+                "JOIN orders o ON o.order_id=oi.order_id "
+                "WHERE o.order_status='delivered' AND o.order_date>=? AND o.order_date<? "
+                + clause + "GROUP BY p.product_id "
+                "ORDER BY SUM(oi.quantity) DESC,p.product_id ASC" + (" LIMIT ?" if max_products else ""))
+            params = (first.isoformat(), last.isoformat()) + params
+        else:
+            product_sql = ("SELECT p.product_id,p.name,p.brand,p.category,p.price,p.weight_kg "
+                           "FROM products p " + clause +
+                           "ORDER BY CASE WHEN EXISTS (SELECT 1 FROM returns r "
+                           "WHERE r.product_id=p.product_id) THEN 0 ELSE 1 END, p.product_id" +
+                           (" LIMIT ?" if max_products else ""))
         products = [dict(row) for row in db.execute(
             product_sql, params + ((max_products,) if max_products else ()))]
         if not products:
@@ -264,6 +284,7 @@ def generate(source: Path, output: Path, *, max_products: int = 200,
                 "source_counts": source_counts, "category_filter": category,
                 "corpus_path": str(output), "counts": counts,
                 "limits": {"products": max_products, "reviews": max_reviews, "tickets": max_tickets},
+                "selection": selection, "ranking_period": period,
                 "return_lineage_invalid": bad_returns,
                 "source_schema_status": "validated_for_selected_columns_and_return_lineage",
                 "review_and_ticket_origin": "synthetic_not_real_customer_feedback",
@@ -291,12 +312,14 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=ROOT / "data" / "fiction_rag_v1")
     parser.add_argument("--max-products", type=int, default=200, help="0 for whole product catalog")
     parser.add_argument("--category", type=str, default=None, help="Optional catalog category, e.g. electronics")
+    parser.add_argument("--selection", choices=("returns_first", "top_delivered"), default="returns_first")
+    parser.add_argument("--period", help="YYYY-MM, required for top_delivered")
     parser.add_argument("--max-reviews", type=int, default=120)
     parser.add_argument("--max-tickets", type=int, default=100)
     args = parser.parse_args()
     print(json.dumps(generate(args.source, args.output, max_products=args.max_products,
                               max_reviews=args.max_reviews, max_tickets=args.max_tickets,
-                              category=args.category),
+                              category=args.category, selection=args.selection, period=args.period),
                      ensure_ascii=False, indent=2))
 
 
