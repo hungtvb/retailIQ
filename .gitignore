@@ -41,3 +41,8 @@ data/retailiq_product_workspace_*.png
 # Generated product frontend assets
 frontend/node_modules/
 frontend/dist/
+
+# Fiction Retail source snapshot and generated RAG corpus (local-only)
+data/fiction-retail.db
+data/fiction_rag_v1/
+data/fiction_rag_verification.json
