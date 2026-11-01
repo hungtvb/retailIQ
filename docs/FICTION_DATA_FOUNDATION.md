@@ -43,3 +43,27 @@ RETAILIQ_FICTION_DB=data/fiction-retail.db python -m pytest -q tests/test_fictio
 Local verification on the uploaded snapshot found delivered merchandise value for April 2024: **18,571,791.10 USD**, and reproduced the historical source counts. The separate 220-document source-linked corpus verification returned PASS. These are **offline data tests**, not LLM/RAG, real-time inventory or authenticated action approval.
 
 **Next PR**: migrate chat/SQL tools, session product identity and RAG index namespace to Fiction, remove legacy entry points, enforce retrieval metadata constraints, and run independent HTTP/conversation acceptance. Do not label the app as Fiction-powered until this gate passes.
+
+
+## First scoped business journey: live app cutover (stacked PR)
+
+Set:
+```sh
+RETAILIQ_DATASET=fiction
+RETAILIQ_FICTION_DB=data/fiction-retail.db
+RETAILIQ_FICTION_CORPUS=data/fiction_rag_top100
+```
+Build the **business-relevant** corpus using the new selection flag (new empty output directory):
+```sh
+python -m scripts.build_fiction_rag --source data/fiction-retail.db --output data/fiction_rag_top100 --selection top_delivered --period 2024-04 --max-products 100 --max-reviews 160 --max-tickets 100
+python -m scripts.verify_fiction_rag --source data/fiction-retail.db --corpus data/fiction_rag_top100
+```
+
+The shared HTTP `/ask` and `/ask/stream` handlers then route **explicitly** to a bounded Fiction deterministic SQL workflow using the existing session history. Example:
+1. “Top 5 sản phẩm bán chạy tháng 4/2024”
+2. “Sản phẩm số 1 còn bao nhiêu tồn kho?”
+3. “Có bị trả hàng và khách hàng phàn nàn gì không?”
+
+Data outputs explicitly distinguish delivered-unit rankings, undated inventory snapshot, return events by return_date (not cohort-based return rate), synthetic review samples (not observed reviews), and missing factual specifications. Exact product UUIDs are kept across turns without parsing assistant prose.
+
+**Limitations:** this is intentionally **not a LangGraph/LLM run, embedding RAG, validated real sentiment, financial net revenue, or live inventory**. The rest of the app's legacy graph and tools are still unmigrated. HTTP scenario acceptance must pass before claiming this single bounded journey works in the user-facing app; browser visual quality and full graph handoff are separate gates.
