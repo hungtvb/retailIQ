@@ -89,3 +89,32 @@ def test_uploaded_fiction_real_world_journey(monkeypatch):
     ret=fiction_chat.ask('Có trả hàng và review gì không?',history=[{'role':'user','content':'Top 5 sản phẩm bán chạy tháng 4/2024'},{'role':'user','content':q}])
     assert ret['selected_product_id']==stock['selected_product_id']
     assert any('2 sự kiện trả hàng' in ret['answer'] for _ in [0])
+
+def test_actual_http_session_and_sse_business_journey(source, monkeypatch, tmp_path):
+    """Exercise the actual FastAPI + persistent chat + streaming entrypoint."""
+    monkeypatch.setenv('RETAILIQ_DATASET', 'fiction')
+    monkeypatch.setenv('RETAILIQ_CHAT_DB', str(tmp_path / 'sessions.db'))
+    from fastapi.testclient import TestClient
+    from retailiq.api.http import app
+    import json
+    with TestClient(app) as client:
+        sid = client.post('/api/sessions', json={}).json()['id']
+        body = {'session_id': sid, 'question': 'Top 2 sản phẩm bán chạy tháng 4/2024'}
+        first = client.post('/ask', json=body)
+        assert first.status_code == 200, first.text
+        assert first.json()['records'][0]['product_id'] == P1
+        followup = client.post('/ask', json={'session_id': sid, 'question': 'Sản phẩm số 1 còn bao nhiêu tồn kho?'})
+        assert followup.status_code == 200, followup.text
+        assert followup.json()['selected_product_id'] == P1
+        assert followup.json()['mode'] == 'FICTION_DETERMINISTIC_SQL_NOT_LANGGRAPH'
+        stream = client.post('/ask/stream', json={'session_id':sid, 'question':'Có trả hàng và review gì không?'})
+        assert stream.status_code == 200, stream.text
+        results = [json.loads(line[6:]) for line in stream.text.splitlines()
+                   if line.startswith('data: ') and '"selected_product_id"' in line]
+        assert len(results) == 1
+        assert results[0]['selected_product_id'] == P1
+        assert 'DEFECTIVE' in results[0]['answer']
+        session = client.get('/api/sessions/' + sid).json()
+        assert len(session['messages']) == 6
+        assert session['messages'][-1]['role'] == 'assistant'
+        assert 'CUSTOMER_SECRET' not in str(session)
