@@ -118,3 +118,18 @@ def test_actual_http_session_and_sse_business_journey(source, monkeypatch, tmp_p
         assert len(session['messages']) == 6
         assert session['messages'][-1]['role'] == 'assistant'
         assert 'CUSTOMER_SECRET' not in str(session)
+
+
+def test_corpus_selection_tracks_real_business_ranking(source, tmp_path):
+    """A returns-first sample must not substitute for the actual top sellers."""
+    from scripts.build_fiction_rag import generate
+    import json
+    target = tmp_path / 'ranked_corpus'
+    manifest = generate(source, target, selection='top_delivered',
+                        period='2024-04', max_products=1,
+                        max_reviews=1, max_tickets=1)
+    records = [json.loads(line) for line in (target/'records.jsonl').read_text().splitlines()]
+    catalog = [r for r in records if r['kind']=='product_catalog']
+    assert len(catalog)==1 and catalog[0]['product_id']==P1
+    assert manifest['selection']=='top_delivered'
+    assert manifest['ranking_period']=='2024-04'
