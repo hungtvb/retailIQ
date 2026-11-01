@@ -46,3 +46,4 @@ frontend/dist/
 data/fiction-retail.db
 data/fiction_rag_v1/
 data/fiction_rag_verification.json
+data/fiction_rag_top100/
