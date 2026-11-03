@@ -117,3 +117,45 @@ The Fiction release stores **100 selected investigations**, not a full inventory
 **Prioritization remains independent:** drafting UC-01 does not decide whether Backorder or Refund Reconciliation is implemented first. Reuse shared capability issues and create new task issues only for independently verifiable gaps; do not block all M1 correctness work on complete RAG/MCP/HITL.
 
 **Implementation gate:** review/merge this design into `main` **before** a feature code PR; that code PR must link this path + approved design commit and state deviations. Significant changes to capability, temporal, policy or trust contracts require design review first. Small clarifications may travel in the code PR only when the approved behavior is unchanged. No separate UC-01 microservice, agent framework, event bus, extra source database or unrequested action endpoints.
+
+## 7. T04 — Inventory/Order MCP integration plan
+
+**Owner:** [#26](https://github.com/hungtvb/retailIQ/issues/26); **UC parent:** [#34](https://github.com/hungtvb/retailIQ/issues/34). This is a design amendment, **not** implemented/verified evidence. Preserve the approved T01 case cutoff and T03 same-session evidence contract.
+
+### Execution and scope
+
+- Reuse the existing FastMCP **stdio** server, LangChain MCP adapter, instrumentation and manifest-verified FictionStore. No new server, framework, second dataset or duplicate SQL implementation.
+- Expose only read-only inventory_lookup(product_id | sku, warehouse_id?, as_of?) and order_lookup(order_id). Resolve SKU to canonical UUID with FictionStore; reuse FictionStore.inventory() and FictionStore.order(), returning their authoritative source/scope/refs/temporal/limitations envelope.
+- Base inventory is **undated**: no trustworthy stock observation timestamp. Without as_of, report quantities with unknown freshness, never live/current. If as_of asks for historical stock, explicitly return unsupported/insufficient evidence **without a historical quantity**. last_restocked_date does not represent observation. Case-scoped snapshots remain exclusive to verified fulfillment_case() / investigate_backorder() and never leak to unrelated product requests.
+- Order result contains validated order, lines and shipments, bounded and without customer PII. Distinguish missing product/order, absent inventory evidence, malformed request and transport/source failures; missing stock is not numeric zero.
+- Keep the existing deterministic UC-01 investigation and policy checks. Do not invoke MCP redundantly on every case merely to demonstrate technology. For an explicitly requested case-linked order detail, first re-verify case, order ID, cutoff and release; then MCP order_lookup may supply the requested order data if its identity and source hash match. Ordinary bounded Inventory/Order questions may take the MCP route directly.
+- Fiction MCP mode must require the pinned Fiction DB and manifest and fail closed; never silently fall back to old EL-SKU / ORD-demo data. Existing legacy direct SQL paths are unaffected. Legacy MCP opt-in requires explicit migration/retirement; do not silently mix two incompatible business schemas.
+
+~~~mermaid
+flowchart LR
+    U[Validated inventory or order request] --> G[Bounded LangGraph route]
+    G --> A[LangChain MCP adapter]
+    A --> S[Existing stdio FastMCP server]
+    S --> F[Verified FictionStore operation]
+    F --> S
+    S --> V[Validate tool result, source, identity and scope]
+    V --> T[Observed MCP events and authoritative response]
+~~~
+
+### Contracts, errors and compatibility
+
+- Preserve the Fiction evidence envelope: data, source.id/version/sha256, scope, record_refs, temporal, limitations. The tool accepts only named typed parameters; never LLM-authored SQL/columns, unverified source selection, role/authorization or writes.
+- Decode the actual MCP result and reject tool execution errors before trusting content. Validate shape, source release/hash, UUID/SKU/warehouse/order identity and no unexpected extra scope. A timeout, unavailable subprocess, malformed payload or mismatch must fail closed, not manufacture success or unmarked direct-SQL fallback.
+- Emit mcp.tool.started/completed/failed for **actual** invocation only, with request/session correlation and sanitized metadata. Apply row and tool timeout bounds; do not log PII.
+- Retain the present pinned MCP SDK v1 range (mcp>=1.28,<2) and LangChain MCP adapters (<1) for this slice. SDK v2 renames FastMCP to MCPServer; defer that independent migration. Confirm exact installed versions and error handling at implementation.
+- Targeted code surfaces: retail iq MCP server/adapter and narrowly scoped graph integration; add domain order-line validation only when an observed gap requires it. Tests and smoke use Fiction fixtures. Update canonical DATA_API and FICTION_RUNTIME documentation with the code PR, not ahead of implementation.
+
+### Acceptance / evidence gates
+
+1. **Real transport:** subprocess stdio handshake, discovery, actual LangChain invocation of both tools, record real tool args/result IDs; migrate scripts/smoke_mcp_stdio.py from legacy demo identifiers.
+2. **Independent SQL oracle:** compare product/SKU mapping, warehouse stock arithmetic, order/lines/shipments, source checksum and record refs on the same manifest-verified Fiction fixture/release. Shared SQL equivalence is **not independent-source corroboration**.
+3. **Fail-closed negatives:** invalid/unknown identifiers, absent inventory, historical as_of, identity/hash mismatch, unexpected content shape, subprocess failure/timeout, illegal quantity/source values, and attempted mutations. No PII.
+4. **User flow:** actual compiled LangGraph + API turn calls a scoped MCP tool and emits persisted request/session-correlated events; case-linked order requests preserve verified case/cutoff/release. Verify separately in mock-provider, real local SQLite and live-LLM modes when each is actually configured; no fake live test claims.
+5. **Report:** exact code SHA, release/DB SHA, test commands, expected/observed tool calls and business values, execution mode, PASS/FAIL, blockers and remaining limitations. Generated traces/reports stay outside Git. No #26 or UC-01 T04 acceptance from design merge alone.
+
+**Official references:** [MCP Python SDK v1](https://py.sdk.modelcontextprotocol.io/v1/); [MCP v2 migration](https://github.com/modelcontextprotocol/python-sdk/blob/main/docs/migration.md); [LangChain MCP client and error behavior](https://reference.langchain.com/python/langchain-mcp-adapters/client/MultiServerMCPClient).
