@@ -41,7 +41,7 @@ The team originally estimated five members at roughly 60 minutes per person per 
 - SQL/domain functions own authorized read-only business facts and deterministic rules. Review 08 owns evidence fitness/claim support; the LLM does not certify truth or execute unrestricted SQL. Procurement remains a **separate deferred simulated read-only MCP integration**, roughly 20 inbound PO-line records/two tools; it is not part of #26 or a table already present in Fiction unified.
 - Review 07 is architecturally complete but **retrieval/chunking defaults remain evidence-driven evaluation choices**, not unclosed architectural design. Review 10 reuses React/SVG, SSE and existing traces; no default React Flow migration or new observability platform.
 
-**Verified release boundary:** [Fiction Retail unified v1.0.0](https://github.com/hungtvb/fiction-retail/blob/main/manifest.json), repository main `d92aa3fb28b9fb1b492fdc2e784b8cd4d49ebb72`. The separately uploaded SQLite file was checked against release SHA-256 `015b0a84d8d93870c6facd359347f4c039bc7fc570000890c581010d0451af42`; **this does not mean RetailIQ runtime, source documents, Chroma index or CI have been migrated/accepted**. The active RetailIQ `main` baseline remains `cdd37eeb2ff99521901437f72bae186761a592b3` with legacy fixture paths. Do not conflate accepted architectural design with historical/mock provider PASS.
+**Verified M0 release boundary:** [Fiction Retail unified v1.0.0](https://github.com/hungtvb/fiction-retail/blob/main/manifest.json), source `d92aa3f`, business `as_of=2026-11-03`, expected SQLite SHA-256 `015b0a84d8d93870c6facd359347f4c039bc7fc570000890c581010d0451af42`. **RetailIQ `main@69c4bf4`** now contains the read-only Fiction SQL foundation, pinned manifest and independent local oracle from [merged PR #33](https://github.com/hungtvb/retailIQ/pull/33), [M0 Issue #31 closed](https://github.com/hungtvb/retailIQ/issues/31). The 209MB DB binary is **not committed** and must be imported separately. This does **not** mean Fiction chat, policy RAG, vector index, MCP, live LLM or end-to-end capabilities have been migrated/accepted.
 
 ## Planning and task traceability
 
@@ -57,7 +57,7 @@ The team originally estimated five members at roughly 60 minutes per person per 
 | Requirement-level acceptance/gaps | [Capability Ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md) | Last evidenced status, scope, mode and remaining proof; no duplicated issue task status |
 | Scenario definition and test oracle | [Testing & Scenario Acceptance](27_BEHAVIORAL_ACCEPTANCE_MATRIX.md) | Positive/negative cases, commands and independent correctness checks |
 
-**Trace chain:** `BR/CAP/QUAL ID` → bounded GitHub Issue (when needed) → implementation PR → scenario/evidence (commit + mode + input + expected/observed + artifact) → capability ledger **only when verified**. The ledger's original `W1-*` … `W4-*` IDs are course acceptance labels, not new project task IDs. Do not rename those historical IDs or infer PASS from a merged PR.
+**Design-first trace chain:** `BR/CAP/QUAL ID` → **reviewed, merged Implementation Detail path + design commit SHA** → bounded GitHub Issue (when needed) → implementation PR (link to exact design) → scenario/evidence (commit + mode + input + expected/observed + artifact) → capability ledger **only when verified**. Design in `docs/` is canonical; Issue/PR comments are discussion and change history, **not** the normative design. The ledger's original `W1-*` … `W4-*` IDs are course acceptance labels, not new project task IDs. Do not rename those historical IDs or infer PASS from a merged PR.
 
 ### Task sizing (just-in-time)
 
@@ -65,18 +65,26 @@ For an implementation task, use the GitHub Issue body to capture **requirement I
 
 A PR should link to the issue if one exists and state actual **changed paths, requirement IDs, test mode and results, expected-versus-observed business evidence, artifact/trace references and unverified gates**. Documentation-only PRs can proceed without a separate issue; verify documentation links and source alignment, not the full application CI by default.
 
+### Design gate before implementation
+
+1. Architecture decisions and shared contracts stay in [Design](DESIGN.md)/[Data & API](DATA_API.md). For a concrete vertical slice, write **one short use-case-specific Implementation Detail** in `docs/implementation/`, with a flowchart, exact ownership, source IDs, input/output, errors and independent acceptance.
+2. Review and **merge the documentation PR before feature code**; attach the **approved document path and Git commit SHA** to the implementation Issue and code PR. Draft design proposals cannot be used as approved specifications.
+3. When code exposes a substantive design gap, revise and review the affected document first. Compatible wording fixes may accompany code. Do not copy the design into the Issue body or maintain a second plan in PR comments.
+
+**First proposed design:** [UC-01 Backorder Investigation — draft](implementation/UC-01-backorder.md). It is **not implemented** through Fiction Agent/RAG/LLM/GUI just because M0 SQL exists. UC-02/03 detail docs should be created **when their implementation is scheduled**, not in advance.
+
 ### Dependency-first implementation sequence (not deadlines)
 
 | Milestone | Bounded deliverable and acceptance gate | Owner / dependencies |
 |---|---|---|
-| **M0 — Fiction data & SQL foundation** | Import single unified business DB + manifest, verify hashes/schema/entity/time semantics; reuse compatible code from draft PRs #24/#25; independent SQL/rule oracles for UC-01 backorder, UC-02 refund reconciliation, UC-03 sales→inventory | [#31](https://github.com/hungtvb/retailIQ/issues/31), then [#28](https://github.com/hungtvb/retailIQ/issues/28) |
+| **M0 — Fiction data & SQL foundation — COMPLETE** | Read-only SQL, pinned manifest, hash/schema/identity/time verification and independent local SQL oracles merged on `main@69c4bf4`. SQLite binary remains external; no Agent cutover | [#31 closed](https://github.com/hungtvb/retailIQ/issues/31) / [PR #33 merged](https://github.com/hungtvb/retailIQ/pull/33) |
 | **M1 — Trusted business capabilities** | Correct scoped, read-only order/inventory/sales/refund/case and effective policy rules; allow verified partial analysis when evidence is absent | [#31](https://github.com/hungtvb/retailIQ/issues/31), [#28](https://github.com/hungtvb/retailIQ/issues/28) |
 | **M2 — Agent intelligence** | Hybrid context and bounded LangGraph orchestration; real local MCP Inventory/Order, Fiction RAG source-doc ingestion/retrieval evaluation | [#22](https://github.com/hungtvb/retailIQ/issues/22), [#23](https://github.com/hungtvb/retailIQ/issues/23), [#26](https://github.com/hungtvb/retailIQ/issues/26), [#27](https://github.com/hungtvb/retailIQ/issues/27) |
 | **M3 — Authorized use/HITL** | Two local roles, session ownership, enforced server-side scopes, authenticated one-shot review; no actual order/refund/price/stock mutation | [#29](https://github.com/hungtvb/retailIQ/issues/29); auth baseline can progress alongside M2 |
 | **M4 — Integrated UI & SSE** | Verified findings/evidence/limitations, invocation-aware active nodes and directed actual request/result data edges; verified-first SSE | [#30](https://github.com/hungtvb/retailIQ/issues/30), [#21](https://github.com/hungtvb/retailIQ/issues/21) |
 | **M5 — E2E acceptance** | Fiction golden scenarios + independent oracle + actual MCP + real LLM/RAG + browser/UI/trace evidence; update capability ledger only with versioned measured results | Existing test harnesses and [#30](https://github.com/hungtvb/retailIQ/issues/30) |
 
-**PR status at planning baseline:** [#24](https://github.com/hungtvb/retailIQ/pull/24) and its stacked [#25](https://github.com/hungtvb/retailIQ/pull/25) are **draft/not merge-approved**; parts of SQL, identity/follow-up and tests can be reused, but source-era 2024 assumptions, generated duplicate RAG narratives and incomplete month coverage must be reconciled with the unified 2026 release. Review in order, do not merge automatically.
+**Current merge baseline (2026-11-03):** [#24](https://github.com/hungtvb/retailIQ/pull/24) / [#25](https://github.com/hungtvb/retailIQ/pull/25) were **closed unmerged** as superseded; [#33](https://github.com/hungtvb/retailIQ/pull/33) was **squash-merged** and M0 accepted. [PR #32](https://github.com/hungtvb/retailIQ/pull/32) is **documentation-only and pending review**; its UC-01 design draft does not authorize M1/M2 coding.
 
 **Planning rule:** One approved issue per bounded implementation outcome where useful, reused code before new abstractions, independent scenario tests with negative cases, separate offline/mock/local-MCP/provider modes. No extra roadmap, parallel status spreadsheet, speculative infrastructure, or inferred owner/deadline. Course-specific required RAGAS, LangSmith, Langfuse, DeepEval and multi-agent acceptance remain tracked by the existing [CAP ↔ W-ID ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md), not silently dropped.
 
