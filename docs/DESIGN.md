@@ -1,6 +1,6 @@
 # RetailIQ — Basic Design & Detail Design
 
-**Status:** implementation-aligned design baseline, reviewed 2026-10-31. Describes current local behavior and important gaps; **not** certification of provider-backed reliability, security or production readiness. This is one focused design note rather than separate speculative BD/DD document sets.
+**Status (2026-11-03):** this document describes **current legacy/local behavior** and shared architecture boundaries. **Fiction M0 (read-only unified DB/SQL)** is implemented on `main` via [PR #33](https://github.com/hungtvb/retailIQ/pull/33); **Fiction chat/Agent/MCP/RAG integration is not yet implemented or accepted**. The [UC-01 Backorder Implementation Detail](implementation/UC-01-backorder.md) is **draft for review**, not permission to code or an E2E PASS. This is one shared Basic Design plus just-in-time per-use-case detail, not two speculative document sets.
 
 [Product](PROJECT.md) · [Requirements](REQUIREMENTS.md) · [Architecture](ARCHITECTURE.md) · [Data and API contracts](DATA_API.md) · [Capability status](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md)
 
@@ -15,6 +15,7 @@
 | Assistant selection | `retailiq/assistant.py` | Explicit offline deterministic vs full-mode execution |
 | Chat orchestration | `retailiq/orchestration/week1_graph.py` | LangGraph router, domain specialists, handoff, optional scoped supervisor and checkpointer |
 | Domain decisions | `retailiq/domain/analytics.py`, `retailiq/queries.py`, `retailiq/domain/semantic.py` | Reviewed business definitions and read-only SQL; LLM does **not** write unrestricted SQL |
+| **Fiction M0 domain (merged)** | `retailiq/domain/fiction.py`, `retailiq/infrastructure/sqlite.py`, `data/fiction/manifest.json` | **Release-verified** read-only Fiction business facts; not yet wired into main chat/agent paths. Real SQLite binary stays outside Git |
 | Product knowledge | `retailiq/retrieval.py`, `retailiq/rag/` | Offline lexical search or full-mode hybrid/vector retrieval, sourced generation and grounding |
 | Data and sessions | `retailiq/infrastructure/` | Synthetic SQLite facts, local session/history, opt-in scoped preference memory |
 | MCP | `retailiq/mcp_server.py`, `retailiq/mcp_adapter.py` | Local stdio inventory/order operations; not an external retail API |
@@ -61,7 +62,17 @@ Read `AGENTS.md` and the [documentation index](README.md) first. Start at the **
 
 **Compatibility boundaries:** `retailiq/analytics.py` re-exports `domain.analytics`; `retailiq/api/__init__.py` preserves the `uvicorn retailiq.api:app` entrypoint. Keep these paths unless callers/tests are explicitly migrated. `orchestration/week1_graph.py` is an existing source filename, **not** a cue to create new `weekN_*` packages. The two frontend implementations and the deterministic workflow simulator are **intentional independent surfaces**; don't merge or rewrite them simply to reduce the file count. Large source files alone are not a reason to add frameworks or abstractions.
 
-## Detail Design — request and decision flows
+## Fiction target design and implementation ownership (from 2026-11-03)
+
+**Implemented now:** `FictionStore.open()` validates the pinned 27-table unified SQLite release; `fulfillment_case()`, `order()`, `inventory()`, `top_sellers()`, `refund()` return scoped **read-only facts** with source IDs, limitations and temporal information. See [Fiction Runtime](FICTION_RUNTIME.md), [PR #33](https://github.com/hungtvb/retailIQ/pull/33) and [Issue #31](https://github.com/hungtvb/retailIQ/issues/31). This is **not** a working Fiction Agent/LLM/RAG path.
+
+**Approved architecture / pending implementation:** Reviews 01–10, tracked by [#21–23](https://github.com/hungtvb/retailIQ/issues/23) and [#26–30](https://github.com/hungtvb/retailIQ/issues/30), require verified-first execution: committed context (#22), bounded capability plan (#23), shared SQL/MCP (#26), sourced policy RAG (#27), evidence fitness (#28), authenticated HITL (#29), and truthful event-driven UI (#21/#30). Do not present a deterministic workflow illustration as actual Agent execution.
+
+**Next proposed vertical slice:** [UC-01 Backorder Investigation — Implementation Detail](implementation/UC-01-backorder.md). Its diagram, input/output, component mapping and acceptance matrix are **design proposals**. The document must be reviewed and merged before feature coding. Other use cases get their own short detail **only when implementation begins**; shared decisions stay here and in [Data/API](DATA_API.md).
+
+**Important separation:** legacy flows below are a record of **existing behavior** using the old retail fixture (`EL-###`, VND, completed-order semantics); they are **not** the Fiction target contract (Fiction product UUID/FR-SKU, USD, delivered orders and time-qualified policy). Do not reuse legacy business semantics without explicit validation.
+
+## Existing legacy request and decision flows (not Fiction UC-01 acceptance)
 
 ### DD-01 — Structured retail question (CAP-01, CAP-04, CAP-07)
 
@@ -118,6 +129,13 @@ Read `AGENTS.md` and the [documentation index](README.md) first. Start at the **
 | HITL and multi-agent | Rejection, unauthorized actor, replay/resume, actual transfer and safe finalization | Current local scenario is **simulation only**; authenticated approval gate remains open |
 
 **Evidence contract:** report commit SHA, execution mode, exact command/input, independent expected result, observed output and any remaining gap. Consult the [capability acceptance ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md) for status; a requirement appearing above does **not** mean it passed.
+
+### Design-first change policy
+
+- **Stable design is versioned code-adjacent documentation:** shared principles live in `ARCHITECTURE.md`/`DESIGN.md`/`DATA_API.md`; use-case-specific implementation detail lives in `docs/implementation/UC-XX-*.md`. `docs/README.md` is the index. No parallel Basic/Detail document hierarchy or duplicate design pasted into Issues.
+- **Approve before feature code:** design PR reviewed and merged to `main` first; the implementation issue links the **approved path and design commit SHA**; code PR names the issue, requirement and design version and shows deviations and evidence. A design **draft** is not an implementation contract yet.
+- **If code reveals a substantive gap** (business metric, source authority, time applicability, tool scope, trust boundary): stop the affected change and update/review design **before implementing the new behavior**. A typo or strictly compatible explanation can be updated alongside a code PR.
+- **Ownership:** docs define the normative design; GitHub Issues track work and acceptance; PRs record review, diff and test mode; CI artifacts/traces carry execution evidence. The capability ledger records only actually proven statuses. Wiki explains rationale without copying contracts. No hardcoded success claims from merged docs alone.
 
 ## Design constraints and change policy
 
