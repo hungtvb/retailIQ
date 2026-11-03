@@ -414,6 +414,8 @@ def test_uc01_t02_explicit_case_langgraph_api_with_real_fixture(monkeypatch, fic
     monkeypatch.setattr(graph, "chat_model", lambda: RouterModel())
     try:
         with TestClient(app) as client:
+            direct = graph.run(f"Investigate backorder {C1}")
+            assert direct["disposition"] == "NEEDS_REVIEW"
             result = client.post("/ask", json={"question": f"Investigate backorder {C1}"})
             assert result.status_code == 200, result.text[:300]
             body = result.json()
