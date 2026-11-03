@@ -19,7 +19,7 @@ SQLITE_BUSY_SECONDS = 3.0
 SQLITE_QUERY_SECONDS = 4.0
 
 
-def query(sql: str, args: tuple = ()) -> list[dict]:
+def query(sql: str, args: tuple = (), *, db_path: Path | None = None) -> list[dict]:
     """Execute an internal reviewed SELECT, returning bounded materialized rows.
 
     This is a safety boundary, not a general-purpose SQL interpreter.
@@ -32,7 +32,7 @@ def query(sql: str, args: tuple = ()) -> list[dict]:
 
     # mode=ro prevents write access even if a future caller passes bad SQL.
     # closing(), unlike "with connection", actually closes the DB handle.
-    db_path = Path(os.environ.get('RETAILIQ_DATA_DB') or DB)
+    db_path = Path(db_path) if db_path is not None else Path(os.environ.get('RETAILIQ_DATA_DB') or DB)
     uri = db_path.resolve().as_uri() + '?mode=ro'
     with closing(sqlite3.connect(uri, uri=True, timeout=SQLITE_BUSY_SECONDS)) as connection:
         connection.row_factory = sqlite3.Row

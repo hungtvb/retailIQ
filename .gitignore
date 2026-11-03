@@ -41,3 +41,9 @@ data/retailiq_product_workspace_*.png
 # Generated product frontend assets
 frontend/node_modules/
 frontend/dist/
+
+# Local unified Fiction runtime (binary is distributed separately; manifest tracked)
+data/fiction/*.sqlite
+data/fiction/*.sqlite-*
+data/fiction/*.db
+data/fiction/audit_*.json
