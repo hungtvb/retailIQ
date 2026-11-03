@@ -579,3 +579,20 @@ def test_uc01_t02_rejects_invalid_case_before_llm_and_sql(monkeypatch, tmp_path)
             assert invocations == []
     finally:
         graph.close_checkpoint_graph()
+
+
+
+def test_uc01_api_does_not_misreport_internal_key_error_as_missing_session(monkeypatch):
+    """Internal business/source errors must never become a spurious session 404."""
+    from fastapi.testclient import TestClient
+    from retailiq.api import app
+    from retailiq.api import http
+
+    def invalid_domain(*args, **kwargs):
+        raise KeyError("unrelated business evidence key missing")
+
+    monkeypatch.setattr(http, "ask", invalid_domain)
+    with TestClient(app) as client:
+        response = client.post("/ask", json={"question": "Investigate business evidence"})
+        assert response.status_code == 503
+        assert "Session not found" not in response.text

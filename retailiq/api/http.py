@@ -119,6 +119,10 @@ def _missing_module_message(error: ModuleNotFoundError) -> str:
             'in the same Python environment used to start RetailIQ, then restart the server.')
 
 
+class _SessionNotFound(KeyError):
+    """Only a verified missing chat session maps to HTTP 404."""
+
+
 class AskBody(BaseModel):
     question: str = Field(min_length=3, max_length=500)
     session_id: str | None = Field(default=None, min_length=36, max_length=36)
@@ -147,7 +151,7 @@ def _perform_turn(data: AskBody) -> dict:
         if data.session_id is not None:
             current = get_session(data.session_id, include_messages=False)
             if current is None:
-                raise KeyError('Session not found')
+                raise _SessionNotFound('Session not found')
         with observed('chat.turn', execution_mode='full' if os.getenv('RETAILIQ_MODE') == 'full' else 'offline'):
             if data.session_id is None:
                 result = ask(data.question)
@@ -176,7 +180,7 @@ def answer(data: AskBody):
             return _perform_turn(data)
         except InvalidCaseId as error:
             raise HTTPException(status_code=422, detail=str(error)) from None
-        except KeyError:
+        except _SessionNotFound:
             raise HTTPException(status_code=404, detail='Session not found') from None
         except SessionBusyError:
             raise HTTPException(status_code=409, detail='Session is processing another request') from None
