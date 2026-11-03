@@ -2,6 +2,14 @@
 
 **Document owner:** testing approach, reproducible commands, business/control/safety oracles and scenario coverage. This is **not** the current evidence ledger or a certificate that tests passed on the latest commit. [Capability status and open gates](CAPABILITY_LEDGER.md) is the single owner of requirement acceptance; [dated Week 1 execution records](archive/2026-11-03/week-01/EVIDENCE.md) preserve historical evidence. Week-labelled scenario IDs below are existing test identifiers, not a requirement to organize new source code by course weeks.
 
+## Applicability — legacy scenarios versus Fiction
+
+All `audit_queries`, `audit_workflows`, `audit_edge_scenarios`, seeded browser and existing MCP demos below exercise the **legacy `EL-###`/VND fixture** unless a specific test states otherwise. A green run does **not** verify the Fiction UC-01 chat/Agent/MCP/RAG path.
+
+**Fiction M0 (read-only SQL):** with the pinned local DB and manifest, run `python -m scripts.verify_fiction_runtime --db data/fiction/fiction_retail.sqlite --manifest data/fiction/manifest.json`. This checks source identity/integrity and independent SQL business oracles **without an LLM**. Record the pinned release hash, tested commit and observed result; do not assume a run occurred on a newer commit.
+
+**Fiction UC-01 E2E (pending):** follow the positive/negative, cutoff/policy, evidence, context, MCP/RAG, provider-backed and browser gates in [UC-01 Implementation Detail](implementation/UC-01-backorder.md) when implemented. Seeded legacy tests and the existing live-LLM CI workflow are **not substitutes**.
+
 ## Acceptance principle
 
 A code path, a UI node, or a passing unit test **does not prove a business scenario works**.
