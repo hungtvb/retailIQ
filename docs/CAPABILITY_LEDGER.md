@@ -10,6 +10,12 @@ This is the **single owner of per-capability acceptance and open gaps**. For the
 
 **Evidence reconciliation:** The 2026-10-29 limited RAGAS and remote LangSmith observations in the historical ledger do not establish current-commit CAP-05 acceptance. Likewise, old offline scenario runs with 20/20 PASS do not supersede the later recorded 9 PASS / 11 FAIL query audit. Preserve both with date/SHA/mode; require new execution evidence before reporting a current PASS.
 
+## Fiction release and migration evidence boundary
+
+- **Fiction M0:** read-only `FictionStore`, release-locked manifest and independent local SQL audit were implemented through [PR #33](https://github.com/hungtvb/retailIQ/pull/33). This is a **data/SQL foundation only**, not evidence of provider-backed Fiction question answering. Re-run `scripts.verify_fiction_runtime` on the actual pinned DB to establish acceptance for a specific commit and release.
+- **Fiction UC-01 and later integration:** `/ask`, LangGraph, MCP, source-document RAG, authenticated approval and business E2E acceptance remain **not verified on Fiction**. Their implementation and acceptance are owned by the corresponding reviews/issues and [UC-01 design](implementation/UC-01-backorder.md).
+- The `W1-*`–`W4-*` entries below record **legacy/local course capability evidence** and open gates; do **not** transfer a `LOCAL PASS` or `MOCKED PASS` to the Fiction runtime. Follow [scenario applicability](SCENARIO_ACCEPTANCE.md#applicability--legacy-scenarios-versus-fiction) before running or reporting tests.
+
 ## Evidence status legend
 
 - **LOCAL PASS:** deterministic SQL, local stdio MCP, browser or controlled fixtures passed; read the specific gate.

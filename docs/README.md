@@ -10,8 +10,8 @@ Use this index to load **only the documentation needed for the task**.
 | System design and implementation boundaries | [Architecture](ARCHITECTURE.md) |
 | Request paths, component behavior and detailed execution boundaries | [Basic & Detail Design](DESIGN.md) |
 | Implementation Detail for an approved vertical slice | [UC-01 Backorder Investigation](implementation/UC-01-backorder.md) (use its reviewed/merged revision) (others added only when scheduled) |
-| KPI definitions and current HTTP/MCP contracts | [Data & API](DATA_API.md) |
-| Verified Fiction SQL release and local setup | [Fiction Runtime](FICTION_RUNTIME.md) |
+| Fiction release, identifiers, temporal/data authority and local verification | [Fiction Runtime](FICTION_RUNTIME.md) |
+| Fiction vs legacy contract boundaries; currently implemented legacy HTTP/MCP | [Data & API](DATA_API.md) |
 | Testing approach, scenarios and reproducible commands | [Testing & Scenario Acceptance](SCENARIO_ACCEPTANCE.md) |
 | Capability-level acceptance status and missing evidence | [Capability Ledger](CAPABILITY_LEDGER.md) |
 | Engineering rationale, alternatives, trade-offs and learning references | [Engineering Wiki](wiki/README.md) |
