@@ -8,6 +8,15 @@
 - `docs/DATA_API.md`: source-of-truth, KPI and API contracts.
 - `docs/implementation/`: **just-in-time, reviewed** per-use-case Implementation Detail; do not load unrelated use cases.
 
+## Documentation Rules
+
+1. Read `docs/README.md` to find the canonical document.
+2. Update existing docs before creating new ones.
+3. Create new docs only when explicitly approved or required by an approved task.
+4. Keep docs consistent with code; distinguish planned, implemented, and verified.
+5. Never use `docs/archive/` as current implementation guidance.
+6. Update affected docs and links in the same PR; avoid duplicate content.
+
 ## Working rules
 - Before substantial coding, inspect existing code and dependency versions; research the **latest relevant official documentation**, release notes and compatibility guidance. Cite or link key sources in the task/PR. Small self-contained fixes need only proportionate verification.
 - **Challenge before executing:** identify unnecessary complexity, contradictions, security risks and simpler/reusable alternatives. Explain meaningful trade-offs **before** implementing; do not blindly accept a request.

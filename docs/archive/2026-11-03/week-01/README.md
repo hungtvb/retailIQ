@@ -1,6 +1,6 @@
 # Week 1 — Rubric, scope and acceptance
 
-**Rubric source:** supplied evaluation image: **2 sections / 7 checkpoints**. The older four-checkpoint transcription is retained only [in archive](../../archive/2026-10-30/legacy/00_WEEK1_OFFICIAL_CHECKLIST.md). This document states requirements; [EVIDENCE](EVIDENCE.md) states execution outcomes.
+**Rubric source:** supplied evaluation image: **2 sections / 7 checkpoints**. The older four-checkpoint transcription is retained only [in archive](../../2026-10-30/legacy/00_WEEK1_OFFICIAL_CHECKLIST.md). This document states requirements; [EVIDENCE](EVIDENCE.md) states execution outcomes.
 
 ## 1. Business Problem — 3 checkpoints
 
@@ -12,7 +12,7 @@
 | **BP-2** | Understand target users and their pain points | Retail/store operators, managers and analysts; unnecessary navigation and interpretation overhead |
 | **BP-3** | Explain expected value, benefits or business impact | **Faster · Easier · Reliable** information tasks; measurable hypotheses, not invented ROI |
 
-**Canonical content:** [Business Problem and personas](../../PROJECT.md).
+**Canonical content:** [Business Problem and personas](../../../PROJECT.md).
 
 ## 2. Solution Design + Demo + Testing — 4 checkpoints
 
@@ -20,7 +20,7 @@
 
 | ID | Official checklist requirement | Evidence or explanation |
 |---|---|---|
-| **SD-1** | Present a clear workflow and solution architecture | User → FastAPI → LangGraph route → SQL / Product RAG → grounded answer; [architecture](../../ARCHITECTURE.md) |
+| **SD-1** | Present a clear workflow and solution architecture | User → FastAPI → LangGraph route → SQL / Product RAG → grounded answer; [architecture](../../../ARCHITECTURE.md) |
 | **SD-2** | Demonstrate Week 1 concepts | FDE; harness architecture layers/components; LangChain context/tools; Chain, Agent, multi-agent **Subagent, Handoff, Skill, Router, Custom Workflow**; LangSmith operations; Agent Cost & ROI |
 | **SD-3** | Successfully demonstrate the solution | Stock, revenue, top sellers, product documentation and optional cross-source review |
 | **SD-4** | Conduct testing and explain limitations, risks and improvements | Tests, real/fixture/mocked evidence, RAGAS, LangSmith, unsafe or unsupported questions |
@@ -39,6 +39,6 @@
 
 ## Scope guardrails and references
 
-Week 1 is local, synthetic and read-only. No automatic orders/price changes or production integration. Weeks 2–4 original required capabilities—including the **five-agent Week 4 approved order scenario**—are maintained in the [course baseline](../../COURSE_PLAN.md). Original [course lesson references](../../archive/2026-10-30/legacy/00_WEEK1_LESSON_REFERENCES.md) and [PRD user stories](../../archive/2026-10-30/legacy/12_Product_Brief_and_PRD.md) are preserved.
+Week 1 is local, synthetic and read-only. No automatic orders/price changes or production integration. Weeks 2–4 original required capabilities—including the **five-agent Week 4 approved order scenario**—are maintained in the [course baseline](../../../COURSE_PLAN.md). Original [course lesson references](../../2026-10-30/legacy/00_WEEK1_LESSON_REFERENCES.md) and [PRD user stories](../../2026-10-30/legacy/12_Product_Brief_and_PRD.md) are preserved.
 
 **Acceptance rule:** every PASS must include execution mode, tested SHA, date, environment and reproducible artifact; an older run does not certify newer source code.
