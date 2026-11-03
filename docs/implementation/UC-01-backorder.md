@@ -16,24 +16,31 @@
 
 ~~~mermaid
 flowchart TD
-    U[Operator asks about CASE ID] --> API[Existing /ask or /ask/stream]
-    API --> CX[Resolve session / explicit case reference]
-    CX --> PLAN[Bounded capability plan: UC-01 template]
-    PLAN --> CASE[FictionStore: fulfillment_case + order facts]
-    CASE --> FIT[Trusted evidence fitness: ID, cutoff, snapshots, route]
-    PLAN --> POLICY[Policy registry + source document by case cutoff]
-    POLICY --> FIT
-    FIT --> VERDICT{Enough trusted evidence?}
-    VERDICT -->|Yes| REVIEW[Findings + transfer proposal needs manager review]
-    VERDICT -->|Partial / conflicting| PARTIAL[Verified facts + gaps; no unsupported transfer verdict]
+    U[Operator: investigate CASE ID] --> API[Existing /ask or /ask/stream]
+    API --> CX[Resolve explicit or committed-session case reference]
+    CX --> PLAN[Validate bounded UC-01 capability plan]
+    PLAN --> CASE[FictionStore: fulfillment_case + order]
+    CASE --> IDENT{Identity and exactly one cutoff valid?}
+    IDENT -->|No| STOP[Clarify / deny / fail closed]
+    IDENT -->|Yes: bind case ID and cutoff| POLICY[Exact warehouse policy registry and source Markdown]
+    IDENT -->|Verified case facts| FACT[Assess case-scoped snapshots, freshness, route and qty]
+    POLICY --> JOINT[Verify policy, source versions and business claim]
+    FACT --> JOINT
+    JOINT --> OUT{Evidence-backed disposition}
+    OUT -->|Eligible candidate + policy| REVIEW[Proposal requires manager review; no mutation]
+    OUT -->|Verified exclusions only| NEG[Scoped negative finding, no transfer]
+    OUT -->|Missing / conflicting evidence| PARTIAL[Verified partial facts + explicit gaps]
     REVIEW --> ANSWER[Authoritative AnswerResult + evidence refs]
+    NEG --> ANSWER
     PARTIAL --> ANSWER
-    ANSWER --> UI[Chat + actual execution events]
+    ANSWER --> UI[Chat + actual observed execution events]
 ~~~
 
-**Control rule:** `resolve → plan once → validate → execute bounded reads → verify → assemble → finish`. The LLM may interpret user phrasing or **propose** registered capabilities, but may not select unrestricted SQL, invent policy validity, alter case IDs, decide authorization or certify its own evidence. Use the fixed UC-01 DAG before considering adaptive supervisor.
+**Dependency invariant (B1):** the policy task **cannot run** from the initial plan alone. It requires a validated \`case_id\`, order-item/product scope, and exactly one \`evidence_cutoff_reached\` obtained from \`FictionStore.fulfillment_case(case_id)\`. Persist that cutoff as a typed output binding in the fixed UC-01 DAG. A model-supplied/current-date cutoff, policy ID or unverified prior chat text must not bypass the gate. Case facts and policy may join for verification **only after** both are bound to the same source release and cutoff.
 
-**Request lifecycle:** one execution per request; only successfully verified answer/evidence is committed to session history. `/ask/stream` emits observable execution events and a single authoritative final `result`; do **not** stream unverified factual draft tokens. The graph renders observed invocation/return events, not hypothetical agent nodes ([#21](https://github.com/hungtvb/retailIQ/issues/21), [#30](https://github.com/hungtvb/retailIQ/issues/30)).
+**Control rule:** \`resolve → plan once → validate → execute bounded reads → verify → assemble → finish\`. The LLM may interpret phrasing/propose registered capabilities, but may not write unrestricted SQL, choose policy validity, alter case IDs, decide authorization or certify evidence. Use a fixed dependency DAG; no adaptive supervisor for UC-01 without a tested need.
+
+**Request lifecycle:** one execution per request, committed same-session evidence only (#22); only verified results/evidence are stored. \`/ask/stream\` emits actual execution events plus **one authoritative final \`result\`**. Do not stream unverified factual draft text; graph edges reflect observed calls/returns, not hypothetical agents (#21/#30). Reject mismatched scope before policy/RAG work or business conclusions.
 
 ## 3. Source-to-code mapping — reuse first
 
@@ -43,7 +50,7 @@ flowchart TD
 | Capability planning/execution | `retailiq/orchestration/week1_graph.py` | Registered, validated fixed UC-01 task plan, bounded calls and trace (#23); no new graph engine |
 | Case, order, snapshot, eligibility SQL | `retailiq/domain/fiction.py` `FictionStore.open()` / `fulfillment_case()` / `order()` | **Reuse as-is first**; add only targeted read-only domain operation if a tested missing fact requires it |
 | Release/access boundary | `retailiq/infrastructure/sqlite.py`, `data/fiction/manifest.json` | Explicit local Fiction DB; release hash/integrity/WAL gate; no `EL-###`/VND fallback |
-| Effective policy evidence | Fiction `fulfillment_policies`, `knowledge_documents` registry + source Markdown; existing `retailiq/rag/` | Resolve **exact warehouse policy ID + validity at case cutoff** (#27); do not infer effective dates from `fulfillment_policies` table alone |
+| Effective policy evidence | Fiction \`fulfillment_policies\`, \`knowledge_documents\` and \`knowledge/policies/FR-WH-2026-10-04.md\` | **Deterministic exact policy lookup by verified case cutoff** + registry/document hash, source-version and effective-interval checks; policy RAG only explains verified text (#27), never selects binding applicability |
 | Business verification | Existing case exclusions + Review 08 [#28](https://github.com/hungtvb/retailIQ/issues/28) | Shared source/identity/time/policy gate and qualified final disposition; no second verifier agent |
 | UI / tracing | `retailiq/observability.py`, `frontend/src/main.tsx`, `frontend/src/graph.ts` | Display actual evidence/limitations and observed execution, not synthetic approvals (#30) |
 
@@ -56,35 +63,57 @@ The Fiction release stores **100 selected investigations**, not a full inventory
 **Trusted business reads:** `fulfillment_case(case_id)` yields `case`, `cutoff`, `snapshots`, `warehouse_eligibility`, `evidence_candidates`, `candidate_gap_reasons` plus `source` (release/hash), `scope`, `record_refs`, `temporal` and `limitations`. `order(order_id)` must match the case's order item/product; mismatch blocks the joined claim. **No generic LLM-generated SQL**.
 
 **Case-evidence gate (deterministic):**
-1. Exactly one `evidence_cutoff_reached` event; validate timestamps and quantity; keep original cutoff unchanged across follow-ups.
-2. Filter by same `case_id` and `product_id`; both `observed_at` **and** `received_at` must be ≤ cutoff; observation age ≤ 24 hours. Reject invalid chronology.
-3. Use the **latest available-at-cutoff observation per warehouse**; a newer insufficient snapshot supersedes an older favorable one. Reject assigned warehouse, denied/unknown route and insufficient available quantity (`on_hand - reserved < request_qty`).
-4. Surface rejected snapshots with explicit reason codes and evidence references. `NO_CASE_SNAPSHOT` ≠ zero stock; historical/case observations ≠ current/live inventory.
-5. Validate policy ID, source document checksum/version and effective interval **at the case cutoff**, not at the dataset `as_of`. Fiction's warehouse policy `FR-WH-2026-10-04` applies for **[2026-10-04, 2026-11-03)**; verify via registry/document metadata (the SQL `fulfillment_policies` table carries summary/approval flag, **not** effective-date columns). Missing/overlapping/expired policy must not silently become “current.”
+1. Verify the case/order/line/product/quantity relation using \`fulfillment_case(case_id)\` and \`order(order_id)\`; the selected \`order_item_id\` must belong to that order and product. Exactly one valid \`evidence_cutoff_reached\` exists; preserve its ISO timestamp (with offset) across follow-ups.
+2. Only case-scoped snapshots for the same \`product_id\` are eligible; both \`observed_at\` **and** \`received_at\` must be ≤ cutoff, \`received_at >= observed_at\`, observation age ≤24 h. Inventory base table has no observation timestamp and **cannot** replace missing case evidence.
+3. Select the latest available-at-cutoff observation **per warehouse**; a newer insufficient snapshot supersedes an older favorable one. Exclude assigned warehouse, unknown/denied route and \`on_hand - reserved < request_qty\`. Preserve \`snapshot_id\`, \`warehouse_id\`, timestamps and rejection reasons.
+4. Distinguish **recorded alternatives with verified exclusions**, **no case snapshot**, and **unknown/incomplete alternative coverage**. \`NO_VERIFIED_ALTERNATIVE_WAREHOUSE_CANDIDATE\` describes only the **recorded, evaluated scope**; it never proves there is no stock anywhere. \`NO_CASE_SNAPSHOT\` is not zero on-hand stock.
+
+**Exact policy lookup and provenance (B2):**
+
+1. **Input dependency:** accept only the validated \`case_id\` and \`cutoff\` from step 1. Use the pinned Fiction release \`fiction-retail-unified-v1.0.0\` and select its **warehouse transfer** policy, not returns/pricing policy and not a semantic-search guess.
+2. **Registry binding:** locate exactly one \`fulfillment_policies.policy_id = FR-WH-2026-10-04\`; join \`knowledge_documents\` on exact \`policy_id\` with \`kind='business_policy'\`. Require a unique \`document_id\`, \`relative_path\`, SHA-256 and the expected \`requires_manager_approval\` flag. The registry **does not contain validity dates**; do not pretend it does.
+3. **Document integrity:** read the *local release's* \`knowledge/<relative_path>\` (expected \`knowledge/policies/FR-WH-2026-10-04.md\`), reject traversal/missing files, hash original Markdown bytes against \`knowledge_documents.sha256\`, and ensure the documents/registry/manifest belong to the **same pinned release**. No GitHub network dependency at runtime; reject unverified or mismatched source versions.
+4. **Validity authority:** use the **release-locked, reviewed policy interval mapping** from Fiction's [Data Contract](https://github.com/hungtvb/fiction-retail/blob/main/docs/DATA_CONTRACT.md): \`FR-WH-2026-10-04 → [2026-10-04, 2026-11-03)\` in \`Asia/Ho_Chi_Minh\` (the policy Markdown displays 4 Oct–2 Nov inclusive). Implement as the smallest trusted config/typed mapping (or reuse an existing one), **not** filename-derived or LLM-extracted dates. Cross-check ID and effective statement against the verified document; an ambiguity/mismatch fails closed. Compare **timezone-normalized case cutoff** against that half-open interval, **not** \`dataset_business_as_of=2026-11-03\`.
+5. **Decision rule:** missing/expired policy, hash mismatch, incompatible release, two overlapping authoritative policies without precedence, or inconsistent approval requirements block **transfer recommendation**. A verified policy conflict yields \`NEEDS_REVIEW\` for **evidence adjudication**, not an approval-ready transfer proposal. Surface exact reason codes and bounded policy evidence refs (e.g. \`fulfillment_policies/FR-WH-2026-10-04\`, \`knowledge_documents/<document_id>\`); RAG can supply a cited explanation **only after** applicability has been established deterministically.
+
+**Policy implementation note:** do not add validity columns to Fiction SQLite, fetch the upstream repo at runtime, create a new policy database, or use embedding similarity to establish policy authority. If local source documents/registry are not yet imported (#27), the policy gate stays **unverified**; no policy-backed decision is marked PASS.
 
 **Proposed final answer envelope:** keep existing `AnswerResult` fields (`answer`, `records`, `contexts`, `request_id`); add only the integration fields agreed in #28/#30: `disposition` (`SUPPORTED | NEEDS_REVIEW | INSUFFICIENT_EVIDENCE`), bounded `findings` with supporting `evidence_refs`, `limitations`, and actual trace/`source` metadata. Do not create a second answer schema.
 
-**Status rules:** `SUPPORTED` can qualify *factual* case/snapshot findings. A proposed warehouse transfer **requires manager review** even when qualifying evidence is complete (`NEEDS_REVIEW` for the proposed decision). Missing/stale/conflicting evidence must yield `INSUFFICIENT_EVIDENCE` for that decision, while still showing supported partial facts. Tool execution failure is an execution error, **not** automatically an evidence-insufficiency verdict.
+**Status semantics (B3):** keep three orthogonal concepts: **execution** (completed / failed / denied), **evidence fitness for each finding** (\`USABLE | QUALIFIED | BLOCKED\`, #28), and **business conclusion disposition** (\`SUPPORTED | NEEDS_REVIEW | INSUFFICIENT_EVIDENCE\`, #30). Manager approval state is separate and is never inferred from \`disposition\`.
 
-## 5. Acceptance scenarios — implement tests before business wiring
+| Verified situation and scope | Finding / requested decision | Business disposition | Next action |
+|---|---|---|---|
+| At least one case-scoped alternative candidate passes snapshot/route/quantity and applicable policy is verified | Candidate and eligibility evidence supported; **proposed transfer is not approved** | \`NEEDS_REVIEW\` for proposed transfer | Authorized Manager review only (#29); no operational mutation |
+| All **recorded** alternatives evaluated, with identifiable exclusion reasons and enough evidence for the **narrow question** “any verified candidate in this case?” | **Supported negative finding**: no eligible candidate among evaluated case observations. Never claim all company warehouses lack stock | \`SUPPORTED\` for scoped *negative finding*; **not** an executable transfer verdict | Report rejected warehouse/reasons and coverage limit; investigate unobserved options separately |
+| No case snapshot, stale/late/unknown alternative evidence, policy missing/expired/mismatch, or insufficient coverage for **transfer feasibility** | Supported order/case facts may be shown; actionable transfer feasibility **not established** | \`INSUFFICIENT_EVIDENCE\` for proposed transfer | Request evidence/policy verification; do not treat missing as zero stock |
+| Two authoritative policy documents overlap/conflict without trustworthy precedence | Conflict itself is supported; which policy authorizes a proposal is **unresolved** | \`NEEDS_REVIEW\` for **policy reconciliation**, explicitly **not** a manager-transfer approval request | Resolve authority; no proposal or mutation |
+| SQL/tool/LLM timeout or exception, invalid case identity or forbidden plan | No trustworthy final business result | Execution \`FAILED\` / \`DENIED\` (or clarification); **no fabricated business disposition** | Safe error/clarification; do not persist unverified facts |
 
-| ID | Scenario / independent expected outcome | Evidence mode |
+**Disambiguation rule:** A narrow **negative finding** may be \`SUPPORTED\` when the recorded alternatives are fully evaluated. That does **not** imply enough evidence to conclude real-world feasibility. If the user's question is broadly “Can any warehouse fulfill?” and coverage is incomplete, the **decision** remains \`INSUFFICIENT_EVIDENCE\`, even when “no candidate found in evaluated records” is a supported partial fact. Keep the claim's scope and \`record_refs\` visible.
+
+## 5. Acceptance scenarios — exact golden oracle + adversarial fixtures (B4)
+
+**Published-release SQL golden cases** (independently checked against the local, pinned Fiction SQLite; these **do not** prove Agent/RAG E2E). Each test must assert input \`case_id\`, exact \`cutoff\`, canonical order/item/product scope, selected/rejected \`snapshot_id\`, actual \`warehouse_id\` and quantity, source/version refs, reason codes and **business disposition** after policy integration.
+
+| Test / user request | Independent expected result at case cutoff | Expected answer contract |
 |---|---|---|
-| UC01-A | Case exists, alternative snapshot valid at cutoff, route eligible, stock sufficient, dated policy applicable → candidate evidence, **not** automatic transfer | Independent SQL oracle + dated policy registry |
-| UC01-B | Case missing / mismatched order, line, product or warehouse → fail closed, original scope preserved | Fixture + SQL/contract check |
-| UC01-C | No snapshot / only stale or insufficient / assigned warehouse → verified facts + reasons, no “zero stock” or positive candidate claim | Actual cases + independent SQL oracle |
-| UC01-D | Received after cutoff / observed after cutoff / superseded latest snapshot → exclusion reason, no late-evidence use | **Fixture** (not present in published real cases) |
-| UC01-E | Policy expired, missing, conflicting, wrong product/release or injected source text → no policy-based decision | Dated-registry/RAG adversarial fixture |
-| UC01-F | “What about warehouse two?” and “which policy applied?” → preserve exact case/cutoff/warehouse from **committed** answer; wrong-session or ambiguous reference clarifies | Context + actual tool args |
-| UC01-G | Model suggests unauthorized capability / plan omits required evidence; tool timeout; SSE disconnect → bounded fail-closed execution, no fabricated results or actions | Mocked plan/HTTP scenarios |
-| UC01-H | One real LLM run for this **wired UC-01 path**: observe actual tool invocation IDs, expected case/warehouse/cutoff, grounded response and usage/trace | Provider-backed CI + independent oracle; **PENDING** |
+| **UC01-G1: eligible alternative**, \`CASE-06181249-280d-59b3-b00b-b3de7877eb59\` | Cutoff \`2026-10-21T11:00:00Z\`; requested **1**; alternative warehouse \`bd0b4a2e-3f75-46a1-bf8a-5a82594d70a4\`; **latest** \`SNAP-850016da-7ba6-594a-8532-ca23e4085e89\` (\`on_hand=6, reserved=1, available=5\`), observed \`2026-10-21T10:00:00Z\`, received \`2026-10-21T10:05:00Z\`. Warehouse policy effective at cutoff | Candidate evidence **SUPPORTED**; disposition \`NEEDS_REVIEW\` **for proposed transfer**, no approval or stock write; refs include case, cutoff event, candidate snapshot, warehouse route and exact policy document |
+| **UC01-G2: recorded alternative insufficient**, \`CASE-15332a00-70bb-59b0-9aa4-a44a7b1a37a9\` | Cutoff \`2026-10-24T11:00:00Z\`; requested **1**; alternative \`2f1e95b4-aa81-4b55-926d-70531f59528d\`; \`SNAP-5ff78bcc-d9e5-5b28-9580-ca4626e316de\` has **available=0** and \`INSUFFICIENT_AVAILABLE\`. No verified candidate from evaluated recorded alternatives | \`SUPPORTED\` **scoped negative finding** only; no “stock unavailable everywhere” and no transfer proposal. If asked about **all warehouses**, report limited coverage rather than global impossibility |
+| **UC01-G3: no case observations**, \`CASE-103510dd-95fb-5a4d-9f26-f508b3a73df3\` | Cutoff \`2026-10-22T11:00:00Z\`; requested **1**; **0 case snapshots**; alternative route \`90d6c40d-10d6-432b-99fe-bd1448f1aa57\` has \`ELIGIBILITY_ASSUMED_STOCK_UNKNOWN\`. Snapshot limitation \`NO_CASE_SNAPSHOT\` | Show only supported order/case/route facts; \`INSUFFICIENT_EVIDENCE\` **for fulfillment/transfer conclusion**, never assert zero stock or negative warehouse inventory |
 
-**Run gates:** existing `python -m scripts.verify_fiction_runtime --db data/fiction/fiction_retail.sqlite --manifest data/fiction/manifest.json` is **M0 only**; it does **not** test UC-01 orchestration, policy retrieval, context or UI. Add a small scenario test through the actual newly wired path, then current-commit CI and provider-backed CI only when its new model path can be exercised. Log commit, release SHA, exact input, expected/observed IDs/cutoff, test mode, trace refs and known gaps. Never mark a course CAP PASS from a mock or an illustration.
+**Policy oracle (same release):** \`FR-WH-2026-10-04\`, \`knowledge_documents.document_id = DOC-de8b393e-45d7-53f3-b1d4-9366a5d0c134\`, path \`knowledge/policies/FR-WH-2026-10-04.md\`, expected SHA-256 \`f3ff7463e67e034360fd87b35c1c71286445be0de1431009591821489bd4d9c8\`, effective **[2026-10-04, 2026-11-03)** in Asia/Ho_Chi_Minh, manager approval required. SQL registry binding and source-doc byte hash must be separately verified **at runtime**; listed expected metadata is **not** proof docs were imported into RetailIQ yet.
+
+**Fixture-only negatives** (not claims about the actual 100-case release): \`UC01-F1\` late-received/observed-after-cutoff, \`UC01-F2\` newer insufficient snapshot supersedes older sufficient, \`UC01-F3\` expired/no/overlapping/conflicting policy and wrong/missing doc SHA, \`UC01-F4\` case/order/item mismatch, \`UC01-F5\` cross-session wrong case/cutoff or malformed model plan, \`UC01-F6\` timeout/SSE disconnect. Assert exact exclusions (\`RECEIVED_AFTER_CUTOFF\`, \`OBSERVED_AFTER_CUTOFF\`, \`SUPERSEDED_BY_NEWER_OBSERVATION\`, etc.), stop reasons, source refs and **no unauthorized mutation**. The published release has **zero received-after-cutoff observations and no case whose cutoff is outside the warehouse policy window**; these branches require fixtures.
+
+**Provider/Agent E2E gate — PENDING:** after a real Fiction UC-01 path is wired, use one or more golden case IDs in **actual live LLM CI** and inspect LangGraph execution/trace: requested \`case_id\`, *actual tool invocation IDs, inputs/outputs*, cutoff, policy lookup, verified candidate IDs, final disposition/findings/limitations, session scope and usage. Compare against the independent SQL/policy oracle; a fluent answer without matching tool arguments and evidence is a FAIL. Record commit, release hash, model/provider, mode, inputs, expected/observed outputs and trace IDs. **M0-only** \`python -m scripts.verify_fiction_runtime --db data/fiction/fiction_retail.sqlite --manifest data/fiction/manifest.json\` proves none of this.
 
 ## 6. Implementation order and stop conditions
 
-1. **M1 read-only vertical slice:** reuse `FictionStore`, add missing policy/verification checks only as needed; independent positive/negative business oracle (#28). Keep it callable deterministically without Agent.
-2. **M2 integration:** register minimal capabilities, wire fixed bounded LangGraph plan (#23), committed-evidence context (#22), exact policy-document retrieval (#27) and **optional real MCP path only where #26 requires it**. Do not make all SQL calls go through MCP.
-3. **M3–M5 acceptance:** real auth/HITL (#29) before any approval claim, verified-first SSE and truthful graph (#21/#30), then Fiction UC-01 real LLM + source/versioned E2E evidence.
+1. **M1 deterministic contract gate:** reuse \`FictionStore\`; validate case/line/cutoff, exact release-locked policy registry/document applicability, business disposition and G1–G3 + critical fixture negatives with independent SQL oracle. This is callable directly **without** claiming Agent/LLM/UI works.
+2. **First wired Agent gate (M2):** fixed registered capability DAG (#23) consumes M1, minimal same-session reference handling (#22), one actual \`/ask\` or \`/ask/stream\` path and real-provider golden run when configured. Real LLM usage must be identified explicitly, not inferred from mocks. Policy decision uses **exact deterministic lookup** even if #27's explanatory RAG is still pending.
+3. **Full UC-01 integration / acceptance (M2–M5):** source-policy RAG explanations (#27), actual MCP invocation only where #26 requires it, truthful evidence/UI/SSE (#21/#30), and authenticated manager review (#29) before **any** claim of authorized HITL. App-facing session/ownership validation must follow #29; a local unauthenticated prototype is not security acceptance. No stock/order/transfer mutation.
+
+**Prioritization remains independent:** drafting UC-01 does not decide whether Backorder or Refund Reconciliation is implemented first. Reuse shared capability issues and create new task issues only for independently verifiable gaps; do not block all M1 correctness work on complete RAG/MCP/HITL.
 
 **Implementation gate:** review/merge this design into `main` **before** a feature code PR; that code PR must link this path + approved design commit and state deviations. Significant changes to capability, temporal, policy or trust contracts require design review first. Small clarifications may travel in the code PR only when the approved behavior is unchanged. No separate UC-01 microservice, agent framework, event bus, extra source database or unrequested action endpoints.
