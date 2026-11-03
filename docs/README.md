@@ -9,6 +9,7 @@ Use this index to load **only the documentation needed for the task**.
 | Course milestones and original planning sequence | [Roadmap / Course Plan](COURSE_PLAN.md) |
 | System design and implementation boundaries | [Architecture](ARCHITECTURE.md) |
 | Request paths, component behavior and detailed execution boundaries | [Basic & Detail Design](DESIGN.md) |
+| Implementation Detail for an approved vertical slice | [UC-01 Backorder Investigation](implementation/UC-01-backorder.md) (use its reviewed/merged revision) (others added only when scheduled) |
 | KPI definitions, data and API contracts | [Data & API](DATA_API.md) |
 | Testing approach, scenarios and reproducible commands | [Testing & Scenario Acceptance](27_BEHAVIORAL_ACCEPTANCE_MATRIX.md) |
 | Capability-level acceptance status and missing evidence | [Capability Ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md) |
@@ -21,6 +22,8 @@ Use this index to load **only the documentation needed for the task**.
 - [Older notes and records](archive/README.md)
 
 The original course-week structure belongs to the [roadmap](COURSE_PLAN.md), not the permanent product or source architecture. Some older documents and module filenames are preserved until they can be migrated without losing references or behavior.
+
+**Documentation lifecycle:** Review/merge design in `docs/` **before feature code**; link its path + approved commit SHA from the implementation issue and code PR. Issues track work; PRs track changes/review; generated test evidence stays outside Git. See [Design-first change policy](DESIGN.md#design-first-change-policy). A draft use-case detail is **not approved implementation**.
 
 **Evidence policy:** test definitions and CI configuration remain in Git. Generated results, traces, screenshots and benchmark reports belong outside the repository; preserve already committed historical evidence before removal.
 
