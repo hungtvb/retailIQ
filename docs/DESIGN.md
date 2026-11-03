@@ -2,7 +2,7 @@
 
 **Status (2026-11-03):** this document describes **current legacy/local behavior** and shared architecture boundaries. **Fiction M0 (read-only unified DB/SQL)** is implemented on `main` via [PR #33](https://github.com/hungtvb/retailIQ/pull/33); **Fiction chat/Agent/MCP/RAG integration is not yet implemented or accepted**. The [UC-01 Backorder Implementation Detail](implementation/UC-01-backorder.md) is the proposed target contract; **only its reviewed/merged design commit** authorizes implementation, and design approval is never an E2E PASS. This is one shared Basic Design plus just-in-time per-use-case detail, not two speculative document sets.
 
-[Product](PROJECT.md) · [Requirements](REQUIREMENTS.md) · [Architecture](ARCHITECTURE.md) · [Data and API contracts](DATA_API.md) · [Capability status](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md)
+[Product](PROJECT.md) · [Requirements](REQUIREMENTS.md) · [Architecture](ARCHITECTURE.md) · [Data and API contracts](DATA_API.md) · [Capability status](CAPABILITY_LEDGER.md)
 
 ## Basic Design — boundaries and responsibilities
 
@@ -121,14 +121,14 @@ Read `AGENTS.md` and the [documentation index](README.md) first. Start at the **
 
 | Design slice | Required scenario / failure | Evidence mode and source |
 |---|---|---|
-| Structured answer | Stock, revenue, ranking; missing/mismatched SKU, time or location; independently verified totals | Local SQL + business scenario oracle; `docs/27_BEHAVIORAL_ACCEPTANCE_MATRIX.md` |
+| Structured answer | Stock, revenue, ranking; missing/mismatched SKU, time or location; independently verified totals | Local SQL + business scenario oracle; `docs/SCENARIO_ACCEPTANCE.md` |
 | Conversation | Same product/period across follow-up; no session leakage; ambiguous reference clarified | Session + graph scenarios; no claim of full open-ended dialogue reliability |
 | Product RAG | Correct citations; empty/invalid source; stale index; injected document instructions | Index/grounding tests, then separately **provider-backed** retrieval and RAGAS |
 | Multi-source supervisor | Sales-ranked SKU equals inventory SKU; no guessed numbers or purchase write | Scoped graph/subagent events plus negative-case oracle |
 | Freshness/MCP | Expired/unknown refresh time; real stdio transport; SQL/MCP disagreement | Local routing/MCP audits; live retailer freshness still pending |
 | HITL and multi-agent | Rejection, unauthorized actor, replay/resume, actual transfer and safe finalization | Current local scenario is **simulation only**; authenticated approval gate remains open |
 
-**Evidence contract:** report commit SHA, execution mode, exact command/input, independent expected result, observed output and any remaining gap. Consult the [capability acceptance ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md) for status; a requirement appearing above does **not** mean it passed.
+**Evidence contract:** report commit SHA, execution mode, exact command/input, independent expected result, observed output and any remaining gap. Consult the [capability acceptance ledger](CAPABILITY_LEDGER.md) for status; a requirement appearing above does **not** mean it passed.
 
 ### Design-first change policy
 

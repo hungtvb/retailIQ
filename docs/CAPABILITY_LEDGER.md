@@ -6,7 +6,7 @@
 **Integration baseline for recorded checks:** `main` + `feature/product-workspace-v1` (historical; since integrated).
 **Last evidence assessment:** 2026-10-30. **This snapshot has not been re-tested on the latest `main` merely because documentation PRs were merged.**
 
-This is the **single owner of per-capability acceptance and open gaps**. For the reproducible scenario plan and test commands see [Testing & Scenario Acceptance](27_BEHAVIORAL_ACCEPTANCE_MATRIX.md). For dated Week 1 results see [Historical Execution Evidence](weeks/week-01/EVIDENCE.md). Entries below describe the **last documented assessment**, not an automatic claim about untested later commits. A green CI run establishes only its explicit scenarios, not full provider quality or course completion.
+This is the **single owner of per-capability acceptance and open gaps**. For the reproducible scenario plan and test commands see [Testing & Scenario Acceptance](SCENARIO_ACCEPTANCE.md). For dated Week 1 results see [Historical Execution Evidence](archive/2026-11-03/week-01/EVIDENCE.md). Entries below describe the **last documented assessment**, not an automatic claim about untested later commits. A green CI run establishes only its explicit scenarios, not full provider quality or course completion.
 
 **Evidence reconciliation:** The 2026-10-29 limited RAGAS and remote LangSmith observations in the historical ledger do not establish current-commit CAP-05 acceptance. Likewise, old offline scenario runs with 20/20 PASS do not supersede the later recorded 9 PASS / 11 FAIL query audit. Preserve both with date/SHA/mode; require new execution evidence before reporting a current PASS.
 

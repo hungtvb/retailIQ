@@ -204,7 +204,7 @@ Nhóm 5 người, khoảng 60 phút/người/ngày gồm cả học. Không chia
 - **Ưu tiên nghiệp vụ, không chỉ kỹ thuật:** trainer phản biện là cơ sở đổi flagship scenario sang decision support.
 - **Một dataset nền:** không trộn nhiều public datasets thiếu khóa nối; mô tả rõ real/synthetic.
 - **Preserve implementation:** không viết lại graph/agent/UI chỉ để đẹp; reuse và sửa nếu có evidence cần.
-- **Traceability:** Yêu cầu khóa học trong [COURSE_PLAN](../../COURSE_PLAN.md); trạng thái và gaps trong [capability ledger](../../29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md); baseline kinh doanh trong [PROJECT](../../PROJECT.md); SQL/API trong [DATA_API](../../DATA_API.md).
+- **Traceability:** Yêu cầu khóa học trong [COURSE_PLAN](../../COURSE_PLAN.md); trạng thái và gaps trong [capability ledger](../../CAPABILITY_LEDGER.md); baseline kinh doanh trong [PROJECT](../../PROJECT.md); SQL/API trong [DATA_API](../../DATA_API.md).
 
 **Thông điệp chung cho team:** “RetailIQ không phải chatbot tra giá/tồn kho. Đây là dự án học Agentic AI bằng một workflow hỗ trợ quyết định vận hành bán lẻ, trong đó số liệu và tài liệu đều phải truy xuất, kiểm chứng và giải thích được. Chúng ta chỉ nói PASS khi có đúng evidence ở đúng mode và commit.”
 
@@ -216,8 +216,8 @@ Nhóm 5 người, khoảng 60 phút/người/ngày gồm cả học. Không chia
 - [Course requirements and 4-week milestone](../../COURSE_PLAN.md)
 - [Technical architecture](../../ARCHITECTURE.md)
 - [Data dictionary, KPI and API contract](../../DATA_API.md)
-- [Capability acceptance ledger](../../29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md)
+- [Capability acceptance ledger](../../CAPABILITY_LEDGER.md)
 - [Product Workspace notes](28_PRODUCT_WORKSPACE_V1.md)
 - [Four-week workflow semantics](26_FOUR_WEEK_GRAPH_WORKFLOWS.md)
-- [Week 1 evidence](../../weeks/week-01/EVIDENCE.md)
-- [Week 1 runbook](../../weeks/week-01/RUNBOOK.md)
+- [Week 1 evidence](../2026-11-03/week-01/EVIDENCE.md)
+- [Week 1 runbook](../2026-11-03/week-01/RUNBOOK.md)

@@ -1,6 +1,6 @@
 # RetailIQ — Testing & Scenario Acceptance
 
-**Document owner:** testing approach, reproducible commands, business/control/safety oracles and scenario coverage. This is **not** the current evidence ledger or a certificate that tests passed on the latest commit. [Capability status and open gates](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md) is the single owner of requirement acceptance; [dated Week 1 execution records](weeks/week-01/EVIDENCE.md) preserve historical evidence. Week-labelled scenario IDs below are existing test identifiers, not a requirement to organize new source code by course weeks.
+**Document owner:** testing approach, reproducible commands, business/control/safety oracles and scenario coverage. This is **not** the current evidence ledger or a certificate that tests passed on the latest commit. [Capability status and open gates](CAPABILITY_LEDGER.md) is the single owner of requirement acceptance; [dated Week 1 execution records](archive/2026-11-03/week-01/EVIDENCE.md) preserve historical evidence. Week-labelled scenario IDs below are existing test identifiers, not a requirement to organize new source code by course weeks.
 
 ## Acceptance principle
 
@@ -56,7 +56,7 @@ Use a clean synthetic fixture as required by the individual script. Some command
 
 The workflow uses Python 3.12, serialized concurrency and a 30-minute job timeout. It exports a **7-day GitHub Actions artifact** with the strict query report (when created) plus non-secret commit/run/mode metadata. A failed setup can legitimately have no query report. GitHub Environment Secrets are scoped to this job; `LANGSMITH_TRACING=false` unless an independent, explicitly approved remote-tracing gate is added.
 
-**Boundary:** This is provider-backed **smoke and targeted query acceptance** only. It does **not** run RAGAS, establish LangSmith trace acceptance, test arbitrary natural-language requests, prove live retailer freshness or production security. Track these separately in the [Capability Ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md) when artifacts can be reviewed.
+**Boundary:** This is provider-backed **smoke and targeted query acceptance** only. It does **not** run RAGAS, establish LangSmith trace acceptance, test arbitrary natural-language requests, prove live retailer freshness or production security. Track these separately in the [Capability Ledger](CAPABILITY_LEDGER.md) when artifacts can be reviewed.
 
 ## Scenario coverage (existing course-labelled IDs)
 
@@ -136,7 +136,7 @@ clarification; English plural phrases resolve to the prior ranked group;
 before price/order proposals. Two additional real Chromium conversations
 check out-of-range ordinal clarification and plural-reference stock against SQL.
 
-**Historical 2026-10-29 strict run:** 14/14 edge scenarios, 20/20 business scenarios, 19/19 workflow scenarios, and browser/MCP integration checks reported PASS in https://github.com/hungtvb/retailIQ/actions/runs/40878317768. **Do not treat this as latest/current acceptance:** a separately documented 2026-10-30 offline query audit reported **9 PASS / 11 FAIL / 0 ERROR** on its recorded commit; see [dated evidence](weeks/week-01/EVIDENCE.md). Re-run the selected suite on the target SHA and inspect each failed case before updating acceptance status.
+**Historical 2026-10-29 strict run:** 14/14 edge scenarios, 20/20 business scenarios, 19/19 workflow scenarios, and browser/MCP integration checks reported PASS in https://github.com/hungtvb/retailIQ/actions/runs/40878317768. **Do not treat this as latest/current acceptance:** a separately documented 2026-10-30 offline query audit reported **9 PASS / 11 FAIL / 0 ERROR** on its recorded commit; see [dated evidence](archive/2026-11-03/week-01/EVIDENCE.md). Re-run the selected suite on the target SHA and inspect each failed case before updating acceptance status.
 
 Each suite remains a bounded sample of user behavior. All three are *offline
 synthetic acceptance*, except the separately verified **actual local MCP stdio**
@@ -148,8 +148,8 @@ DeepEval, autonomous A2A, or production authorization as complete.
 For every reported result, record the **test SHA, run date, environment, execution mode, command and input, independent oracle, pass/fail counts, artifact/trace reference and limitations**. A green unit-test suite, a screenshot of the graph, or an API HTTP 200 response alone does not establish business correctness.
 
 - **Scenario definitions and reproduction:** this document and existing test scripts.
-- **Current capability status and missing gates:** [capability acceptance ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md). Do not duplicate a live status table here.
-- **Historical provider/RAGAS/LangSmith evidence:** [Week 1 evidence](weeks/week-01/EVIDENCE.md); prior dated provider results are not present-commit acceptance.
+- **Current capability status and missing gates:** [capability acceptance ledger](CAPABILITY_LEDGER.md). Do not duplicate a live status table here.
+- **Historical provider/RAGAS/LangSmith evidence:** [Week 1 evidence](archive/2026-11-03/week-01/EVIDENCE.md); prior dated provider results are not present-commit acceptance.
 - **Run artifacts:** CI artifacts or access-controlled external storage. Keep generated reports, screenshots and traces outside Git (do not delete existing historical artifacts without preserving them).
 
 A locally verified MCP stdio call is not a hosted integration; model-free simulated approvals are not authenticated HITL; provider-backed product RAG is distinct from offline lexical retrieval. Do not label one mode as another.

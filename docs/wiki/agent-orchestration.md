@@ -45,7 +45,7 @@
 
 ## VERIFY / khi nào cần thiết kế lại
 
-- Kiểm tra exact SKU/period/rank và negative scenarios ở [Testing](../27_BEHAVIORAL_ACCEPTANCE_MATRIX.md).
+- Kiểm tra exact SKU/period/rank và negative scenarios ở [Testing](../SCENARIO_ACCEPTANCE.md).
 - Khi muốn chứng minh handoff, cần trace `Command`/actual node execution cùng request ID; không dùng screenshot graph làm bằng chứng.
 - Chỉ thêm agent khi một subtask cần tool/permission/context/evaluation khác thực sự, và có scenario đo được lợi ích so với single-agent/function.
 

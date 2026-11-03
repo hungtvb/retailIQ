@@ -39,7 +39,7 @@ Theo LangGraph, **checkpointer** phục vụ state ngắn hạn theo thread; **s
 4. Trường preference không nằm trong allowlist hoặc chứa PII → reject.
 5. Reload/restart: chỉ những gì thực sự persisted, cùng session hợp lệ, mới có thể được lấy lại; đừng coi local UUID là secure identity.
 
-Kiểm tra: `python -m pytest -q tests/test_customer_memory.py` và query/follow-up scenarios ở [Testing](../27_BEHAVIORAL_ACCEPTANCE_MATRIX.md). Hiện tại **không có acceptance** cho cross-user identity/memory hay authenticated authorization.
+Kiểm tra: `python -m pytest -q tests/test_customer_memory.py` và query/follow-up scenarios ở [Testing](../SCENARIO_ACCEPTANCE.md). Hiện tại **không có acceptance** cho cross-user identity/memory hay authenticated authorization.
 
 **Official reading (đối chiếu 2026-10-31):**
 - [LangGraph persistence: checkpointer vs store](https://docs.langchain.com/oss/python/langgraph/persistence)

@@ -42,7 +42,7 @@
 
 **Thử lỗi quan trọng:** missing/renamed source, stale hash, prompt injection trong document, SKU không khớp, sản phẩm trùng tên, tháng khác nhau giữa ranking và revenue, kết quả retrieval không liên quan. Không coi context hiện diện là câu trả lời có căn cứ.
 
-**Đánh giá:** `python -m scripts.audit_queries --mode offline --strict` cho SQL; `scripts/eval_retrieval.py` cho source hit@k/MRR trong đúng mode; `scripts/eval_ragas.py` đánh giá generation khi có provider. Kết quả thực tế và gate chưa hoàn thành nằm ở [Capability Ledger](../29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md).
+**Đánh giá:** `python -m scripts.audit_queries --mode offline --strict` cho SQL; `scripts/eval_retrieval.py` cho source hit@k/MRR trong đúng mode; `scripts/eval_ragas.py` đánh giá generation khi có provider. Kết quả thực tế và gate chưa hoàn thành nằm ở [Capability Ledger](../CAPABILITY_LEDGER.md).
 
 **Official reading (đối chiếu 2026-10-31):**
 - [LangChain retrieval fundamentals](https://docs.langchain.com/oss/python/deepagents/retrieval)
