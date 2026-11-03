@@ -346,3 +346,17 @@ def test_uc01_m1_stale_evidence_and_bad_case_join(fiction, tmp_path):
 def test_uc01_policy_document_copy_is_exact_pinned_release_bytes():
     source = Path(__file__).resolve().parents[1] / "data/fiction/knowledge/policies/FR-WH-2026-10-04.md"
     assert sha256(source.read_bytes()).hexdigest() == "f3ff7463e67e034360fd87b35c1c71286445be0de1431009591821489bd4d9c8"
+
+
+def test_uc01_one_verified_candidate_does_not_require_every_route_snapshot(fiction, tmp_path):
+    path, manifest, _ = fiction
+    root = _copy_policy(tmp_path)
+    add_snapshot(path, "good", W2, "2026-10-16T11:00:00Z", "2026-10-16T11:05:00Z")
+    with sqlite3.connect(path) as conn:
+        conn.execute("INSERT INTO warehouse_eligibility VALUES (?,?,?,?)",
+                     (C1, "99999999-9999-4999-8999-999999999999", 1, "ALLOWED"))
+    store = reseal(path, manifest)
+    result = investigate_backorder(store, C1, knowledge_root=root)
+    assert result["disposition"] == "NEEDS_REVIEW"
+    assert "NO_USABLE_SNAPSHOT_FOR_ELIGIBLE_ROUTE" in result["reason_codes"]
+    assert [c["snapshot_id"] for c in result["data"]["evidence_candidates"]] == ["good"]

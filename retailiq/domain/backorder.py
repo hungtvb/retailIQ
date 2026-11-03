@@ -5,10 +5,9 @@ guess or semantic search. This is M1 domain logic, not an Agent or approval.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 from retailiq.domain.fiction import (
     FictionDataError, FictionStore, RELEASE, _aware_timestamp,
@@ -16,7 +15,8 @@ from retailiq.domain.fiction import (
 
 _POLICY_ID = "FR-WH-2026-10-04"
 _POLICY_PATH = "policies/FR-WH-2026-10-04.md"
-_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
+# Fiction 2026 business timezone is fixed UTC+07; avoid Windows tzdata requirement.
+_TZ = timezone(timedelta(hours=7))
 _POLICY_START = datetime(2026, 10, 4, tzinfo=_TZ)
 _POLICY_END = datetime(2026, 11, 3, tzinfo=_TZ)
 _POLICY_HEADER = b"**Policy reference:** FR-WH-2026-10-04"
@@ -141,11 +141,13 @@ def investigate_backorder(
     ):
         reasons.add("WAREHOUSE_ROUTE_UNKNOWN")
 
-    unverified = bool(reasons)
-    if unverified:
+    if policy_reason:
         disposition = "INSUFFICIENT_EVIDENCE"
     elif candidates:
-        disposition = "NEEDS_REVIEW"  # Candidate proposal, never an approval.
+        # A proven candidate is usable even if *other* routes lack observations.
+        disposition = "NEEDS_REVIEW"  # Proposal; approval is still separate.
+    elif reasons:
+        disposition = "INSUFFICIENT_EVIDENCE"
     else:
         disposition = "SUPPORTED"  # Only the recorded/evaluated negative finding.
 
