@@ -215,7 +215,8 @@ def route(state: State):
     if previous == 'sales_agent' and category == 'stock':
         target = 'sales_agent'
     log_event('agent.routed', agent=target, intent=category, route_fallback=fallback, execution_mode='full')
-    selected_skill = skill_for(category)
+    # UC-01 uses a vetted capability, not a legacy skill file.
+    selected_skill = '' if category == 'backorder' else skill_for(category)
     if selected_skill:
         # Routing/selection is not proof of loading or executing a skill.
         log_event('skill.selected', agent=AGENT_FOR_INTENT[category],
