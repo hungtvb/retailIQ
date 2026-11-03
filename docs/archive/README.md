@@ -12,14 +12,6 @@ This directory contains **dated records**, not a second source of current requir
 
 ## Current authoritative documents
 
-| Topic | Use this current source |
-|---|---|
-| Business problem, users, product scope | [Product](../PROJECT.md) |
-| Required capabilities and success criteria | [Requirements](../REQUIREMENTS.md) |
-| Course milestone mapping and historical timeline | [Roadmap](../COURSE_PLAN.md) |
-| System responsibility and technology decisions | [Architecture](../ARCHITECTURE.md) and [Basic/Detail Design](../DESIGN.md) |
-| Schema, KPI semantics, HTTP and MCP contracts | [Data & API](../DATA_API.md) |
-| Scenario definitions and executable checks | [Testing & Scenario Acceptance](../SCENARIO_ACCEPTANCE.md) |
-| Acceptance status and unresolved evidence | [Capability Ledger](../CAPABILITY_LEDGER.md) |
+Use the [single canonical documentation index](../README.md) for current requirements, designs, contracts and acceptance status. This archive is for provenance only.
 
 **Interpretation rule:** dates and execution modes are part of each historical claim. Older “PASS” or “NOT VERIFIED” labels are not automatically true for a newer commit. Preserve relevant source SHA and execution artifacts before reporting current acceptance.

@@ -9,6 +9,8 @@
 **Tool/agent selection rule:** for a simple question route to one trusted domain function; for cross-source questions, orchestrate reviewed sales/inventory tools, preserve SKU identity and verify evidence. A deterministic tool executor is not automatically an autonomous agent; no unchecked LLM-generated SQL.
 
 
+## Runtime execution paths
+
 ### Fiction M0 — implemented read-only foundation (not chat-connected)
 
 ```mermaid
