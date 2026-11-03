@@ -379,3 +379,64 @@ def test_uc01_untrusted_competing_policy_requires_authority_review(fiction, tmp_
     assert result["reason_codes"] == ["POLICY_CONFLICT"]
     assert result["disposition"] == "NEEDS_REVIEW"  # Policy review, NOT transfer.
     assert result["approval_status"] == "NOT_REQUESTED"
+
+
+
+def test_uc01_t02_explicit_case_langgraph_api_with_real_fixture(monkeypatch, fiction, tmp_path):
+    """Compiled LangGraph + actual FastAPI /ask; fake *router provider*, real SQL fixture."""
+    from types import SimpleNamespace
+    from fastapi.testclient import TestClient
+    from retailiq.api import app
+    from retailiq.orchestration import week1_graph as graph
+
+    pytest.importorskip("langgraph")
+    path, manifest, store = fiction
+    root = _copy_policy(tmp_path)
+    add_snapshot(path, "candidate", W2, "2026-10-16T11:00:00Z",
+                 "2026-10-16T11:05:00Z")
+    store = reseal(path, manifest)
+    graph.close_checkpoint_graph()
+    graph._fiction_store_cached.cache_clear()
+
+    class RouterModel:
+        def with_structured_output(self, schema):
+            return self
+        def invoke(self, messages):
+            return SimpleNamespace(intent=graph.classify(messages[-1][1]))
+
+    monkeypatch.setenv("RETAILIQ_MODE", "full")
+    monkeypatch.setenv("RETAILIQ_FICTION_DB", str(path))
+    monkeypatch.setenv("RETAILIQ_FICTION_MANIFEST", str(manifest))
+    monkeypatch.setenv("RETAILIQ_FICTION_KNOWLEDGE_ROOT", str(root))
+    monkeypatch.setenv("RETAILIQ_CHAT_DB", str(tmp_path / "sessions.sqlite3"))
+    monkeypatch.setenv("RETAILIQ_CHECKPOINT_DB", str(tmp_path / "checkpoints.sqlite3"))
+    monkeypatch.setenv("LANGSMITH_TRACING", "false")
+    monkeypatch.setattr(graph, "chat_model", lambda: RouterModel())
+    try:
+        with TestClient(app) as client:
+            result = client.post("/ask", json={"question": f"Investigate backorder {C1}"})
+            assert result.status_code == 200, result.text[:300]
+            body = result.json()
+            assert body["intent"] == "backorder"
+            assert body["active_agent"] == "backorder_agent"
+            assert body["mode"] == "LangGraph + Fiction verified SQL"
+            assert body["disposition"] == "NEEDS_REVIEW"
+            assert body["approval_status"] == "NOT_REQUESTED"
+            assert body["as_of"] == "2026-10-16T12:00:00Z"
+            assert body["records"][0]["warehouse_id"] == W2
+            assert body["records"][0]["snapshot_id"] == "candidate"
+            assert body["source"]["sha256"] == store.release["runtime_sha256"]
+            assert f"inventory_snapshots_v2/candidate" in body["evidence_refs"]
+            assert body["capability_plan"]["capabilities"] == ["fiction.backorder.investigate"]
+    finally:
+        graph.close_checkpoint_graph()
+        graph._fiction_store_cached.cache_clear()
+
+
+def test_uc01_t02_rejects_ambiguous_or_invalid_case_without_tool_call(monkeypatch):
+    from retailiq.orchestration import week1_graph as graph
+    with pytest.raises(ValueError, match="exactly one"):
+        graph._case_id_for_uc01("Investigate CASE-not-a-uuid")
+    with pytest.raises(ValueError, match="exactly one"):
+        graph._case_id_for_uc01(f"Compare {C1} and CASE-11111111-1111-4111-8111-111111111111")
+    assert graph.classify(f"Backorder {C1}") == "backorder"

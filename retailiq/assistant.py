@@ -12,6 +12,8 @@ def offline(q, *, history=None, active_agent='', memory=None):
  from .skills import skill_for
  from .domain.customer_memory import is_memory_question, memory_answer
  category=followup_intent(q,history)
+ if category=='backorder':
+  raise ValueError('Fiction case investigation requires RETAILIQ_MODE=full and pinned local Fiction data')
  effective=resolve_followup(q,history,category)
  agent=AGENT_FOR_INTENT[category]
  log_event('agent.routed', intent=category, agent=agent, execution_mode='offline')
