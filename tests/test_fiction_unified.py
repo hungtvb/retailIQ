@@ -200,3 +200,50 @@ def test_cli_checks_survive_python_optimized_mode():
 
 def test_period_bounds():
     assert _period("2026-12") == ("2026-12-01", "2027-01-01")
+
+
+def test_inventory_unknown_identity_is_not_missing_stock(fiction):
+    _, _, store = fiction
+    # Known product with no rows is distinct from an unknown product identifier.
+    existing = store.inventory(P2)
+    assert existing["scope"]["product_id"] == P2
+    assert any("NO_INVENTORY_RECORDS" in reason for reason in existing["limitations"])
+
+    for unknown in ("00000000-0000-4000-8000-000000000000", "FR-AAAAAAAAAAAAAAAA"):
+        missing = store.inventory(unknown)
+        assert missing["data"] == []
+        assert missing["scope"]["requested_product"] == unknown
+        assert missing["scope"]["product_id"] is None
+        assert missing["limitations"] == ["PRODUCT_NOT_FOUND"]
+        assert missing["record_refs"] == []
+
+
+def test_verified_snapshot_rejects_wal_journal_even_after_resealing(fiction):
+    path, manifest, _ = fiction
+    # A valid checksum of the primary .sqlite is insufficient for WAL-mode DBs.
+    writer = sqlite3.connect(path)
+    try:
+        assert writer.execute("PRAGMA journal_mode=WAL").fetchone()[0] == "wal"
+    finally:
+        writer.close()
+    with pytest.raises(FictionDataError, match="DELETE journal mode|WAL sidecar"):
+        reseal(path, manifest)
+
+
+def test_verified_store_fails_closed_on_late_wal_sidecar(fiction):
+    path, manifest, store = fiction
+    sidecar = path.with_name(path.name + "-wal")
+    try:
+        sidecar.write_bytes(b"unverified WAL data")
+        with pytest.raises(FictionDataError, match="WAL sidecar"):
+            store.product(P1)
+    finally:
+        sidecar.unlink(missing_ok=True)
+    assert store.product(P1)["data"]["product_id"] == P1
+    # The release gate also refuses even a pre-existing empty WAL sidecar.
+    try:
+        sidecar.touch()
+        with pytest.raises(FictionDataError, match="WAL sidecar"):
+            FictionStore.open(path, manifest)
+    finally:
+        sidecar.unlink(missing_ok=True)
