@@ -25,7 +25,7 @@
 - `scripts/audit_queries.py`: query acceptance với oracle; `--strict` khiến mismatch fail, tránh chỉ in báo cáo mà không ngăn regression.
 - `scripts/audit_workflows.py`, `audit_edge_scenarios.py`, `audit_freshness.py`, `smoke_mcp_stdio.py`: workflow/negative/freshness/transport được kiểm thử riêng.
 - `scripts/eval_retrieval.py`: đánh giá expected source, hit@k/MRR cho vector và hybrid; cần index/provider thực khi chạy live.
-- `scripts/eval_ragas.py`, `retailiq/evaluation.py`: yêu cầu `RETAILIQ_MODE=full`, actual embeddings/model, kiểm tra sample scores hợp lệ và ghi report sau khi đủ cases. Đọc [dated evidence](../weeks/week-01/EVIDENCE.md) để hiểu phạm vi kết quả cũ; **không** tuyên bố current-pass.
+- `scripts/eval_ragas.py`, `retailiq/evaluation.py`: yêu cầu `RETAILIQ_MODE=full`, actual embeddings/model, kiểm tra sample scores hợp lệ và ghi report sau khi đủ cases. Đọc [dated evidence](../archive/2026-11-03/week-01/EVIDENCE.md) để hiểu phạm vi kết quả cũ; **không** tuyên bố current-pass.
 - `retailiq/observability.py`, `api/http.py`: local rotating JSONL, request IDs, SSE **execution events** và persisted bounded traces; không phải streaming từng token LLM.
 - `retailiq/core/config.py`: remote LangSmith tracing **opt-in** nếu có cấu hình/key. Local log và remote LangSmith trace là **hai nguồn evidence khác nhau**.
 
@@ -42,7 +42,7 @@
 | `result`, `failure_reason`, `trace_id` | PASS/FAIL và lý do, không che lỗi |
 | `artifact_url`, `limitations` | Bằng chứng có thể truy xuất, scope chưa phủ |
 
-Generated reports/screenshots/traces để ngoài Git, tránh lộ dữ liệu và repo bloat; `tests/`, fixtures và script source vẫn version-control. Kiểm tra status mới nhất theo **[Capability Ledger](../29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md)**, không theo một ví dụ trong Wiki.
+Generated reports/screenshots/traces để ngoài Git, tránh lộ dữ liệu và repo bloat; `tests/`, fixtures và script source vẫn version-control. Kiểm tra status mới nhất theo **[Capability Ledger](../CAPABILITY_LEDGER.md)**, không theo một ví dụ trong Wiki.
 
 ## Khi nào revisit?
 
