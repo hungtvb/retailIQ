@@ -1,6 +1,6 @@
 # UC-01 — Backorder Investigation · Implementation Detail
 
-**Status:** DRAFT FOR REVIEW (not implementation approval) · **Design baseline:** RetailIQ `main@69c4bf4`, Fiction `fiction-retail-unified-v1.0.0` · **Scope:** one read-only end-to-end vertical slice.
+**Approval gate:** only a reviewed design revision merged to `main` is an implementation contract (a docs PR is a proposal) · **Design baseline:** RetailIQ `main@69c4bf4`, Fiction `fiction-retail-unified-v1.0.0` · **Scope:** one read-only end-to-end vertical slice.
 
 **References:** [Basic Design](../DESIGN.md) · [Fiction runtime](../FICTION_RUNTIME.md) · [Data/API semantics](../DATA_API.md) · [Review 02 / context #22](https://github.com/hungtvb/retailIQ/issues/22) · [Review 03 / orchestration #23](https://github.com/hungtvb/retailIQ/issues/23) · [Review 08 / evidence #28](https://github.com/hungtvb/retailIQ/issues/28) · [Fiction source contract](https://github.com/hungtvb/fiction-retail/blob/main/docs/DATA_CONTRACT.md).
 
