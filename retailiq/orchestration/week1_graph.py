@@ -389,13 +389,16 @@ def backorder_agent(state: State):
                   'Missing evidence is not zero available inventory.')
 
     evidence_refs = investigation['record_refs'][:100]
+    # Case/stock findings remain usable even if a policy document is missing
+    # or in conflict; only attach policy lineage when its applicability passed.
+    policy_ref = ([f"knowledge_documents/{data['policy']['document_id']}"]
+                  if data['policy'] and data['policy']['applicable_at_cutoff'] else [])
     findings = [
         {'text': f"Alternative warehouse {r['warehouse_id']}: "
                  f"{r['available_at_observation']} units in observation at {r['observed_at']}, "
                  f"received at {r['received_at']}; verified evidence at cutoff {cutoff}",
          'evidence_refs': [f"inventory_snapshots_v2/{r['snapshot_id']}",
-                           f"warehouse_eligibility/{case_id}/{r['warehouse_id']}",
-                           f"knowledge_documents/{data['policy']['document_id']}"]}
+                           f"warehouse_eligibility/{case_id}/{r['warehouse_id']}"] + policy_ref}
         for r in records
     ]
     if not findings:
