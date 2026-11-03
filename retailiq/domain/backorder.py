@@ -177,4 +177,3 @@ def investigate_backorder(
         "limitations": case_evidence["limitations"]
         + ["Historical case evidence does not prove current or company-wide inventory"],
     }
-}
