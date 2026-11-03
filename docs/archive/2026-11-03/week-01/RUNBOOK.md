@@ -52,8 +52,8 @@ If `scikit-network` attempts a C++ build on Windows/Python 3.14, use the Python 
 
 ## Demo sequence — all seven grading criteria
 
-1. Explain Business Problem, target users and expected value from [PROJECT](../../PROJECT.md) (**BP-1..3**).
-2. Explain workflow, trustworthy SQL/Product RAG and architecture from [ARCHITECTURE](../../ARCHITECTURE.md) (**SD-1**).
+1. Explain Business Problem, target users and expected value from [PROJECT](../../../PROJECT.md) (**BP-1..3**).
+2. Explain workflow, trustworthy SQL/Product RAG and architecture from [ARCHITECTURE](../../../ARCHITECTURE.md) (**SD-1**).
 3. Show FDE, five harness layers, LangChain agent patterns, LangSmith and cost/ROI assumptions with [DESIGN](DESIGN.md) (**SD-2**).
 4. Run stock, monthly revenue, top-sellers, product RAG and one appropriate cross-source example (**SD-3**).
 5. Show real RAGAS/LangSmith artifacts, deterministic tests, open gaps, risk and improvements from [EVIDENCE](EVIDENCE.md) (**SD-4**).
@@ -71,4 +71,4 @@ If `scikit-network` attempts a C++ build on Windows/Python 3.14, use the Python 
 | RAGAS import/build errors | Check Python **3.12** and `requirements-eval.txt`; do not mark PASS on an import alone |
 | Unexpected agent path | Inspect session/request-specific events, executed tools and returned evidence, not a static mock UI |
 
-Bind the app to `127.0.0.1`; no production authentication, multi-tenant isolation or freshness SLA is provided. See the [archived original runbook](../../archive/2026-10-30/legacy/03_Week1_Demo_Runbook.md) for the prior longer walkthrough.
+Bind the app to `127.0.0.1`; no production authentication, multi-tenant isolation or freshness SLA is provided. See the [archived original runbook](../../2026-10-30/legacy/03_Week1_Demo_Runbook.md) for the prior longer walkthrough.
