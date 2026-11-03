@@ -1,11 +1,31 @@
 # Architecture & Tech Stack
 
+**Execution boundary (2026-11-03):** Existing legacy questions still use the synthetic retail runtime. Fiction M0 and UC-01 T01 read-only evidence are implemented; **the first explicit CASE-ID investigation in `RETAILIQ_MODE=full` now follows `/ask → LangGraph → verified Fiction SQL`** ([#37](https://github.com/hungtvb/retailIQ/pull/37), [#40](https://github.com/hungtvb/retailIQ/pull/40)). That single fixed template has **mock-provider fixture coverage**, not live-provider/full Fiction E2E acceptance. Fiction MCP, policy RAG, context follow-ups and authenticated HITL remain pending. See [Fiction Runtime](FICTION_RUNTIME.md) and [Data/API](DATA_API.md).
+
 **Business goal:** Reduce user interaction complexity and, where supported by measurement, end-to-end task completion time for retail information access, **without sacrificing correctness** (Faster · Easier · Reliable). Inventory/Sales data is the initial domain; Replenishment Review is a multi-source demo case, not the only outcome. This is a **proposed value hypothesis**, not proven ROI.
 
-**Data-source mapping:** In a real retailer, POS/OMS holds sales transactions, ERP/WMS holds stock/reservations, and PIM/product documents hold identity/specifications. The current local application models these using synthetic SQLite tables and local product files. No live POS/WMS integration or inventory freshness SLA exists.
+**Data-source mapping:** Fiction Retail is an **independent synthetic enterprise** supplying the pinned unified SQLite business snapshot, source Markdown documents and manifest. RetailIQ consumes this locally for Fiction M0; it does not generate the enterprise dataset. The still-running chat demo uses its separate legacy SQLite fixture and local product files. Neither is a live POS/WMS feed or proof of a freshness SLA.
 
 **Tool/agent selection rule:** for a simple question route to one trusted domain function; for cross-source questions, orchestrate reviewed sales/inventory tools, preserve SKU identity and verify evidence. A deterministic tool executor is not automatically an autonomous agent; no unchecked LLM-generated SQL.
 
+
+## Runtime execution paths
+
+### Fiction M0 + UC-01 first bounded LangGraph path
+
+```mermaid
+flowchart LR
+ FDB[(Pinned local Fiction SQLite)] --> Store[FictionStore.open: release and integrity checks]
+ Manifest[Pinned manifest] --> Store
+ Store --> Read[Read-only scoped domain facts and evidence]
+ Read --> Case[UC-01 trusted case and effective policy evidence]
+ User[Explicit CASE-ID in full-mode chat] --> Graph[Existing LangGraph router]
+ Graph --> CaseAgent[UC-01 vetted read-only capability]
+ CaseAgent --> Case
+ Case --> Reply[Verified bounded answer and source refs]
+```
+
+### Existing legacy chat route (not Fiction)
 
 ```mermaid
 flowchart LR
@@ -24,24 +44,26 @@ flowchart LR
  RAG -.-> Eval[RAGAS Evaluation]
 ```
 
-**Scope of the diagram:** This shows the chat/assistant path only. The workspace also exposes a **separate** deterministic workflow API at `retailiq/api/workflows.py`; events from `retailiq/domain/workflow_demo.py` drive a graph *view* and should not be conflated with executed LangGraph agent invocations. See [Basic & Detail Design](DESIGN.md) for both paths.
+**Scope of the legacy diagram:** This shows the existing legacy chat/assistant path only. The workspace also exposes a **separate** deterministic workflow API at `retailiq/api/workflows.py`; events from `retailiq/domain/workflow_demo.py` drive a graph *view* and should not be conflated with executed LangGraph agent invocations. See [Basic & Detail Design](DESIGN.md) for both paths.
 
 ## Justifications
 - **Python 3.12**: compact implementation for team/course.
 - **LangGraph**: typed state, conditional route, explicit nodes. LangChain `@tool` wraps vetted parameterized SQL.
 - **LangChain ChatOpenAI/OpenAIEmbeddings + Chroma**: one OpenAI-compatible base URL and key, with separate chat and embedding model identifiers; full-mode product vector RAG.
-- **SQLite**: reproducible stock/order sales; read-only query connection, aggregate in SQL.
+- **SQLite**: legacy chat analytics and a **separate** manifest-verified Fiction M0 read-only store. The Fiction SQLite binary is local and excluded from ordinary Git.
 - **FastAPI + legacy HTML/JS plus React 19/TypeScript/Vite**: the original UI remains at `/`; the merged Product Workspace at `/workspace` visualizes event-grounded execution graphs. Its graph renderer is a view of recorded events, not an orchestration engine.
 - **LangSmith**: enable traces via API key in full mode; telemetry is hosted even though application runs local.
 - **RAGAS**: faithfulness and answer relevancy on product RAG with LLM judge in separate evaluation script.
 - **pytest**: deterministic SQL and business calculation tests distinct from RAGAS.
 
 ## Contracts
-`stock`: on_hand, reserved, available=on_hand-reserved, updated_at per location. `revenue`: completed orders only, line-level discount applied, before returns. `top`: monthly units sold. `product`: source-addressable multi-format knowledge documents; never use those docs for real-time stock.
+**Legacy chat semantics only** (not Fiction): `stock`: on_hand, reserved, available=on_hand-reserved, updated_at per location. `revenue`: completed orders only, line-level discount applied, before returns. `top`: monthly units sold. `product`: source-addressable multi-format knowledge documents; never use those docs for real-time stock.
 
-## Logical tools and execution responsibilities
+**Fiction M0 semantics:** canonical product UUID/`FR-` SKU, USD, delivered-order metrics and case-cutoff-aware warehouse evidence. The Fiction store and target UC-01 use [Fiction contracts](FICTION_RUNTIME.md), not legacy `EL-###`/VND rules.
 
-The names below describe **proposed domain contracts**, not newly implemented public API names. Existing code paths remain the source of truth. Do not rename working tools just to match a diagram.
+## Existing legacy chat tools and execution responsibilities
+
+The table below describes **legacy chat** logical contracts, not Fiction UC-01 or newly implemented public API names. Existing code paths remain the source of truth. Do not rename working tools just to match a diagram.
 
 | Logical tool capability | Existing local implementation | Responsible execution path | Guardrail |
 |---|---|---|---|
@@ -62,16 +84,16 @@ The names below describe **proposed domain contracts**, not newly implemented pu
 - **Handoff:** Sales → Inventory follow-up; flexible referents like “the first one” / “what about Hanoi?” are **not yet fully implemented or accepted**.
 - **Business measurement:** compare **end-to-end task time**, **interaction steps**, **post-task ease rating** and **answer correctness** against equivalent human-operated tools. Current synthetic pilot lacks a structured ease-of-use measurement, and there is no real retailer baseline.
 
-## Implementation maturity (reviewed 2026-10-31)
+## Legacy implementation maturity (snapshot reviewed 2026-10-31)
 
 - **Data reliability:** Local implementations include freshness policy, semantic KPI layer, real local MCP stdio Inventory/Order, scoped consented memory and hybrid product retrieval. Live freshness, cross-session authenticated identity and provider retrieval-quality acceptance are still open.
 - **Governance:** Approval, location scope and KPI alerts are primarily deterministic simulations; role selection is not authentication, and Langfuse/DeepEval live gates remain open.
 - **Multi-agent workflow simulations:** Five named specialist roles, stock allocation, verification and manager gate are exercised in a local workflow; this does **not** establish five autonomous agents, interoperable A2A, secure approvals or real order mutations.
 
-The [Capability Acceptance Ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md) owns current capability gaps. Dated historical assessments are retained in the [documentation archive](archive/README.md), not as a competing architecture/status source.
+The [Capability Acceptance Ledger](CAPABILITY_LEDGER.md) owns current capability gaps. Dated historical assessments are retained in the [documentation archive](archive/README.md), not as a competing architecture/status source.
 
 ## Limitations
-The 2026-10-29 local full-mode run has scripted LangGraph/Chroma evidence, a three-question RAGAS report, and inspected remote LangSmith traces (see `docs/weeks/week-01/EVIDENCE.md`). Re-run on the demo machine; this does not establish open-ended question reliability or production readiness. No unverified capability is claimed as PASS. No production-grade authentication or authorized order/pricing mutation is established.
+The 2026-10-29 local full-mode run has scripted LangGraph/Chroma evidence, a three-question RAGAS report, and inspected remote LangSmith traces (see `docs/archive/2026-11-03/week-01/EVIDENCE.md`). Re-run on the demo machine; this does not establish open-ended question reliability or production readiness. No unverified capability is claimed as PASS. No production-grade authentication or authorized order/pricing mutation is established.
 
 ## Current code and quality boundaries
 
@@ -79,10 +101,11 @@ The 2026-10-29 local full-mode run has scripted LangGraph/Chroma evidence, a thr
 |---|---|
 | Public chat/API | `retailiq/assistant.py`, `retailiq/api/`; localhost application |
 | Agent orchestration | `retailiq/orchestration/week1_graph.py`; router, explicit transfer, scoped supervisor |
-| KPI/SQL truth | `retailiq/domain/analytics.py`, `retailiq/queries.py`; vetted read-only queries, no arbitrary generated SQL |
+| Legacy chat KPI/SQL truth | `retailiq/domain/analytics.py`, `retailiq/queries.py`; vetted read-only queries, no arbitrary generated SQL |
+| Fiction M0 business reads | `retailiq/domain/fiction.py`, `retailiq/infrastructure/sqlite.py`, `data/fiction/manifest.json`; release-verified, read-only, not chat-connected |
 | Product document retrieval | `retailiq/rag/`, `retailiq/retrieval.py`; citation-grounded facts, not stock truth |
 | User-facing reply | `retailiq/reply.py`, `web/index.html`; display and graph activity separate from source verification |
 | Observability | `retailiq/observability.py` local JSONL/SSE; remote LangSmith is a different evidence source |
 | Engineering quality | Source checks, unit/API, mocked compiled-graph, provider-backed tests; fail closed on invalid evidence |
 
-**Permanent quality rules:** reviewed business invariants, parameter validation, idempotent read-only tools, safe missing-data behavior, bounded context/retries, secret-safe logs, explicit test modes and source provenance. Preserve details of earlier patch work in [archive](archive/README.md), not in new top-level technical notes. Implementation-aligned Basic/Detail Design is in [Design](DESIGN.md). Historical pattern teaching is in [Week 1 DESIGN](weeks/week-01/DESIGN.md), while dated verification is in [EVIDENCE](weeks/week-01/EVIDENCE.md).
+**Permanent quality rules:** reviewed business invariants, parameter validation, idempotent read-only tools, safe missing-data behavior, bounded context/retries, secret-safe logs, explicit test modes and source provenance. Preserve details of earlier patch work in [archive](archive/README.md), not in new top-level technical notes. Implementation-aligned Basic/Detail Design is in [Design](DESIGN.md). Historical pattern teaching is in [Week 1 DESIGN](archive/2026-11-03/week-01/DESIGN.md), while dated verification is in [EVIDENCE](archive/2026-11-03/week-01/EVIDENCE.md).

@@ -1,6 +1,6 @@
 # Week 1 — FDE, harness and agent patterns
 
-**Purpose:** explain the implemented decisions rather than simply enumerate tools. Source of truth for code is [ARCHITECTURE](../../ARCHITECTURE.md) and [DATA/API](../../DATA_API.md); evidence is [EVIDENCE](EVIDENCE.md).
+**Purpose:** explain the implemented decisions rather than simply enumerate tools. Source of truth for code is [ARCHITECTURE](../../../ARCHITECTURE.md) and [DATA/API](../../../DATA_API.md); evidence is [EVIDENCE](EVIDENCE.md).
 
 ## Problem-first / Forward Deployed Engineering (FDE)
 
@@ -56,6 +56,6 @@ A simple question can be routed once to one specialist; a compound question may 
 
 **Local logs/SSE** give in-app execution events; **LangSmith** is the separate remote nested execution trace. **RAGAS** evaluates a sample of grounded product answers and is not a substitute for SQL golden cases or agent routing tests.
 
-Model cost includes each router/answer LLM call, embeddings, evaluation, retries, hosting and support. The illustrative ROI scenario assumes 1,000 questions/month, 60% helped, 4 minutes saved each, 150,000 VND/hour, 1.2M VND monthly running cost and 18M VND initial build. Gross 6M/month, net 4.8M/month, simple payback 3.75 months **if assumptions held**. These are not observed savings or provider billing. The 10% benefited sensitivity yields negative monthly net; no payback. [Original calculation and formulas](../../archive/2026-10-30/legacy/08_Agent_Cost_ROI.md).
+Model cost includes each router/answer LLM call, embeddings, evaluation, retries, hosting and support. The illustrative ROI scenario assumes 1,000 questions/month, 60% helped, 4 minutes saved each, 150,000 VND/hour, 1.2M VND monthly running cost and 18M VND initial build. Gross 6M/month, net 4.8M/month, simple payback 3.75 months **if assumptions held**. These are not observed savings or provider billing. The 10% benefited sensitivity yields negative monthly net; no payback. [Original calculation and formulas](../../2026-10-30/legacy/08_Agent_Cost_ROI.md).
 
 **Main risks:** wrong routing, mis-scoped time/SKU, stale data, irrelevant RAG sources, incomplete follow-ups, synthetic bias and missing production auth. Week 2 freshness/MCP, Week 3 approval/governance and Week 4 five agents remain future scope.

@@ -2,7 +2,7 @@
 
 **Status:** requirements baseline, **not** a completion report. This consolidates the supplied AI Flezi Retail/E-commerce assignment and RetailIQ's business objectives. The course brief in the repository is a team summary, not a verbatim certified instructor transcript; confirm any disputed wording against the original handout.
 
-This file describes **what must be supported**. The [roadmap](COURSE_PLAN.md) owns the original four-week teaching sequence. The [capability ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md) tracks implementation/evidence and may contain historical statuses.
+This file describes **what must be supported**, not what is already implemented. Fiction M0 is a read-only SQL foundation, not completed Fiction chat/Agent/MCP/RAG integration (see [Fiction Runtime](FICTION_RUNTIME.md)). The [roadmap](COURSE_PLAN.md) owns the original four-week teaching sequence. The [capability ledger](CAPABILITY_LEDGER.md) tracks implementation/evidence and may contain historical statuses.
 
 ## Business requirements
 
@@ -51,7 +51,7 @@ Course-required technologies and five specialist roles remain required even wher
 
 ### Requirement-to-course-ledger crosswalk
 
-The `CAP-*` IDs are **stable product requirement identifiers**. The existing `W*-*` identifiers in the [Capability Ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md) preserve the original course acceptance vocabulary. This is a **navigation mapping only**: it does not assign tasks/owners, assert feature completion or replace the ledger's evidence status.
+The `CAP-*` IDs are **stable product requirement identifiers**. The existing `W*-*` identifiers in the [Capability Ledger](CAPABILITY_LEDGER.md) preserve the original course acceptance vocabulary. This is a **navigation mapping only**: it does not assign tasks/owners, assert feature completion or replace the ledger's evidence status.
 
 | Product requirement | Existing course acceptance ID(s) |
 |---|---|
@@ -78,8 +78,8 @@ The `CAP-*` IDs are **stable product requirement identifiers**. The existing `W*
 Representative acceptance must cover **single-source** queries, **multi-source** joins, **conversational follow-ups**, **data errors**, **retrieval grounding**, **source freshness**, **MCP transport**, **approval/access controls** and **multi-agent execution**. Check exact expected results and negative cases, not just whether an API returned success.
 
 - [Business questions and intended outcomes](PROJECT.md)
-- [Detailed behavioral scenarios](27_BEHAVIORAL_ACCEPTANCE_MATRIX.md)
-- [Implementation and evidence status (historical ledger)](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md)
+- [Detailed behavioral scenarios](SCENARIO_ACCEPTANCE.md)
+- [Implementation and evidence status (historical ledger)](CAPABILITY_LEDGER.md)
 - [Trusted KPI, data and API contracts](DATA_API.md)
 - [Original course milestones and planning sequence](COURSE_PLAN.md)
 

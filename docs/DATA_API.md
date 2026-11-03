@@ -1,16 +1,17 @@
 # RetailIQ — Data & API Contracts
 
-**Status (2026-11-03):** sections below document the **current legacy fixture/HTTP/MCP behavior** audited 2026-10-31. Fiction's merged M0 read-only data contract lives in [Fiction Runtime](FICTION_RUNTIME.md), the [Fiction source Data Contract](https://github.com/hungtvb/fiction-retail/blob/main/docs/DATA_CONTRACT.md) and [PR #33](https://github.com/hungtvb/retailIQ/pull/33). **Fiction Agent/MCP/RAG/HTTP cutover is not yet implemented**; do not apply the legacy `EL-###`/VND/`completed` metrics to Fiction's UUID/FR-SKU/USD/`delivered` records.
+**Status (2026-11-03):** sections below document the **current legacy fixture/HTTP/MCP behavior** audited 2026-10-31. Fiction's merged M0 read-only data contract lives in [Fiction Runtime](FICTION_RUNTIME.md), the [Fiction source Data Contract](https://github.com/hungtvb/fiction-retail/blob/main/docs/DATA_CONTRACT.md) and [PR #33](https://github.com/hungtvb/retailIQ/pull/33). **Only UC-01 explicit CASE-ID `/ask` in full mode has a Fiction LangGraph/SQL path** (#40; mock-provider fixture). Other Fiction Agent/MCP/RAG integration is not implemented; do not apply the legacy `EL-###`/VND/`completed` metrics to Fiction's UUID/FR-SKU/USD/`delivered` records.
 
-**Ownership:** this file defines data fields, KPI semantics, API shapes and limitations. [Architecture](ARCHITECTURE.md) explains component boundaries; [Design](DESIGN.md) explains request flows; [Testing & Scenarios](27_BEHAVIORAL_ACCEPTANCE_MATRIX.md) specifies oracles; [Capability Ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md) owns acceptance status. Do not duplicate implementation status here.
+**Ownership:** this file defines data fields, KPI semantics, API shapes and limitations. [Architecture](ARCHITECTURE.md) explains component boundaries; [Design](DESIGN.md) explains request flows; [Testing & Scenarios](SCENARIO_ACCEPTANCE.md) specifies oracles; [Capability Ledger](CAPABILITY_LEDGER.md) owns acceptance status. Do not duplicate implementation status here.
 
 ### New, accepted M0 Fiction foundation (not the legacy chat default)
 
 - `retailiq/domain/fiction.py::FictionStore.open(db_path, manifest_path)` uses an **explicit path** to the verified `data/fiction/fiction_retail.sqlite` release; `data/fiction/manifest.json` is pinned in Git, while the SQLite binary stays local. It exposes read-only `product`, `order`, `inventory`, `top_sellers`, `refund` and `fulfillment_case` facts with release hash, scope, evidence refs, time and limitations.
 - **Fiction source semantics:** `products.product_id` canonical, one generated `FR-` SKU, USD, `delivered` status, dated **case** observations (not the undated base inventory), and policies effective at the **case cutoff**. A candidate warehouse observation is not approval. For full field/temporal rules see [Fiction Runtime](FICTION_RUNTIME.md) and [UC-01 target Implementation Detail](implementation/UC-01-backorder.md).
-- These facts are **not yet wired** into `/ask`, LangGraph, legacy MCP or Chroma. The following table/schema/HTTP contracts are therefore **historical/current legacy runtime**, not Fiction acceptance.
+- **UC-01 first wired path:** `/ask` with exactly one canonical `CASE-UUID` and `RETAILIQ_MODE=full` routes via existing LangGraph to trusted `fiction.backorder.investigate` (#40). It reads `RETAILIQ_FICTION_DB` (default `data/fiction/fiction_retail.sqlite`), pinned `RETAILIQ_FICTION_MANIFEST` and `RETAILIQ_FICTION_KNOWLEDGE_ROOT` (default `data/fiction/knowledge`). The answer includes `disposition`, verified `findings/evidence_refs`, `limitations`, `source`, exact `as_of` cutoff and `approval_status=NOT_REQUESTED`; source records reflect historical observations, never live inventory or transfer approval. Fixture compiled-graph tests exist; real-provider acceptance is pending.
+- **All other chat/MCP/RAG paths** in the following table still use historical/current legacy semantics; this first UC-01 route does **not** establish a general Fiction cutover.
 
-## 1. Data authority and storage
+## 1. Data authority and storage — existing legacy chat
 
 RetailIQ uses **synthetic** local data rather than live POS/OMS, ERP/WMS or PIM connections. These real-world systems are *conceptual ownership*, not deployed integrations.
 
@@ -71,7 +72,7 @@ Seed fixture: 10 catalog SKUs, three locations and 120 generated orders. This is
 
 The sessions API returns **at most 200 newest messages** in display order and flags `messages_truncated`; older rows can still exist. A saved `execution_traces` record may be absent for a legacy or non-streamed turn; absence is not proof of an empty execution. The preference store accepts only validated attributes and requires explicit consent.
 
-## 3. Canonical KPIs and time semantics
+## 3. Legacy chat KPIs and time semantics
 
 **Business source of truth:** `retailiq/domain/analytics.py` (calculations and validation); `domain/semantic.py` (named metric definitions, freshness *targets*). All monetary results are integer **VND**, not float currency estimates.
 
@@ -174,6 +175,6 @@ The LangChain MCP adapter is `retailiq/mcp_adapter.py`; it validates decoded too
 - **KPI:** update `domain.analytics.py` and `domain.semantic.py` together when meaning changes; test month boundaries, SKU/channel scope, invalid source data and negative cases with independent SQL/data oracles.
 - **API:** verify router methods, request bounds, response fields and status/errors against `api/http.py`, `api/sessions.py`, `api/workflows.py`, `api/roi.py`, `api/logs.py`. Compare the generated OpenAPI contract when the app actually runs.
 - **Freshness/access:** do not equate route selection, synthetic timestamp checks, localhost-only middleware or caller-provided role with live freshness, RBAC or authenticated authorization.
-- **Evidence:** execution results live in dated CI artifacts/reports, not this contract. Record test SHA/mode/expected/observed and link them from the [capability ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md). Keep generated reports and secrets outside Git.
+- **Evidence:** execution results live in dated CI artifacts/reports, not this contract. Record test SHA/mode/expected/observed and link them from the [capability ledger](CAPABILITY_LEDGER.md). Keep generated reports and secrets outside Git.
 
 **Documentation-only audit scope:** this description was checked against repository source. No live API request, provider test, production security assessment or business productivity benchmark is implied by the documentation update.
