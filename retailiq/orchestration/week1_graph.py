@@ -57,6 +57,8 @@ class State(TypedDict, total=False):
     source: dict
     capability_plan: dict
     temporal: dict
+    verified_case_context: dict | None
+    uc01_followup_kind: str | None
 
 
 def classify(question: str) -> str:
@@ -187,6 +189,22 @@ def route(state: State):
     class Route(BaseModel):
         intent: Literal['stock', 'revenue', 'top', 'product', 'decision', 'general', 'latest', 'backorder']
 
+    uc01_kind = _uc01_followup_kind(state['question'])
+    if uc01_kind == 'ambiguous_warehouse':
+        raise UnresolvedCaseReference('Specify the warehouse ID; its display position is not verified')
+    if uc01_kind is not None:
+        committed = state.get('verified_case_context')
+        if not isinstance(committed, dict):
+            raise UnresolvedCaseReference('Specify an explicit CASE-ID; no committed case reference is available')
+        # This binding was loaded from the latest committed assistant turn in
+        # the current session, not from graph checkpoints or model text.
+        log_event('context.case_resolved', intent='backorder', execution_mode='full',
+                  source='committed_session_case')
+        return Command(update={
+            'effective_question': state['question'], 'intent': 'backorder',
+            'route_fallback': False, 'skill': '', 'uc01_followup_kind': uc01_kind,
+        }, goto='backorder_agent')
+
     category = followup_intent(state['question'], state.get('history', []))
     # Do not send malformed/ambiguous case IDs to a paid model or business tool.
     if category == 'backorder':
@@ -316,6 +334,36 @@ class InvalidCaseId(ValueError):
     """Invalid/ambiguous UC-01 input, not a provider or data-source failure."""
 
 
+
+
+class UnresolvedCaseReference(InvalidCaseId):
+    """Case/warehouse reference requires clarification or current-source review."""
+
+
+def _uc01_followup_kind(question: str) -> str | None:
+    """Small conservative UC-01 anaphora grammar, never a policy/entity oracle."""
+    q = ' '.join(question.casefold().split())
+    if len(q) > 160:
+        return None
+    # A numbered warehouse has no authority unless its displayed order was
+    # committed; no such ordering is persisted in this first T03 slice.
+    if re.search(r'kho\s+(?:thứ\s*(?:hai|2)|số\s*2)|(?:second|2nd)\s+warehouse', q):
+        return 'ambiguous_warehouse'
+    if 'case-' in q:
+        return None  # Explicit CASE-ID uses the original reviewed T02 route.
+    if any(term in q for term in ('refund', 'return', 'hoàn tiền', 'đổi trả',
+                                  'bảo hành', 'pricing', 'chính sách giá')):
+        return None  # A topic switch must not inherit a previous case.
+    if (('chính sách' in q and any(x in q for x in ('áp dụng', 'nào', 'đó')))
+            or ('policy' in q and any(x in q for x in ('appl', 'which', 'warehouse', 'transfer')))):
+        return 'policy'
+    if any(x in q for x in ('kho khác', 'còn kho', 'kho nào khác',
+                           'other warehouse', 'another warehouse',
+                           'alternative warehouse', 'other warehouses')):
+        return 'alternatives'
+    return None
+
+
 def _case_id_for_uc01(question: str) -> str:
     matches = _CASE_ID.findall(question)
     if len(matches) != 1 or question.casefold().count("case-") != 1:
@@ -345,7 +393,14 @@ def backorder_agent(state: State):
     from retailiq.domain.backorder import investigate_backorder
     from retailiq.language import is_vietnamese
 
-    case_id = _case_id_for_uc01(state['question'])
+    followup = state.get('uc01_followup_kind')
+    committed = state.get('verified_case_context') if followup else None
+    if followup:
+        if not isinstance(committed, dict) or not isinstance(committed.get('case_id'), str):
+            raise UnresolvedCaseReference('Verified CASE-ID is required for this follow-up')
+        case_id = _case_id_for_uc01(committed['case_id'])
+    else:
+        case_id = _case_id_for_uc01(state['question'])
     db, manifest, knowledge = _uc01_inputs()
     log_event('capability.selected', agent='backorder_agent',
               capability=_BACKORDER_CAPABILITY, execution_mode='full')
@@ -355,6 +410,13 @@ def backorder_agent(state: State):
             _fiction_store_cached(db, manifest), case_id, knowledge_root=knowledge
         )
 
+    if followup and (investigation['source']['id'] != committed['source_id']
+                     or investigation['source']['version'] != committed['source_version']
+                     or investigation['source']['sha256'] != committed['source_sha256']
+                     or investigation['temporal']['evidence_cutoff'] != committed['cutoff']
+                     or f"fulfillment_cases/{case_id}" != committed['case_ref']):
+        raise UnresolvedCaseReference(
+            'Historical case source/cutoff changed; please investigate the CASE-ID again')
     data = investigation['data']
     candidates = data['evidence_candidates']
     cutoff = data['cutoff']
@@ -370,7 +432,14 @@ def backorder_agent(state: State):
          'available_at_observation': item['available_at_observation']}
         for item in candidates
     ]
-    if 'POLICY_CONFLICT' in reasons:
+    if followup == 'policy' and data['policy'] and data['policy']['applicable_at_cutoff']:
+        policy = data['policy']
+        answer = (f"Case {case_id} tại {cutoff}: chính sách {policy['policy_id']} có hiệu lực "
+                  "và yêu cầu Manager phê duyệt đề xuất chuyển kho; chưa có chuyển kho nào được thực hiện."
+                  if vi else
+                  f"Case {case_id} at {cutoff}: policy {policy['policy_id']} applies and "
+                  "requires Manager review for a transfer proposal; no transfer has occurred.")
+    elif 'POLICY_CONFLICT' in reasons:
         answer = (f'Case {case_id} tại {cutoff}: các chính sách kho mâu thuẫn; cần xác minh quyền áp dụng. '
                   'Không có đề xuất chuyển kho được phê duyệt.'
                   if vi else
@@ -411,6 +480,13 @@ def backorder_agent(state: State):
                            f"warehouse_eligibility/{case_id}/{r['warehouse_id']}"] + policy_ref}
         for r in records
     ]
+    if followup == 'policy' and policy_ref:
+        findings = [{
+            'text': f"Warehouse policy {data['policy']['policy_id']} applies at {cutoff}; "
+                    "Manager approval required for a proposed transfer",
+            'evidence_refs': [
+                f"fulfillment_policies/{data['policy']['policy_id']}", *policy_ref],
+        }]
     if not findings:
         findings = [{'text': 'No eligible alternative in evaluated case records'
                      if disposition == 'SUPPORTED' else 'Transfer feasibility is not verified',
@@ -425,7 +501,10 @@ def backorder_agent(state: State):
         'reason_codes': reasons, 'source': investigation['source'],
         'temporal': investigation['temporal'],
         'capability_plan': {'kind': 'fixed_uc01', 'capabilities': [_BACKORDER_CAPABILITY],
-                            'case_id': case_id, 'source': 'validated_explicit_case_id'},
+                            'case_id': case_id,
+                            'source': ('committed_session_case' if followup
+                                       else 'validated_explicit_case_id'),
+                            'source_request_id': committed.get('source_request_id') if followup else None},
     }, goto='retailiq_reply')
 
 def retryable_read_failure(error: Exception) -> bool:
@@ -599,7 +678,7 @@ def validate_graph_result(result: dict) -> dict:
 
 
 def run(q: str, *, history: list[dict] | None = None, active_agent: str = '',
-        memory: dict | None = None) -> dict:
+        memory: dict | None = None, verified_case_context: dict | None = None) -> dict:
     configure_langsmith()
     sid = session_id()
     rid = request_id()
@@ -618,6 +697,13 @@ def run(q: str, *, history: list[dict] | None = None, active_agent: str = '',
         'answer': '', 'records': [], 'contexts': [],
         'handoff': None, 'subagents': [], 'route_fallback': False,
         'customer_memory': memory if memory and memory.get('consent') else {},
+        'verified_case_context': verified_case_context,
+        'uc01_followup_kind': None,
+        # Prevent the previous checkpoint's evidence from becoming this
+        # request's answer if the subsequent execution fails or switches topic.
+        'disposition': None, 'evidence_refs': [], 'findings': [],
+        'source': {}, 'temporal': {}, 'capability_plan': {},
+        'reason_codes': [], 'limitations': [], 'approval_status': None,
     }
     graph = _session_graph() if sid else build_graph()
     if os.getenv('RETAILIQ_NATIVE_GRAPH_EVENTS', 'false').lower() in ('1', 'true', 'yes'):
