@@ -9,7 +9,7 @@ Use this index to load **only the documentation needed for the task**.
 | Course milestones and original planning sequence | [Roadmap / Course Plan](COURSE_PLAN.md) |
 | System design and implementation boundaries | [Architecture](ARCHITECTURE.md) |
 | Request paths, component behavior and detailed execution boundaries | [Basic & Detail Design](DESIGN.md) |
-| Implementation Detail for an approved vertical slice | [UC-01 Backorder Investigation](implementation/UC-01-backorder.md) (use its reviewed/merged revision) (others added only when scheduled) |
+| Use-case implementation details (design-first) | [UC-01 Backorder Investigation](implementation/UC-01-backorder.md) (approved and merged) · [UC-02 Refund Reconciliation](implementation/UC-02-refund-reconciliation.md) (**proposal — not approved until merged**) |
 | KPI definitions, data and API contracts | [Data & API](DATA_API.md) |
 | Testing approach, scenarios and reproducible commands | [Testing & Scenario Acceptance](27_BEHAVIORAL_ACCEPTANCE_MATRIX.md) |
 | Capability-level acceptance status and missing evidence | [Capability Ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md) |
