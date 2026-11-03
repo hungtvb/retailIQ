@@ -505,3 +505,35 @@ def test_uc01_t02_live_provider_route_with_verified_sql_fixture(monkeypatch, fic
     finally:
         graph.close_checkpoint_graph()
         graph._fiction_store_cached.cache_clear()
+
+
+
+def test_uc01_t02_partial_candidate_finding_without_applicable_policy(monkeypatch, fiction, tmp_path):
+    """Missing/conflicting policy must not crash graph or imply approved transfer."""
+    from retailiq.orchestration import week1_graph as graph
+    pytest.importorskip("langgraph")
+    path, manifest, store = fiction
+    root = _copy_policy(tmp_path)
+    add_snapshot(path, "candidate", W2, "2026-10-16T11:00:00Z",
+                 "2026-10-16T11:05:00Z")
+    store = reseal(path, manifest)
+    monkeypatch.setattr(graph, "_uc01_inputs", lambda: ("fixture-db", "fixture-manifest", str(root)))
+    monkeypatch.setattr(graph, "_fiction_store_cached", lambda *_: store)
+    (root / "policies/FR-WH-2026-10-04.md").unlink()
+
+    partial = graph.backorder_agent({"question": f"Investigate {C1}"}).update
+    assert partial["disposition"] == "INSUFFICIENT_EVIDENCE"
+    assert partial["reason_codes"] == ["POLICY_DOCUMENT_MISSING"]
+    assert partial["approval_status"] == "NOT_REQUESTED"
+    assert "knowledge_documents/" not in str(partial["findings"])
+
+    _copy_policy(tmp_path)
+    with sqlite3.connect(path) as conn:
+        conn.execute("INSERT INTO fulfillment_policies VALUES (?,?,?,?)",
+                     ("FR-WH-UNREVIEWED", "Conflicting authority", 1, "fixture_only"))
+    store = reseal(path, manifest)
+    conflicting = graph.backorder_agent({"question": f"Investigate {C1}"}).update
+    assert conflicting["disposition"] == "NEEDS_REVIEW"
+    assert conflicting["reason_codes"] == ["POLICY_CONFLICT"]
+    assert conflicting["approval_status"] == "NOT_REQUESTED"
+    assert "knowledge_documents/" not in str(conflicting["findings"])
