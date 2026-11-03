@@ -640,6 +640,15 @@ def test_uc01_t03_followup_uses_committed_case_even_without_snapshots(monkeypatc
     from retailiq.infrastructure.sessions import last_committed_case_binding
 
     graph, model_calls, store = _uc01_context_client(monkeypatch, tmp_path, fiction)
+    from retailiq.domain import backorder as backorder_domain
+    actual = backorder_domain.investigate_backorder
+    tool_case_ids = []
+
+    def tracked_tool(store, case_id, *, knowledge_root):
+        tool_case_ids.append(case_id)
+        return actual(store, case_id, knowledge_root=knowledge_root)
+
+    monkeypatch.setattr(backorder_domain, "investigate_backorder", tracked_tool)
     try:
         with TestClient(app) as client:
             sid = client.post("/api/sessions", json={}).json()["id"]
@@ -667,6 +676,7 @@ def test_uc01_t03_followup_uses_committed_case_even_without_snapshots(monkeypatc
             assert any("knowledge_documents/" in ref
                        for item in result["findings"] for ref in item["evidence_refs"])
             assert len(model_calls) == 1  # The follow-up cannot relabel the case.
+            assert tool_case_ids == [C1, C1]  # Real reviewed domain invocation twice.
             assert len(client.get(f"/api/sessions/{sid}").json()["messages"]) == 4
     finally:
         graph.close_checkpoint_graph()
@@ -790,6 +800,50 @@ def test_uc01_t03_failed_turn_checkpoint_is_not_committed_context(monkeypatch, f
                 "question": "Chính sách nào áp dụng?"})
             assert followup.status_code == 422
             assert client.get(f"/api/sessions/{sid}").json()["messages"] == []
+    finally:
+        graph.close_checkpoint_graph()
+        graph._fiction_store_cached.cache_clear()
+
+
+
+def test_uc01_t03_explicit_other_case_replaces_committed_context(monkeypatch, fiction, tmp_path):
+    """A different explicit CASE-ID is authoritative; next follow-up inherits it."""
+    from fastapi.testclient import TestClient
+    from retailiq.api import app
+    from retailiq.infrastructure.sessions import last_committed_case_binding
+
+    second_case = "CASE-99999999-9999-4999-8999-999999999999"
+    path, manifest, _ = fiction
+    with sqlite3.connect(path) as conn:
+        conn.execute("""INSERT INTO fulfillment_cases
+            SELECT ?, order_id, order_item_id, product_id, request_qty,
+                   assigned_warehouse_id, case_date
+            FROM fulfillment_cases WHERE case_id=?""", (second_case, C1))
+        conn.execute("INSERT INTO operational_events VALUES (?,?,?,?,?)",
+                     ("event-for-second", second_case, "evidence_cutoff_reached",
+                      "2026-10-17T12:00:00Z", "2026-10-17T12:01:00Z"))
+        conn.execute("""INSERT INTO warehouse_eligibility
+            SELECT ?, warehouse_id, eligible, reason_code FROM warehouse_eligibility
+            WHERE case_id=?""", (second_case, C1))
+    store = reseal(path, manifest)
+    graph, _, _ = _uc01_context_client(monkeypatch, tmp_path, fiction)
+    try:
+        with TestClient(app) as client:
+            sid = client.post("/api/sessions", json={}).json()["id"]
+            assert client.post("/ask", json={"session_id": sid,
+                "question": f"Investigate backorder {C1}"}).status_code == 200
+            explicit = client.post("/ask", json={"session_id": sid,
+                "question": f"Investigate backorder {second_case}"})
+            assert explicit.status_code == 200, explicit.text
+            assert explicit.json()["capability_plan"]["case_id"] == second_case
+            assert explicit.json()["capability_plan"]["source"] == "validated_explicit_case_id"
+            assert last_committed_case_binding(sid)["case_id"] == second_case
+
+            followup = client.post("/ask", json={"session_id": sid,
+                "question": "Which warehouse policy applies?"})
+            assert followup.status_code == 200, followup.text
+            assert followup.json()["capability_plan"]["case_id"] == second_case
+            assert followup.json()["as_of"] == "2026-10-17T12:00:00Z"
     finally:
         graph.close_checkpoint_graph()
         graph._fiction_store_cached.cache_clear()
