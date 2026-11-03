@@ -13,6 +13,7 @@ on:
         options:
           - smoke
           - critical
+          - uc01
 
 permissions:
   contents: read
@@ -53,7 +54,7 @@ jobs:
           LIVE_SUITE: ${{ inputs.suite }}
         run: |
           case "$LIVE_SUITE" in
-            smoke|critical) ;;
+            smoke|critical|uc01) ;;
             *) echo "::error::Unsupported live test suite"; exit 1 ;;
           esac
           if [[ -z "${OPENAI_BASE_URL:-}" || -z "${OPENAI_API_KEY:-}" ]]; then
@@ -111,6 +112,12 @@ jobs:
           python -m scripts.audit_queries --mode full \
             --ids SALES-05,CROSS-01,CTX-04,CAT-01,SALES-12,RAG-01 \
             --confirm-live --strict --out data/query_audit_report.json
+
+      - name: Verify real LLM UC-01 routing with pinned source-checked SQLite fixture
+        if: ${{ inputs.suite == 'uc01' }}
+        env:
+          RETAILIQ_UC01_LIVE: 'true'
+        run: python -m pytest -q -rs tests/test_fiction_unified.py -k test_uc01_t02_live_provider_route_with_verified_sql_fixture
 
       - name: Publish reproducible run evidence (no credentials)
         if: always()

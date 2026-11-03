@@ -4,6 +4,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from retailiq.assistant import ask
+from retailiq.orchestration.week1_graph import InvalidCaseId
 from retailiq.rag.indexing import IndexNotReadyError
 from retailiq.infrastructure.sessions import history, add_turn, get_session, session_mutation, SessionBusyError, save_execution_trace, get_customer_memory
 from pathlib import Path
@@ -118,6 +119,10 @@ def _missing_module_message(error: ModuleNotFoundError) -> str:
             'in the same Python environment used to start RetailIQ, then restart the server.')
 
 
+class _SessionNotFound(KeyError):
+    """Only a verified missing chat session maps to HTTP 404."""
+
+
 class AskBody(BaseModel):
     question: str = Field(min_length=3, max_length=500)
     session_id: str | None = Field(default=None, min_length=36, max_length=36)
@@ -146,7 +151,7 @@ def _perform_turn(data: AskBody) -> dict:
         if data.session_id is not None:
             current = get_session(data.session_id, include_messages=False)
             if current is None:
-                raise KeyError('Session not found')
+                raise _SessionNotFound('Session not found')
         with observed('chat.turn', execution_mode='full' if os.getenv('RETAILIQ_MODE') == 'full' else 'offline'):
             if data.session_id is None:
                 result = ask(data.question)
@@ -173,7 +178,9 @@ def answer(data: AskBody):
     with bind_context(session=data.session_id):
         try:
             return _perform_turn(data)
-        except KeyError:
+        except InvalidCaseId as error:
+            raise HTTPException(status_code=422, detail=str(error)) from None
+        except _SessionNotFound:
             raise HTTPException(status_code=404, detail='Session not found') from None
         except SessionBusyError:
             raise HTTPException(status_code=409, detail='Session is processing another request') from None
@@ -255,6 +262,9 @@ def stream_answer(data: AskBody, request: Request):
                             # business answer; history will truthfully say no trace.
                             log_exception('chat.trace_persist_failed', error)
                     enqueue_final('result', result)
+                except InvalidCaseId as error:
+                    enqueue_final('error', {'code': 'invalid_case_id',
+                                           'message': str(error), 'request_id': rid})
                 except SessionBusyError:
                     enqueue_final('error', {'code': 'session_busy',
                                            'message': 'This chat is already processing another request.',

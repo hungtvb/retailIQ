@@ -5,6 +5,7 @@ fallback and never reported as evidence of full LangGraph execution.
 """
 from __future__ import annotations
 from typing import Literal, TypedDict
+from functools import lru_cache
 import os
 import re
 from contextlib import contextmanager
@@ -25,7 +26,7 @@ from retailiq.domain.analytics import catalog_product, newest_products
 AGENT_FOR_INTENT = {
     'stock': 'inventory_agent', 'revenue': 'sales_agent',
     'top': 'sales_agent', 'product': 'product_agent', 'decision': 'retail_supervisor',
-    'general': 'retailiq',
+    'general': 'retailiq', 'backorder': 'backorder_agent',
     'latest': 'product_agent',
 }
 
@@ -47,10 +48,23 @@ class State(TypedDict, total=False):
     route_fallback: bool
     query_plan: dict
     customer_memory: dict
+    disposition: str
+    evidence_refs: list[str]
+    findings: list[dict]
+    limitations: list[str]
+    approval_status: str
+    reason_codes: list[str]
+    source: dict
+    capability_plan: dict
+    temporal: dict
 
 
 def classify(question: str) -> str:
     q = question.casefold()
+    # CASE-ID is the required, explicit UC-01 fast-path selector; malformed IDs
+    # must reach the bounded validator rather than a generic LLM answer.
+    if 'case-' in q:
+        return 'backorder'
     if any(x in q for x in ('newest product', 'latest product', 'new products', 'sản phẩm mới nhất', 'sản phẩm mới', 'mẫu mới nhất')):
         return 'latest'
     sales = ('top seller', 'best seller', 'bán chạy', 'bestseller', 'selling most')
@@ -171,15 +185,19 @@ def route(state: State):
     from langgraph.types import Command
 
     class Route(BaseModel):
-        intent: Literal['stock', 'revenue', 'top', 'product', 'decision', 'general', 'latest']
+        intent: Literal['stock', 'revenue', 'top', 'product', 'decision', 'general', 'latest', 'backorder']
 
     category = followup_intent(state['question'], state.get('history', []))
+    # Do not send malformed/ambiguous case IDs to a paid model or business tool.
+    if category == 'backorder':
+        _case_id_for_uc01(state['question'])
     effective = resolve_followup(state['question'], state.get('history', []), category)
     fallback = False
     try:
         parsed = chat_model().with_structured_output(Route).invoke([
-            ('system', 'Route retail requests to stock/revenue/top/product/decision/latest/general. '
+            ('system', 'Route retail requests to stock/revenue/top/product/decision/latest/general/backorder. '
              'Use decision only when cross-analyzing bestsellers and inventory. '
+             'Use backorder for investigations with an explicit CASE-UUID. '
              'Never execute side effects.'),
             ('human', state['question']),
         ])
@@ -191,6 +209,11 @@ def route(state: State):
         elif proposed == category:
             # Other categories are enforced by deterministic business routing.
             category = proposed
+        else:
+            fallback = True
+            log_event('agent.router_disagreement', level='WARNING',
+                      proposed_intent=proposed, enforced_intent=category,
+                      execution_mode='full')
     except Exception as error:
         fallback = True
         log_event('agent.router_fallback', level='WARNING', error_type=type(error).__name__)
@@ -201,7 +224,8 @@ def route(state: State):
     if previous == 'sales_agent' and category == 'stock':
         target = 'sales_agent'
     log_event('agent.routed', agent=target, intent=category, route_fallback=fallback, execution_mode='full')
-    selected_skill = skill_for(category)
+    # UC-01 uses a vetted capability, not a legacy skill file.
+    selected_skill = '' if category == 'backorder' else skill_for(category)
     if selected_skill:
         # Routing/selection is not proof of loading or executing a skill.
         log_event('skill.selected', agent=AGENT_FOR_INTENT[category],
@@ -278,6 +302,132 @@ def retailiq(state: State):
                    goto='retailiq_reply')
 
 
+
+# UC-01 is the first explicitly bounded Fiction capability template.
+# The generic capability-based planner in issue #23 is still pending.
+_BACKORDER_CAPABILITY = "fiction.backorder.investigate"
+_CASE_ID = re.compile(
+    r"(?<![A-Za-z0-9])CASE-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}(?![A-Za-z0-9])",
+    re.IGNORECASE,
+)
+
+
+class InvalidCaseId(ValueError):
+    """Invalid/ambiguous UC-01 input, not a provider or data-source failure."""
+
+
+def _case_id_for_uc01(question: str) -> str:
+    matches = _CASE_ID.findall(question)
+    if len(matches) != 1 or question.casefold().count("case-") != 1:
+        raise InvalidCaseId("UC-01 requires exactly one explicit canonical CASE-ID")
+    return "CASE-" + matches[0][5:].lower()
+
+
+@lru_cache(maxsize=2)
+def _fiction_store_cached(db: str, manifest: str):
+    # Opening a store validates the full pinned release once. Its _q still
+    # rejects file replacement or unverified WAL sidecars on each business read.
+    from retailiq.domain.fiction import FictionStore
+    return FictionStore.open(db, manifest)
+
+
+def _uc01_inputs():
+    root = Path(__file__).resolve().parents[2]
+    db = os.getenv("RETAILIQ_FICTION_DB") or str(root / "data/fiction/fiction_retail.sqlite")
+    manifest = os.getenv("RETAILIQ_FICTION_MANIFEST") or str(root / "data/fiction/manifest.json")
+    knowledge = os.getenv("RETAILIQ_FICTION_KNOWLEDGE_ROOT") or str(root / "data/fiction/knowledge")
+    return db, manifest, knowledge
+
+
+def backorder_agent(state: State):
+    """Run one vetted read-only UC-01 capability; no policy or case LLM authority."""
+    from langgraph.types import Command
+    from retailiq.domain.backorder import investigate_backorder
+    from retailiq.language import is_vietnamese
+
+    case_id = _case_id_for_uc01(state['question'])
+    db, manifest, knowledge = _uc01_inputs()
+    log_event('capability.selected', agent='backorder_agent',
+              capability=_BACKORDER_CAPABILITY, execution_mode='full')
+    with observed('tool.sql', agent='backorder_agent',
+                  tool=_BACKORDER_CAPABILITY, execution_mode='full'):
+        investigation = investigate_backorder(
+            _fiction_store_cached(db, manifest), case_id, knowledge_root=knowledge
+        )
+
+    data = investigation['data']
+    candidates = data['evidence_candidates']
+    cutoff = data['cutoff']
+    reasons = investigation['reason_codes']
+    disposition = investigation['disposition']
+    vi = is_vietnamese(state['question'])
+    snapshots = {s['snapshot_id']: s for s in data['snapshots']}
+    records = [
+        {'case_id': case_id, 'cutoff': cutoff, 'snapshot_id': item['snapshot_id'],
+         'warehouse_id': item['warehouse_id'],
+         'observed_at': snapshots[item['snapshot_id']]['observed_at'],
+         'received_at': snapshots[item['snapshot_id']]['received_at'],
+         'available_at_observation': item['available_at_observation']}
+        for item in candidates
+    ]
+    if 'POLICY_CONFLICT' in reasons:
+        answer = (f'Case {case_id} tại {cutoff}: các chính sách kho mâu thuẫn; cần xác minh quyền áp dụng. '
+                  'Không có đề xuất chuyển kho được phê duyệt.'
+                  if vi else
+                  f'Case {case_id} at {cutoff}: warehouse policy authority conflicts. '
+                  'Policy review is required; no transfer is approved.')
+    elif disposition == 'NEEDS_REVIEW':
+        details = '; '.join(
+            f"{x['warehouse_id']} ({x['available_at_observation']})" for x in candidates[:5]
+        )
+        answer = (f'Case {case_id} tại {cutoff}: kho thay thế có bằng chứng đủ điều kiện: {details}. '
+                  'Đây chỉ là đề xuất, cần Manager phê duyệt; không phải tồn kho hiện tại.'
+                  if vi else
+                  f'Case {case_id} at {cutoff}: case-evidenced alternative warehouse candidates: {details}. '
+                  'Manager review is required; this is not current stock or an approved transfer.')
+    elif disposition == 'SUPPORTED':
+        answer = (f'Case {case_id} tại {cutoff}: không có ứng viên hợp lệ trong các kho thay thế '
+                  'đã được ghi nhận và đánh giá. Không thể suy ra toàn bộ kho của doanh nghiệp hết hàng.'
+                  if vi else
+                  f'Case {case_id} at {cutoff}: no eligible alternative among evaluated case-recorded '
+                  'warehouses. This does not prove company-wide unavailability.')
+    else:
+        answer = (f'Case {case_id} tại {cutoff}: chưa đủ bằng chứng để kết luận khả năng chuyển kho. '
+                  f'Thiếu/hạn chế: {", ".join(reasons)}. Không được suy ra tồn kho bằng 0.'
+                  if vi else
+                  f'Case {case_id} at {cutoff}: insufficient transfer evidence ({", ".join(reasons)}). '
+                  'Missing evidence is not zero available inventory.')
+
+    evidence_refs = investigation['record_refs'][:100]
+    # Case/stock findings remain usable even if a policy document is missing
+    # or in conflict; only attach policy lineage when its applicability passed.
+    policy_ref = ([f"knowledge_documents/{data['policy']['document_id']}"]
+                  if data['policy'] and data['policy']['applicable_at_cutoff'] else [])
+    findings = [
+        {'text': f"Alternative warehouse {r['warehouse_id']}: "
+                 f"{r['available_at_observation']} units in observation at {r['observed_at']}, "
+                 f"received at {r['received_at']}; verified evidence at cutoff {cutoff}",
+         'evidence_refs': [f"inventory_snapshots_v2/{r['snapshot_id']}",
+                           f"warehouse_eligibility/{case_id}/{r['warehouse_id']}"] + policy_ref}
+        for r in records
+    ]
+    if not findings:
+        findings = [{'text': 'No eligible alternative in evaluated case records'
+                     if disposition == 'SUPPORTED' else 'Transfer feasibility is not verified',
+                     'evidence_refs': evidence_refs[:20]}]
+
+    return Command(update={
+        'answer': answer, 'records': records, 'contexts': [],
+        'active_agent': 'backorder_agent',
+        'disposition': disposition, 'evidence_refs': evidence_refs,
+        'findings': findings, 'limitations': investigation['limitations'],
+        'approval_status': investigation['approval_status'],
+        'reason_codes': reasons, 'source': investigation['source'],
+        'temporal': investigation['temporal'],
+        'capability_plan': {'kind': 'fixed_uc01', 'capabilities': [_BACKORDER_CAPABILITY],
+                            'case_id': case_id, 'source': 'validated_explicit_case_id'},
+    }, goto='retailiq_reply')
+
 def retryable_read_failure(error: Exception) -> bool:
     """Only transient failures in idempotent read-only SQL paths are retryable."""
     return (isinstance(error, (ConnectionError, TimeoutError)) or
@@ -303,6 +453,8 @@ def build_graph(*, checkpointer=None):
     graph.add_node('product_agent', product_agent, destinations=('retailiq_reply',))
     graph.add_node('retail_supervisor', retail_supervisor, destinations=('retailiq_reply',))
     graph.add_node('retailiq', retailiq, destinations=('retailiq_reply',))
+    graph.add_node('backorder_agent', backorder_agent, retry_policy=read_retry,
+                   destinations=('retailiq_reply',))
     graph.add_node('retailiq_reply', retailiq_reply)
     graph.add_edge('retailiq_reply', END)
     graph.add_edge(START, 'router')
@@ -413,6 +565,16 @@ def validate_graph_result(result: dict) -> dict:
         raise GraphResultError('Graph result has no valid bounded answer')
     if not isinstance(result.get('records', []), list) or not isinstance(result.get('contexts', []), list):
         raise GraphResultError('Graph result has invalid evidence collections')
+    if category == 'backorder':
+        if result.get('disposition') not in {'SUPPORTED', 'NEEDS_REVIEW', 'INSUFFICIENT_EVIDENCE'}:
+            raise GraphResultError('Backorder business disposition is not verified')
+        if result.get('approval_status') != 'NOT_REQUESTED':
+            raise GraphResultError('Backorder approval cannot be inferred by the model')
+        if (not isinstance(result.get('evidence_refs'), list) or
+                not isinstance(result.get('findings'), list) or
+                not isinstance(result.get('source'), dict) or
+                result.get('capability_plan', {}).get('capabilities') != [_BACKORDER_CAPABILITY]):
+            raise GraphResultError('Backorder case response lacks verified evidence lineage')
     if category == 'revenue' and result.get('query_plan') is not None:
         from retailiq.domain.revenue_plan import RevenuePlan, verify_revenue_evidence
         plan_payload = result['query_plan']
@@ -470,9 +632,12 @@ def run(q: str, *, history: list[dict] | None = None, active_agent: str = '',
     else:
         result = graph.invoke(inputs, config=config)
     result = validate_graph_result(result)
-    return {'question': q, 'intent': result['intent'],
-            'mode': 'LangGraph Multi-Agent + SQL / Chroma RAG',
-            'as_of': result.get('period', month()), 'answer': result['answer'],
+    payload = {'question': q, 'intent': result['intent'],
+            'mode': ('LangGraph + Fiction verified SQL' if result['intent'] == 'backorder'
+                     else 'LangGraph Multi-Agent + SQL / Chroma RAG'),
+            'as_of': (result.get('temporal', {}).get('evidence_cutoff')
+                      if result['intent'] == 'backorder' else result.get('period', month())),
+            'answer': result['answer'],
             'records': result.get('records', []), 'contexts': result.get('contexts', []),
             'active_agent': result.get('active_agent', ''),
             'handoff': result.get('handoff'),
@@ -480,3 +645,8 @@ def run(q: str, *, history: list[dict] | None = None, active_agent: str = '',
             'skill': result.get('skill', ''),
             'route_fallback': result.get('route_fallback', False),
             'query_plan': result.get('query_plan')}
+    if result['intent'] == 'backorder':
+        payload.update({key: result[key] for key in
+                        ('disposition', 'evidence_refs', 'findings', 'limitations',
+                         'approval_status', 'reason_codes', 'source', 'capability_plan', 'temporal')})
+    return payload

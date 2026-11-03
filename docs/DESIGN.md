@@ -1,6 +1,6 @@
 # RetailIQ — Basic Design & Detail Design
 
-**Status (2026-11-03):** this document describes **current legacy/local behavior** and shared architecture boundaries. **Fiction M0 (read-only unified DB/SQL)** is implemented on `main` via [PR #33](https://github.com/hungtvb/retailIQ/pull/33); **Fiction chat/Agent/MCP/RAG integration is not yet implemented or accepted**. The [UC-01 Backorder Implementation Detail](implementation/UC-01-backorder.md) is the proposed target contract; **only its reviewed/merged design commit** authorizes implementation, and design approval is never an E2E PASS. This is one shared Basic Design plus just-in-time per-use-case detail, not two speculative document sets.
+**Status (2026-11-03):** this document describes **current legacy/local behavior** and shared architecture boundaries. **Fiction M0 (read-only unified DB/SQL)** is implemented on `main` via [PR #33](https://github.com/hungtvb/retailIQ/pull/33); **One explicit CASE-ID Fiction chat/Agent path is implemented in `/ask` via existing LangGraph** ([T01 #37](https://github.com/hungtvb/retailIQ/pull/37), [T02 #40](https://github.com/hungtvb/retailIQ/pull/40)); mock-provider fixtures passed, **real-provider UC-01 and broader Fiction MCP/RAG/HITL acceptance remain pending**. The [UC-01 Backorder Implementation Detail](implementation/UC-01-backorder.md) is the proposed target contract; **only its reviewed/merged design commit** authorizes implementation, and design approval is never an E2E PASS. This is one shared Basic Design plus just-in-time per-use-case detail, not two speculative document sets.
 
 [Product](PROJECT.md) · [Requirements](REQUIREMENTS.md) · [Architecture](ARCHITECTURE.md) · [Data and API contracts](DATA_API.md) · [Capability status](CAPABILITY_LEDGER.md)
 
@@ -15,7 +15,7 @@
 | Assistant selection | `retailiq/assistant.py` | Explicit offline deterministic vs full-mode execution |
 | Chat orchestration | `retailiq/orchestration/week1_graph.py` | LangGraph router, domain specialists, handoff, optional scoped supervisor and checkpointer |
 | Domain decisions | `retailiq/domain/analytics.py`, `retailiq/queries.py`, `retailiq/domain/semantic.py` | Reviewed business definitions and read-only SQL; LLM does **not** write unrestricted SQL |
-| **Fiction M0 domain (merged)** | `retailiq/domain/fiction.py`, `retailiq/infrastructure/sqlite.py`, `data/fiction/manifest.json` | **Release-verified** read-only Fiction business facts; not yet wired into main chat/agent paths. Real SQLite binary stays outside Git |
+| **Fiction M0 domain (merged)** | `retailiq/domain/fiction.py`, `retailiq/infrastructure/sqlite.py`, `data/fiction/manifest.json` | **Release-verified** read-only Fiction facts; UC-01 explicit CASE-ID full-mode chat path is wired via #40; other business intents remain legacy. Real SQLite binary stays outside Git |
 | Product knowledge | `retailiq/retrieval.py`, `retailiq/rag/` | Offline lexical search or full-mode hybrid/vector retrieval, sourced generation and grounding |
 | Data and sessions | `retailiq/infrastructure/` | Synthetic SQLite facts, local session/history, opt-in scoped preference memory |
 | MCP | `retailiq/mcp_server.py`, `retailiq/mcp_adapter.py` | Local stdio inventory/order operations; not an external retail API |
@@ -64,7 +64,7 @@ Read `AGENTS.md` and the [documentation index](README.md) first. Start at the **
 
 ## Fiction target design and implementation ownership (from 2026-11-03)
 
-**Implemented now:** `FictionStore.open()` validates the pinned 27-table unified SQLite release; `fulfillment_case()`, `order()`, `inventory()`, `top_sellers()`, `refund()` return scoped **read-only facts** with source IDs, limitations and temporal information. See [Fiction Runtime](FICTION_RUNTIME.md), [PR #33](https://github.com/hungtvb/retailIQ/pull/33) and [Issue #31](https://github.com/hungtvb/retailIQ/issues/31). This is **not** a working Fiction Agent/LLM/RAG path.
+**Implemented now:** `FictionStore.open()` validates the pinned 27-table unified SQLite release; `fulfillment_case()`, `order()`, `inventory()`, `top_sellers()`, `refund()` return scoped **read-only facts** with source IDs, limitations and temporal information. See [Fiction Runtime](FICTION_RUNTIME.md), [PR #33](https://github.com/hungtvb/retailIQ/pull/33) and [Issue #31](https://github.com/hungtvb/retailIQ/issues/31). **UC-01 explicit CASE-ID** now reaches a fixed LangGraph business capability via `/ask`, tested with a mock routing provider and verified SQLite fixture. This is **not** generalized Fiction Agent planning, provider-backed UC-01 acceptance or Fiction RAG.
 
 **Approved architecture / pending implementation:** Reviews 01–10, tracked by [#21–23](https://github.com/hungtvb/retailIQ/issues/23) and [#26–30](https://github.com/hungtvb/retailIQ/issues/30), require verified-first execution: committed context (#22), bounded capability plan (#23), shared SQL/MCP (#26), sourced policy RAG (#27), evidence fitness (#28), authenticated HITL (#29), and truthful event-driven UI (#21/#30). Do not present a deterministic workflow illustration as actual Agent execution.
 

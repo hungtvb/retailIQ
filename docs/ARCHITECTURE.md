@@ -1,6 +1,6 @@
 # Architecture & Tech Stack
 
-**Execution boundary (2026-11-03):** Existing chat, LangGraph, product RAG, MCP and the workflow UI still use the **legacy synthetic retail runtime**. The **Fiction M0 read-only SQL foundation** is implemented and pinned, but is **not connected to chat, Agent, MCP or RAG**. The [UC-01 Backorder Investigation](implementation/UC-01-backorder.md) describes **proposed Fiction integration**, not delivered E2E behavior. See [Fiction Runtime](FICTION_RUNTIME.md) and [Data/API](DATA_API.md).
+**Execution boundary (2026-11-03):** Existing legacy questions still use the synthetic retail runtime. Fiction M0 and UC-01 T01 read-only evidence are implemented; **the first explicit CASE-ID investigation in `RETAILIQ_MODE=full` now follows `/ask → LangGraph → verified Fiction SQL`** ([#37](https://github.com/hungtvb/retailIQ/pull/37), [#40](https://github.com/hungtvb/retailIQ/pull/40)). That single fixed template has **mock-provider fixture coverage**, not live-provider/full Fiction E2E acceptance. Fiction MCP, policy RAG, context follow-ups and authenticated HITL remain pending. See [Fiction Runtime](FICTION_RUNTIME.md) and [Data/API](DATA_API.md).
 
 **Business goal:** Reduce user interaction complexity and, where supported by measurement, end-to-end task completion time for retail information access, **without sacrificing correctness** (Faster · Easier · Reliable). Inventory/Sales data is the initial domain; Replenishment Review is a multi-source demo case, not the only outcome. This is a **proposed value hypothesis**, not proven ROI.
 
@@ -11,14 +11,18 @@
 
 ## Runtime execution paths
 
-### Fiction M0 — implemented read-only foundation (not chat-connected)
+### Fiction M0 + UC-01 first bounded LangGraph path
 
 ```mermaid
 flowchart LR
  FDB[(Pinned local Fiction SQLite)] --> Store[FictionStore.open: release and integrity checks]
  Manifest[Pinned manifest] --> Store
  Store --> Read[Read-only scoped domain facts and evidence]
- Read -.-> Future[UC-01 integration: proposed, not implemented]
+ Read --> Case[UC-01 trusted case and effective policy evidence]
+ User[Explicit CASE-ID in full-mode chat] --> Graph[Existing LangGraph router]
+ Graph --> CaseAgent[UC-01 vetted read-only capability]
+ CaseAgent --> Case
+ Case --> Reply[Verified bounded answer and source refs]
 ```
 
 ### Existing legacy chat route (not Fiction)
