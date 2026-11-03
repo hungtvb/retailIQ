@@ -1,6 +1,6 @@
 # RetailIQ — Basic Design & Detail Design
 
-**Status (2026-11-03):** this document describes **current legacy/local behavior** and shared architecture boundaries. **Fiction M0 (read-only unified DB/SQL)** is implemented on `main` via [PR #33](https://github.com/hungtvb/retailIQ/pull/33); **Fiction chat/Agent/MCP/RAG integration is not yet implemented or accepted**. The [UC-01 Backorder Implementation Detail](implementation/UC-01-backorder.md) is **draft for review**, not permission to code or an E2E PASS. This is one shared Basic Design plus just-in-time per-use-case detail, not two speculative document sets.
+**Status (2026-11-03):** this document describes **current legacy/local behavior** and shared architecture boundaries. **Fiction M0 (read-only unified DB/SQL)** is implemented on `main` via [PR #33](https://github.com/hungtvb/retailIQ/pull/33); **Fiction chat/Agent/MCP/RAG integration is not yet implemented or accepted**. The [UC-01 Backorder Implementation Detail](implementation/UC-01-backorder.md) is the proposed target contract; **only its reviewed/merged design commit** authorizes implementation, and design approval is never an E2E PASS. This is one shared Basic Design plus just-in-time per-use-case detail, not two speculative document sets.
 
 [Product](PROJECT.md) · [Requirements](REQUIREMENTS.md) · [Architecture](ARCHITECTURE.md) · [Data and API contracts](DATA_API.md) · [Capability status](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md)
 
