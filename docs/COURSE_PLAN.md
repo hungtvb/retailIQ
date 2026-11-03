@@ -71,7 +71,7 @@ A PR should link to the issue if one exists and state actual **changed paths, re
 2. Review and **merge the documentation PR before feature code**; attach the **approved document path and Git commit SHA** to the implementation Issue and code PR. Draft design proposals cannot be used as approved specifications.
 3. When code exposes a substantive design gap, revise and review the affected document first. Compatible wording fixes may accompany code. Do not copy the design into the Issue body or maintain a second plan in PR comments.
 
-**First proposed design:** [UC-01 Backorder Investigation — draft](implementation/UC-01-backorder.md). It is **not implemented** through Fiction Agent/RAG/LLM/GUI just because M0 SQL exists. UC-02/03 detail docs should be created **when their implementation is scheduled**, not in advance.
+**First scoped design:** [UC-01 Backorder Investigation](implementation/UC-01-backorder.md). Only a **reviewed/merged design revision** authorizes feature coding; UC-01 is **not implemented** through Fiction Agent/RAG/LLM/GUI just because M0 SQL exists. UC-02/03 detail docs should be created **when their implementation is scheduled**, not in advance.
 
 ### Dependency-first implementation sequence (not deadlines)
 
