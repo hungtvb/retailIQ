@@ -7,7 +7,7 @@
 ### New, accepted M0 Fiction foundation (not the legacy chat default)
 
 - `retailiq/domain/fiction.py::FictionStore.open(db_path, manifest_path)` uses an **explicit path** to the verified `data/fiction/fiction_retail.sqlite` release; `data/fiction/manifest.json` is pinned in Git, while the SQLite binary stays local. It exposes read-only `product`, `order`, `inventory`, `top_sellers`, `refund` and `fulfillment_case` facts with release hash, scope, evidence refs, time and limitations.
-- **Fiction source semantics:** `products.product_id` canonical, one generated `FR-` SKU, USD, `delivered` status, dated **case** observations (not the undated base inventory), and policies effective at the **case cutoff**. A candidate warehouse observation is not approval. For full field/temporal rules see [Fiction Runtime](FICTION_RUNTIME.md) and [UC-01 proposed Implementation Detail](implementation/UC-01-backorder.md).
+- **Fiction source semantics:** `products.product_id` canonical, one generated `FR-` SKU, USD, `delivered` status, dated **case** observations (not the undated base inventory), and policies effective at the **case cutoff**. A candidate warehouse observation is not approval. For full field/temporal rules see [Fiction Runtime](FICTION_RUNTIME.md) and [UC-01 target Implementation Detail](implementation/UC-01-backorder.md).
 - These facts are **not yet wired** into `/ask`, LangGraph, legacy MCP or Chroma. The following table/schema/HTTP contracts are therefore **historical/current legacy runtime**, not Fiction acceptance.
 
 ## 1. Data authority and storage
