@@ -1,8 +1,14 @@
 # RetailIQ — Data & API Contracts
 
-**Status:** implementation-aligned local contract, audited 2026-10-31 against `scripts/seed.py`, `retailiq/domain/`, `retailiq/infrastructure/` and `retailiq/api/`. This documents **existing behavior**, not a production integration specification or evidence that every capability has passed testing.
+**Status (2026-11-03):** sections below document the **current legacy fixture/HTTP/MCP behavior** audited 2026-10-31. Fiction's merged M0 read-only data contract lives in [Fiction Runtime](FICTION_RUNTIME.md), the [Fiction source Data Contract](https://github.com/hungtvb/fiction-retail/blob/main/docs/DATA_CONTRACT.md) and [PR #33](https://github.com/hungtvb/retailIQ/pull/33). **Fiction Agent/MCP/RAG/HTTP cutover is not yet implemented**; do not apply the legacy `EL-###`/VND/`completed` metrics to Fiction's UUID/FR-SKU/USD/`delivered` records.
 
 **Ownership:** this file defines data fields, KPI semantics, API shapes and limitations. [Architecture](ARCHITECTURE.md) explains component boundaries; [Design](DESIGN.md) explains request flows; [Testing & Scenarios](27_BEHAVIORAL_ACCEPTANCE_MATRIX.md) specifies oracles; [Capability Ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md) owns acceptance status. Do not duplicate implementation status here.
+
+### New, accepted M0 Fiction foundation (not the legacy chat default)
+
+- `retailiq/domain/fiction.py::FictionStore.open(db_path, manifest_path)` uses an **explicit path** to the verified `data/fiction/fiction_retail.sqlite` release; `data/fiction/manifest.json` is pinned in Git, while the SQLite binary stays local. It exposes read-only `product`, `order`, `inventory`, `top_sellers`, `refund` and `fulfillment_case` facts with release hash, scope, evidence refs, time and limitations.
+- **Fiction source semantics:** `products.product_id` canonical, one generated `FR-` SKU, USD, `delivered` status, dated **case** observations (not the undated base inventory), and policies effective at the **case cutoff**. A candidate warehouse observation is not approval. For full field/temporal rules see [Fiction Runtime](FICTION_RUNTIME.md) and [UC-01 proposed Implementation Detail](implementation/UC-01-backorder.md).
+- These facts are **not yet wired** into `/ask`, LangGraph, legacy MCP or Chroma. The following table/schema/HTTP contracts are therefore **historical/current legacy runtime**, not Fiction acceptance.
 
 ## 1. Data authority and storage
 
