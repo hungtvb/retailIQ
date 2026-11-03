@@ -188,6 +188,9 @@ def route(state: State):
         intent: Literal['stock', 'revenue', 'top', 'product', 'decision', 'general', 'latest', 'backorder']
 
     category = followup_intent(state['question'], state.get('history', []))
+    # Do not send malformed/ambiguous case IDs to a paid model or business tool.
+    if category == 'backorder':
+        _case_id_for_uc01(state['question'])
     effective = resolve_followup(state['question'], state.get('history', []), category)
     fallback = False
     try:
@@ -303,14 +306,21 @@ def retailiq(state: State):
 # UC-01 is the first explicitly bounded Fiction capability template.
 # The generic capability-based planner in issue #23 is still pending.
 _BACKORDER_CAPABILITY = "fiction.backorder.investigate"
-_CASE_ID = re.compile(r"(?<![A-Za-z0-9])CASE-[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}(?![A-Za-z0-9])")
+_CASE_ID = re.compile(
+    r"(?<![A-Za-z0-9])CASE-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}(?![A-Za-z0-9])",
+    re.IGNORECASE,
+)
+
+
+class InvalidCaseId(ValueError):
+    """Invalid/ambiguous UC-01 input, not a provider or data-source failure."""
 
 
 def _case_id_for_uc01(question: str) -> str:
     matches = _CASE_ID.findall(question)
     if len(matches) != 1 or question.casefold().count("case-") != 1:
-        raise ValueError("UC-01 requires exactly one explicit canonical CASE-ID")
-    return matches[0][:5] + matches[0][5:].lower()
+        raise InvalidCaseId("UC-01 requires exactly one explicit canonical CASE-ID")
+    return "CASE-" + matches[0][5:].lower()
 
 
 @lru_cache(maxsize=2)

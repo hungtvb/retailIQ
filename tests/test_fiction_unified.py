@@ -537,3 +537,45 @@ def test_uc01_t02_partial_candidate_finding_without_applicable_policy(monkeypatc
     assert conflicting["reason_codes"] == ["POLICY_CONFLICT"]
     assert conflicting["approval_status"] == "NOT_REQUESTED"
     assert "knowledge_documents/" not in str(conflicting["findings"])
+
+
+
+def test_uc01_t02_rejects_invalid_case_before_llm_and_sql(monkeypatch, tmp_path):
+    """Invalid input is a client error, never a provider/configuration failure."""
+    from fastapi.testclient import TestClient
+    from retailiq.api import app
+    from retailiq.orchestration import week1_graph as graph
+
+    pytest.importorskip("langgraph")
+    graph.close_checkpoint_graph()
+    monkeypatch.setenv("RETAILIQ_MODE", "full")
+    monkeypatch.setenv("RETAILIQ_CHAT_DB", str(tmp_path / "sessions.sqlite3"))
+    monkeypatch.setenv("RETAILIQ_CHECKPOINT_DB", str(tmp_path / "checkpoints.sqlite3"))
+    monkeypatch.setenv("LANGSMITH_TRACING", "false")
+    invocations = []
+
+    def unexpected_model():
+        invocations.append("model")
+        raise AssertionError("Invalid case ID must not reach the model")
+
+    def unexpected_db(*args):
+        invocations.append("db")
+        raise AssertionError("Invalid case ID must not reach the database")
+
+    monkeypatch.setattr(graph, "chat_model", unexpected_model)
+    monkeypatch.setattr(graph, "_fiction_store_cached", unexpected_db)
+    valid = C1.lower()
+    assert graph._case_id_for_uc01(f"Investigate {valid}") == C1
+    questions = [
+        "Investigate CASE-not-a-uuid",
+        f"Compare {C1} and CASE-11111111-1111-4111-8111-111111111111",
+    ]
+    try:
+        with TestClient(app) as client:
+            for question in questions:
+                response = client.post("/ask", json={"question": question})
+                assert response.status_code == 422, response.text
+                assert "exactly one explicit" in response.json()["detail"]
+            assert invocations == []
+    finally:
+        graph.close_checkpoint_graph()
