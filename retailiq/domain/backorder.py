@@ -31,10 +31,13 @@ def _effective_warehouse_policy(
         raise FictionDataError("Unsupported policy release")
 
     policies = store._q(  # SQL is fixed and parameterized, never model-generated.
-        "SELECT policy_id, requires_manager_approval FROM fulfillment_policies "
-        "WHERE policy_id=?", (_POLICY_ID,),
+        "SELECT policy_id, requires_manager_approval FROM fulfillment_policies"
     )
-    if len(policies) != 1:
+    # This pinned Fiction release has exactly one warehouse transfer policy.
+    # Additional unversioned policy authorities cannot be silently ignored.
+    if len(policies) > 1:
+        return None, "POLICY_CONFLICT"
+    if len(policies) != 1 or policies[0]["policy_id"] != _POLICY_ID:
         return None, "POLICY_REGISTRY_MISSING"
     if policies[0]["requires_manager_approval"] != 1:
         raise FictionDataError("Warehouse policy approval authority mismatch")
@@ -141,7 +144,9 @@ def investigate_backorder(
     ):
         reasons.add("WAREHOUSE_ROUTE_UNKNOWN")
 
-    if policy_reason:
+    if policy_reason == "POLICY_CONFLICT":
+        disposition = "NEEDS_REVIEW"  # Policy adjudication, not transfer approval.
+    elif policy_reason:
         disposition = "INSUFFICIENT_EVIDENCE"
     elif candidates:
         # A proven candidate is usable even if *other* routes lack observations.
