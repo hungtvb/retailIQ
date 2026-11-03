@@ -10,7 +10,7 @@
 
 **Expected outcome:** a source-addressable investigation with verified partial facts, alternative-warehouse observations, policy applicability and an explicit business disposition. **No shipment/stock/order mutation; no transfer execution.** An observation that passes stock/cutoff checks is **not** a transfer approval. Manager HITL belongs to [#29](https://github.com/hungtvb/retailIQ/issues/29) and must not be faked with a caller-supplied role.
 
-**Milestone boundary:** M0 [#33](https://github.com/hungtvb/retailIQ/pull/33) and deterministic UC-01 T01 [#37](https://github.com/hungtvb/retailIQ/pull/37) have merged. T02 [#40](https://github.com/hungtvb/retailIQ/pull/40) wires an **explicit CASE-ID-only** LangGraph/`/ask` template, verified with **mock-provider + real SQLite fixture**. The diagram below remains a **full target flow**, not evidence that conversation follow-ups, Fiction MCP/RAG/HITL/UI or real-provider UC-01 E2E are accepted.
+**Milestone boundary:** M0 [#33](https://github.com/hungtvb/retailIQ/pull/33) and deterministic UC-01 T01 [#37](https://github.com/hungtvb/retailIQ/pull/37) have merged. T02 [#40](https://github.com/hungtvb/retailIQ/pull/40) wires an **explicit CASE-ID-only** LangGraph/`/ask` template, verified with **mock-provider + real SQLite fixture**. T03 [#44](https://github.com/hungtvb/retailIQ/pull/44) adds **committed-session case binding** for policy/alternative-warehouse follow-ups, with explicit source/cutoff re-verification; ambiguous positional warehouses require clarification. This is **not** the complete conversation-context capability in #22. The diagram remains a **full target flow**, not evidence that Fiction MCP/RAG/HITL/UI or real-provider UC-01 E2E are accepted.
 
 ## 2. Target execution flow
 
