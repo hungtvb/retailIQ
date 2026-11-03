@@ -87,7 +87,7 @@ The table below describes **legacy chat** logical contracts, not Fiction UC-01 o
 The [Capability Acceptance Ledger](CAPABILITY_LEDGER.md) owns current capability gaps. Dated historical assessments are retained in the [documentation archive](archive/README.md), not as a competing architecture/status source.
 
 ## Limitations
-The 2026-10-29 local full-mode run has scripted LangGraph/Chroma evidence, a three-question RAGAS report, and inspected remote LangSmith traces (see `docs/weeks/week-01/EVIDENCE.md`). Re-run on the demo machine; this does not establish open-ended question reliability or production readiness. No unverified capability is claimed as PASS. No production-grade authentication or authorized order/pricing mutation is established.
+The 2026-10-29 local full-mode run has scripted LangGraph/Chroma evidence, a three-question RAGAS report, and inspected remote LangSmith traces (see `docs/archive/2026-11-03/week-01/EVIDENCE.md`). Re-run on the demo machine; this does not establish open-ended question reliability or production readiness. No unverified capability is claimed as PASS. No production-grade authentication or authorized order/pricing mutation is established.
 
 ## Current code and quality boundaries
 
@@ -102,4 +102,4 @@ The 2026-10-29 local full-mode run has scripted LangGraph/Chroma evidence, a thr
 | Observability | `retailiq/observability.py` local JSONL/SSE; remote LangSmith is a different evidence source |
 | Engineering quality | Source checks, unit/API, mocked compiled-graph, provider-backed tests; fail closed on invalid evidence |
 
-**Permanent quality rules:** reviewed business invariants, parameter validation, idempotent read-only tools, safe missing-data behavior, bounded context/retries, secret-safe logs, explicit test modes and source provenance. Preserve details of earlier patch work in [archive](archive/README.md), not in new top-level technical notes. Implementation-aligned Basic/Detail Design is in [Design](DESIGN.md). Historical pattern teaching is in [Week 1 DESIGN](weeks/week-01/DESIGN.md), while dated verification is in [EVIDENCE](weeks/week-01/EVIDENCE.md).
+**Permanent quality rules:** reviewed business invariants, parameter validation, idempotent read-only tools, safe missing-data behavior, bounded context/retries, secret-safe logs, explicit test modes and source provenance. Preserve details of earlier patch work in [archive](archive/README.md), not in new top-level technical notes. Implementation-aligned Basic/Detail Design is in [Design](DESIGN.md). Historical pattern teaching is in [Week 1 DESIGN](archive/2026-11-03/week-01/DESIGN.md), while dated verification is in [EVIDENCE](archive/2026-11-03/week-01/EVIDENCE.md).

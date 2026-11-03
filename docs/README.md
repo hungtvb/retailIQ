@@ -22,7 +22,7 @@ Write for the reader and the task: state the **purpose, scope/current status, au
 
 ## Reference material
 
-- [Dated Week 1 execution evidence](weeks/week-01/EVIDENCE.md) — historical results only; do not treat as current-commit acceptance
+- [Dated Week 1 execution evidence](archive/2026-11-03/week-01/EVIDENCE.md) — historical results only; do not treat as current-commit acceptance
 - [Dated project assessment](archive/2026-10-31/RETAILIQ_HIGH_LEVEL_OVERVIEW.md) — historical snapshot; Product, Design and Acceptance now have canonical owners
 - [Older notes and records](archive/README.md)
 

@@ -8,7 +8,7 @@ This directory contains **dated records**, not a second source of current requir
 - [2026-10-31 high-level assessment](2026-10-31/RETAILIQ_HIGH_LEVEL_OVERVIEW.md): dated project overview and gap review, superseded by canonical Product, Design and capability-status documents.
 - [2026-10-31 workflow prototype](2026-10-31/26_FOUR_WEEK_GRAPH_WORKFLOWS.md): original local scenario-graph proposal and validation notes; not the current overall architecture.
 - [2026-10-31 Workspace first slice](2026-10-31/28_PRODUCT_WORKSPACE_V1.md): original UI decisions and staged acceptance notes; code and current [Design](../DESIGN.md) are authoritative.
-- [Course evidence and handout assets](../weeks/week-01/): original rubric, learning notes, runbook, dated execution evidence and five preserved non-Markdown artifacts (including PPTX/DOCX, RAGAS result and screenshots). They remain **course history**, not evidence for the current revision.
+- [Course evidence and handout assets](2026-11-03/week-01/): original rubric, learning notes, runbook, dated execution evidence and five preserved non-Markdown artifacts (including PPTX/DOCX, RAGAS result and screenshots). They remain **course history**, not evidence for the current revision.
 
 ## Current authoritative documents
 
@@ -19,7 +19,7 @@ This directory contains **dated records**, not a second source of current requir
 | Course milestone mapping and historical timeline | [Roadmap](../COURSE_PLAN.md) |
 | System responsibility and technology decisions | [Architecture](../ARCHITECTURE.md) and [Basic/Detail Design](../DESIGN.md) |
 | Schema, KPI semantics, HTTP and MCP contracts | [Data & API](../DATA_API.md) |
-| Scenario definitions and executable checks | [Testing & Scenario Acceptance](../27_BEHAVIORAL_ACCEPTANCE_MATRIX.md) |
-| Acceptance status and unresolved evidence | [Capability Ledger](../29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md) |
+| Scenario definitions and executable checks | [Testing & Scenario Acceptance](../SCENARIO_ACCEPTANCE.md) |
+| Acceptance status and unresolved evidence | [Capability Ledger](../CAPABILITY_LEDGER.md) |
 
 **Interpretation rule:** dates and execution modes are part of each historical claim. Older “PASS” or “NOT VERIFIED” labels are not automatically true for a newer commit. Preserve relevant source SHA and execution artifacts before reporting current acceptance.

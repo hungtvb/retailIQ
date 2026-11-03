@@ -11,7 +11,7 @@ This document owns the **original course-week sequence** and planning context. T
 | **Week 3 — Governed Copilot** | HITL, access control, KPI alerts, usage/cost, Langfuse, DeepEval, security and PromptOps | CAP-11–13; demonstrable security/governance controls and reports |
 | **Week 4 — Multi-Agent Retail OS** | Five specialist agents, A2A-style coordination, verification and manager-approved order scenario | CAP-14–15; tested end-to-end coordination with human approval |
 
-The course's mandatory topics are retained even where implementation is incomplete or only simulated. For the exact capability gaps and their evidence modes see the [acceptance ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md).
+The course's mandatory topics are retained even where implementation is incomplete or only simulated. For the exact capability gaps and their evidence modes see the [acceptance ledger](CAPABILITY_LEDGER.md).
 
 ## Original provisional delivery plan (historical)
 
@@ -21,7 +21,7 @@ The team originally estimated five members at roughly 60 minutes per person per 
 
 ## Architecture review closure & Fiction implementation baseline (2026-11-03)
 
-**Architecture Reviews 01–10: DESIGN APPROVED. Implementation and capability acceptance: OPEN.** Approval records architectural decisions, **not** code completion, live data freshness, provider quality or business E2E PASS. Retain course capability IDs in [Requirements](REQUIREMENTS.md); use [Capability Ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md) only for *evidenced* acceptance, not review approval.
+**Architecture Reviews 01–10: DESIGN APPROVED. Implementation and capability acceptance: OPEN.** Approval records architectural decisions, **not** code completion, live data freshness, provider quality or business E2E PASS. Retain course capability IDs in [Requirements](REQUIREMENTS.md); use [Capability Ledger](CAPABILITY_LEDGER.md) only for *evidenced* acceptance, not review approval.
 
 | Architecture review | Approved issue / implementation owner |
 |---|---|
@@ -54,8 +54,8 @@ The team originally estimated five members at roughly 60 minutes per person per 
 | Relative sequence and dependency | **This roadmap** | Milestone grouping and delivery principle; original weeks are **not deadlines** |
 | Work item, owner, dependency and progress | [GitHub Issues](https://github.com/hungtvb/retailIQ/issues) | One scoped issue only when useful for tracked implementation; no invented assignee or completion |
 | Change and review | [GitHub Pull Requests](https://github.com/hungtvb/retailIQ/pulls) | What actually changed, linked issue/requirement, review, test/evidence and known limitations |
-| Requirement-level acceptance/gaps | [Capability Ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md) | Last evidenced status, scope, mode and remaining proof; no duplicated issue task status |
-| Scenario definition and test oracle | [Testing & Scenario Acceptance](27_BEHAVIORAL_ACCEPTANCE_MATRIX.md) | Positive/negative cases, commands and independent correctness checks |
+| Requirement-level acceptance/gaps | [Capability Ledger](CAPABILITY_LEDGER.md) | Last evidenced status, scope, mode and remaining proof; no duplicated issue task status |
+| Scenario definition and test oracle | [Testing & Scenario Acceptance](SCENARIO_ACCEPTANCE.md) | Positive/negative cases, commands and independent correctness checks |
 
 **Design-first trace chain:** `BR/CAP/QUAL ID` → **reviewed, merged Implementation Detail path + design commit SHA** → bounded GitHub Issue (when needed) → implementation PR (link to exact design) → scenario/evidence (commit + mode + input + expected/observed + artifact) → capability ledger **only when verified**. Design in `docs/` is canonical; Issue/PR comments are discussion and change history, **not** the normative design. The ledger's original `W1-*` … `W4-*` IDs are course acceptance labels, not new project task IDs. Do not rename those historical IDs or infer PASS from a merged PR.
 
@@ -86,10 +86,10 @@ A PR should link to the issue if one exists and state actual **changed paths, re
 
 **Current M0 merge baseline (2026-11-03):** [#24](https://github.com/hungtvb/retailIQ/pull/24) / [#25](https://github.com/hungtvb/retailIQ/pull/25) were **closed unmerged** as superseded; [#33](https://github.com/hungtvb/retailIQ/pull/33) was **squash-merged** and M0 accepted. Subsequent M1/M2 development uses the **approved design commit**, not a former PR discussion or an unreviewed draft.
 
-**Planning rule:** One approved issue per bounded implementation outcome where useful, reused code before new abstractions, independent scenario tests with negative cases, separate offline/mock/local-MCP/provider modes. No extra roadmap, parallel status spreadsheet, speculative infrastructure, or inferred owner/deadline. Course-specific required RAGAS, LangSmith, Langfuse, DeepEval and multi-agent acceptance remain tracked by the existing [CAP ↔ W-ID ledger](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md), not silently dropped.
+**Planning rule:** One approved issue per bounded implementation outcome where useful, reused code before new abstractions, independent scenario tests with negative cases, separate offline/mock/local-MCP/provider modes. No extra roadmap, parallel status spreadsheet, speculative infrastructure, or inferred owner/deadline. Course-specific required RAGAS, LangSmith, Langfuse, DeepEval and multi-agent acceptance remain tracked by the existing [CAP ↔ W-ID ledger](CAPABILITY_LEDGER.md), not silently dropped.
 
 **Historical task snapshot (2026-10-31; see live issues for current state):** [Issue #1](https://github.com/hungtvb/retailIQ/issues/1) is closed (historical documentation work); [Issue #6](https://github.com/hungtvb/retailIQ/issues/6) is open for real owner/approval sign-off. No owner, approval date or technical acceptance should be fabricated from the original course timetable. Completed documentation PRs #11–#16 improve the **documentation baseline**, not current product capability acceptance.
 
 **Historical source:** initial [roadmap](archive/2026-10-30/legacy/16_Roadmap_and_Timeline.md) and [risk register](archive/2026-10-30/legacy/15_Risk_Register_and_Document_Governance.md) remain preserved without becoming the active tracker.
 
-[Product](PROJECT.md) · [Requirements](REQUIREMENTS.md) · [Capability status](29_COURSE_CAPABILITY_ACCEPTANCE_LEDGER.md)
+[Product](PROJECT.md) · [Requirements](REQUIREMENTS.md) · [Capability status](CAPABILITY_LEDGER.md)
