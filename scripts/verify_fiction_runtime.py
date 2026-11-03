@@ -29,14 +29,31 @@ def _oracle(db_path: Path) -> dict:
             ORDER BY c.case_id""").fetchall()
         anomalous = conn.execute("""SELECT r.return_id FROM returns r JOIN orders o ON o.order_id=r.order_id
             WHERE r.refund_amount > o.total_amount ORDER BY r.return_id LIMIT 1""").fetchone()
+        anomalies = {
+            "refunds_above_order_value": conn.execute(
+                "SELECT COUNT(*) FROM returns r JOIN orders o ON o.order_id=r.order_id "
+                "WHERE r.refund_amount > o.total_amount").fetchone()[0],
+            "refunds_above_returned_product_lines": conn.execute(
+                "SELECT COUNT(*) FROM returns r WHERE r.refund_amount > "
+                "(SELECT SUM(oi.quantity*oi.unit_price*(100-oi.discount_pct)/100.0) "
+                "FROM order_items oi WHERE oi.order_id=r.order_id AND oi.product_id=r.product_id)"
+            ).fetchone()[0],
+            "warehouses_over_nominal_capacity": conn.execute(
+                "SELECT COUNT(*) FROM warehouses w WHERE w.capacity_units < "
+                "(SELECT SUM(i.quantity_on_hand) FROM inventory i WHERE i.warehouse_id=w.warehouse_id)"
+            ).fetchone()[0],
+        }
         return {"top3": [dict(x) for x in top], "cases_without_snapshot": [x[0] for x in missing],
-                "refund_above_order": anomalous[0] if anomalous else None}
+                "refund_above_order": anomalous[0] if anomalous else None, "anomalies": anomalies}
 
 
 def audit(db_path: Path, manifest_path: Path) -> dict:
     verified = verify_release(db_path, manifest_path)
     source = FictionStore(db_path, verified)
     expected = _oracle(db_path)
+    quality = json.loads(manifest_path.read_text(encoding="utf-8")).get("data_quality", {})
+    for name, count in expected["anomalies"].items():
+        assert quality.get(name) == count, f"Manifest/source anomaly mismatch: {name}"
     ranked = source.top_sellers("2026-10", 3)
     assert [(r['product_id'], r['delivered_units']) for r in ranked['data']] == [
         (r['product_id'], r['units']) for r in expected['top3']]
@@ -57,9 +74,11 @@ def audit(db_path: Path, manifest_path: Path) -> dict:
     assert all('customer_id' not in str(v) and 'email' not in str(v) for v in (stock, returned, case))
     return {"status":"PASS", "mode":"read_only_local_fiction_sql", "release":verified,
             "oracle":{"top3":expected['top3'],"missing_case_count":len(missing),
-                      "example_missing_case":missing[0],"example_refund_anomaly":expected['refund_above_order']},
+                      "example_missing_case":missing[0],"example_refund_anomaly":expected['refund_above_order'],
+                      "preserved_source_anomalies":expected["anomalies"]},
             "checks":["release_integrity", "sku_identity", "top_seller_sql", "partial_month",
-                      "case_missing_snapshot", "refund_anomaly", "inventory_same_product", "no_customer_pii"]}
+                      "case_missing_snapshot", "refund_anomaly", "preserved_source_anomalies",
+                      "inventory_same_product", "no_customer_pii"]}
 
 
 def main() -> None:
