@@ -54,13 +54,14 @@ def replenish_review_offline():
  return {'answer':f"Synthetic {month()} decision review: {leader['name']} sold {leader['units_sold']} units; {available} available. {priority}. Not a forecast or purchase order.",
          'records':[leader,*stocks],'contexts':[]}
 
-def ask(q, *, history=None, active_agent='', memory=None):
+def ask(q, *, history=None, active_agent='', memory=None, verified_case_context=None):
  if os.getenv('RETAILIQ_MODE')=='full':
   from .graph import run
+  binding = {'verified_case_context': verified_case_context} if verified_case_context else {}
   if memory and memory.get('consent'):
-   return run(q,history=history or [],active_agent=active_agent,memory=memory)
+   return run(q,history=history or [],active_agent=active_agent,memory=memory,**binding)
   if history or active_agent:
-   return run(q,history=history or [],active_agent=active_agent)
-  return run(q)
+   return run(q,history=history or [],active_agent=active_agent,**binding)
+  return run(q,**binding)
  return offline(q,history=history,active_agent=active_agent,memory=memory)
 
