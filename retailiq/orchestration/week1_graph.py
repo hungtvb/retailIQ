@@ -194,6 +194,7 @@ def route(state: State):
         parsed = chat_model().with_structured_output(Route).invoke([
             ('system', 'Route retail requests to stock/revenue/top/product/decision/latest/general/backorder. '
              'Use decision only when cross-analyzing bestsellers and inventory. '
+             'Use backorder for investigations with an explicit CASE-UUID. '
              'Never execute side effects.'),
             ('human', state['question']),
         ])
@@ -205,6 +206,11 @@ def route(state: State):
         elif proposed == category:
             # Other categories are enforced by deterministic business routing.
             category = proposed
+        else:
+            fallback = True
+            log_event('agent.router_disagreement', level='WARNING',
+                      proposed_intent=proposed, enforced_intent=category,
+                      execution_mode='full')
     except Exception as error:
         fallback = True
         log_event('agent.router_fallback', level='WARNING', error_type=type(error).__name__)
@@ -345,9 +351,12 @@ def backorder_agent(state: State):
     reasons = investigation['reason_codes']
     disposition = investigation['disposition']
     vi = is_vietnamese(state['question'])
+    snapshots = {s['snapshot_id']: s for s in data['snapshots']}
     records = [
         {'case_id': case_id, 'cutoff': cutoff, 'snapshot_id': item['snapshot_id'],
          'warehouse_id': item['warehouse_id'],
+         'observed_at': snapshots[item['snapshot_id']]['observed_at'],
+         'received_at': snapshots[item['snapshot_id']]['received_at'],
          'available_at_observation': item['available_at_observation']}
         for item in candidates
     ]
@@ -382,9 +391,11 @@ def backorder_agent(state: State):
     evidence_refs = investigation['record_refs'][:100]
     findings = [
         {'text': f"Alternative warehouse {r['warehouse_id']}: "
-                 f"{r['available_at_observation']} observed available units at {cutoff}",
+                 f"{r['available_at_observation']} units in observation at {r['observed_at']}, "
+                 f"received at {r['received_at']}; verified evidence at cutoff {cutoff}",
          'evidence_refs': [f"inventory_snapshots_v2/{r['snapshot_id']}",
-                           f"warehouse_eligibility/{case_id}/{r['warehouse_id']}"]}
+                           f"warehouse_eligibility/{case_id}/{r['warehouse_id']}",
+                           f"knowledge_documents/{data['policy']['document_id']}"]}
         for r in records
     ]
     if not findings:

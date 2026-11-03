@@ -427,6 +427,8 @@ def test_uc01_t02_explicit_case_langgraph_api_with_real_fixture(monkeypatch, fic
             assert body["as_of"] == "2026-10-16T12:00:00Z"
             assert body["records"][0]["warehouse_id"] == W2
             assert body["records"][0]["snapshot_id"] == "candidate"
+            assert body["records"][0]["observed_at"] == "2026-10-16T11:00:00Z"
+            assert "received at 2026-10-16T11:05:00Z" in body["findings"][0]["text"]
             assert body["source"]["sha256"] == store.release["runtime_sha256"]
             assert f"inventory_snapshots_v2/candidate" in body["evidence_refs"]
             assert body["capability_plan"]["capabilities"] == ["fiction.backorder.investigate"]
@@ -442,3 +444,64 @@ def test_uc01_t02_rejects_ambiguous_or_invalid_case_without_tool_call(monkeypatc
     with pytest.raises(ValueError, match="exactly one"):
         graph._case_id_for_uc01(f"Compare {C1} and CASE-11111111-1111-4111-8111-111111111111")
     assert graph.classify(f"Backorder {C1}") == "backorder"
+
+
+
+@pytest.mark.skipif(__import__("os").getenv("RETAILIQ_UC01_LIVE") != "true",
+                    reason="Explicit paid provider-backed CI suite only")
+def test_uc01_t02_live_provider_route_with_verified_sql_fixture(monkeypatch, fiction, tmp_path):
+    """REAL LLM router + compiled LangGraph + Fiction fixture SQL; not real-release E2E."""
+    from fastapi.testclient import TestClient
+    from retailiq.api import app
+    from retailiq.orchestration import week1_graph as graph
+    from retailiq.domain import backorder as backorder_domain
+
+    pytest.importorskip("langgraph")
+    path, manifest, store = fiction
+    root = _copy_policy(tmp_path)
+    add_snapshot(path, "candidate", W2, "2026-10-16T11:00:00Z",
+                 "2026-10-16T11:05:00Z")
+    store = reseal(path, manifest)
+    graph.close_checkpoint_graph()
+    graph._fiction_store_cached.cache_clear()
+
+    monkeypatch.setenv("RETAILIQ_MODE", "full")
+    monkeypatch.setenv("RETAILIQ_FICTION_DB", str(path))
+    monkeypatch.setenv("RETAILIQ_FICTION_MANIFEST", str(manifest))
+    monkeypatch.setenv("RETAILIQ_FICTION_KNOWLEDGE_ROOT", str(root))
+    monkeypatch.setenv("RETAILIQ_CHAT_DB", str(tmp_path / "sessions.sqlite3"))
+    monkeypatch.setenv("RETAILIQ_CHECKPOINT_DB", str(tmp_path / "checkpoints.sqlite3"))
+    actual_model = graph.chat_model
+    actual_domain = backorder_domain.investigate_backorder
+    provider_calls = []
+    tool_inputs = []
+
+    def provider():
+        provider_calls.append("actual_provider_model_created")
+        return actual_model()
+
+    def tool(store, case_id, *, knowledge_root):
+        tool_inputs.append({"case_id": case_id, "knowledge_root": str(knowledge_root)})
+        return actual_domain(store, case_id, knowledge_root=knowledge_root)
+
+    monkeypatch.setattr(graph, "chat_model", provider)
+    monkeypatch.setattr(backorder_domain, "investigate_backorder", tool)
+    try:
+        with TestClient(app) as client:
+            response = client.post("/ask", json={"question": f"Investigate the backorder {C1}"})
+            assert response.status_code == 200, response.text[:300]
+            result = response.json()
+            assert provider_calls == ["actual_provider_model_created"]
+            assert tool_inputs == [{"case_id": C1, "knowledge_root": str(root)}]
+            assert result["intent"] == "backorder"
+            assert result["route_fallback"] is False, "Live provider disagreed or fell back"
+            assert result["disposition"] == "NEEDS_REVIEW"
+            assert result["approval_status"] == "NOT_REQUESTED"
+            assert result["records"][0]["snapshot_id"] == "candidate"
+            assert result["records"][0]["warehouse_id"] == W2
+            assert result["source"]["sha256"] == store.release["runtime_sha256"]
+            assert f"inventory_snapshots_v2/candidate" in result["evidence_refs"]
+            assert "observed at 2026-10-16T11:00:00Z" in result["findings"][0]["text"]
+    finally:
+        graph.close_checkpoint_graph()
+        graph._fiction_store_cached.cache_clear()
