@@ -596,3 +596,200 @@ def test_uc01_api_does_not_misreport_internal_key_error_as_missing_session(monke
         response = client.post("/ask", json={"question": "Investigate business evidence"})
         assert response.status_code == 503
         assert "Session not found" not in response.text
+
+
+
+def _uc01_context_client(monkeypatch, tmp_path, fiction, *, with_candidate=False):
+    """Actual compiled Graph + HTTP, fake *router model*, real verified SQL fixture."""
+    from types import SimpleNamespace
+    from retailiq.orchestration import week1_graph as graph
+
+    path, manifest, store = fiction
+    if with_candidate:
+        add_snapshot(path, "candidate", W2, "2026-10-16T11:00:00Z",
+                     "2026-10-16T11:05:00Z")
+        store = reseal(path, manifest)
+    root = _copy_policy(tmp_path)
+    graph.close_checkpoint_graph()
+    graph._fiction_store_cached.cache_clear()
+    calls = []
+
+    class RouterModel:
+        def with_structured_output(self, schema):
+            return self
+
+        def invoke(self, messages):
+            calls.append(messages[-1][1])
+            return SimpleNamespace(intent=graph.classify(messages[-1][1]))
+
+    monkeypatch.setenv("RETAILIQ_MODE", "full")
+    monkeypatch.setenv("RETAILIQ_FICTION_DB", str(path))
+    monkeypatch.setenv("RETAILIQ_FICTION_MANIFEST", str(manifest))
+    monkeypatch.setenv("RETAILIQ_FICTION_KNOWLEDGE_ROOT", str(root))
+    monkeypatch.setenv("RETAILIQ_CHAT_DB", str(tmp_path / "sessions.sqlite3"))
+    monkeypatch.setenv("RETAILIQ_CHECKPOINT_DB", str(tmp_path / "checkpoints.sqlite3"))
+    monkeypatch.setenv("LANGSMITH_TRACING", "false")
+    monkeypatch.setattr(graph, "chat_model", lambda: RouterModel())
+    return graph, calls, store
+
+
+def test_uc01_t03_followup_uses_committed_case_even_without_snapshots(monkeypatch, fiction, tmp_path):
+    """A+B end-to-end; missing snapshots must not erase the case reference."""
+    from fastapi.testclient import TestClient
+    from retailiq.api import app
+    from retailiq.infrastructure.sessions import last_committed_case_binding
+
+    graph, model_calls, store = _uc01_context_client(monkeypatch, tmp_path, fiction)
+    try:
+        with TestClient(app) as client:
+            sid = client.post("/api/sessions", json={}).json()["id"]
+            first = client.post("/ask", json={
+                "session_id": sid, "question": f"Investigate backorder {C1}"})
+            assert first.status_code == 200, first.text
+            assert first.json()["disposition"] == "INSUFFICIENT_EVIDENCE"
+            assert first.json()["records"] == []
+            committed = last_committed_case_binding(sid)
+            assert committed["case_id"] == C1
+            assert committed["cutoff"] == "2026-10-16T12:00:00Z"
+            assert committed["source_sha256"] == store.release["runtime_sha256"]
+            assert committed["case_ref"] == f"fulfillment_cases/{C1}"
+
+            second = client.post("/ask", json={
+                "session_id": sid, "question": "Chính sách nào áp dụng?"})
+            assert second.status_code == 200, second.text
+            result = second.json()
+            assert result["intent"] == "backorder"
+            assert result["disposition"] == "INSUFFICIENT_EVIDENCE"
+            assert result["as_of"] == committed["cutoff"]
+            assert result["capability_plan"]["source"] == "committed_session_case"
+            assert result["capability_plan"]["case_id"] == C1
+            assert "FR-WH-2026-10-04" in result["answer"]
+            assert any("knowledge_documents/" in ref
+                       for item in result["findings"] for ref in item["evidence_refs"])
+            assert len(model_calls) == 1  # The follow-up cannot relabel the case.
+            assert len(client.get(f"/api/sessions/{sid}").json()["messages"]) == 4
+    finally:
+        graph.close_checkpoint_graph()
+        graph._fiction_store_cached.cache_clear()
+
+
+def test_uc01_t03_session_scope_topic_switch_and_ambiguous_warehouse(monkeypatch, fiction, tmp_path):
+    from fastapi.testclient import TestClient
+    from retailiq.api import app
+    from retailiq.infrastructure.sessions import add_turn, last_committed_case_binding
+
+    graph, model_calls, store = _uc01_context_client(monkeypatch, tmp_path, fiction,
+                                                       with_candidate=True)
+    try:
+        with TestClient(app) as client:
+            a = client.post("/api/sessions", json={}).json()["id"]
+            b = client.post("/api/sessions", json={}).json()["id"]
+            assert client.post("/ask", json={"session_id": a,
+                "question": f"Investigate backorder {C1}"}).status_code == 200
+            result = client.post("/ask", json={"session_id": a,
+                "question": "Còn kho khác không?"})
+            assert result.status_code == 200, result.text
+            assert result.json()["records"][0]["warehouse_id"] == W2
+            assert result.json()["capability_plan"]["source"] == "committed_session_case"
+
+            before = len(client.get(f"/api/sessions/{a}").json()["messages"])
+            ambiguous = client.post("/ask", json={"session_id": a,
+                "question": "Kho thứ hai thì sao?"})
+            assert ambiguous.status_code == 422
+            assert "warehouse ID" in ambiguous.json()["detail"]
+            assert len(client.get(f"/api/sessions/{a}").json()["messages"]) == before
+
+            cross = client.post("/ask", json={"session_id": b,
+                "question": "Chính sách nào áp dụng?"})
+            assert cross.status_code == 422
+            assert client.get(f"/api/sessions/{b}").json()["messages"] == []
+
+            # A successful independent topic breaks implicit case inheritance.
+            add_turn(a, "What are top products?", {
+                "intent": "top", "active_agent": "sales_agent", "answer": "Sample ranking",
+                "records": [], "contexts": []})
+            assert last_committed_case_binding(a) is None
+            unrelated = client.post("/ask", json={"session_id": a,
+                "question": "Chính sách nào áp dụng?"})
+            assert unrelated.status_code == 422
+            assert len(model_calls) == 1
+    finally:
+        graph.close_checkpoint_graph()
+        graph._fiction_store_cached.cache_clear()
+
+
+def test_uc01_t03_tampered_evidence_and_explicit_case_override(monkeypatch, fiction, tmp_path):
+    """The pinned release validates inherited authority, not user/assistant prose."""
+    from fastapi.testclient import TestClient
+    from retailiq.api import app
+    from retailiq.infrastructure.sessions import last_committed_case_binding
+
+    graph, _, store = _uc01_context_client(monkeypatch, tmp_path, fiction)
+    try:
+        with TestClient(app) as client:
+            sid = client.post("/api/sessions", json={}).json()["id"]
+            assert client.post("/ask", json={"session_id": sid,
+                "question": f"Investigate {C1}"}).status_code == 200
+            db = tmp_path / "sessions.sqlite3"
+            with sqlite3.connect(db) as c:
+                raw = c.execute("SELECT evidence_json FROM messages WHERE session_id=? AND role='assistant' ORDER BY id DESC LIMIT 1",
+                                (sid,)).fetchone()[0]
+                payload = json.loads(raw)
+                payload["case_binding"]["source_sha256"] = "0"*64
+                c.execute("UPDATE messages SET evidence_json=? WHERE session_id=? AND role='assistant'",
+                          (json.dumps(payload), sid))
+            # Well-formed but mismatching source hash cannot authorize a follow-up.
+            stale = client.post("/ask", json={"session_id": sid,
+                "question": "Chính sách nào áp dụng?"})
+            assert stale.status_code == 422
+            assert "source/cutoff changed" in stale.json()["detail"]
+            assert last_committed_case_binding(sid)["source_sha256"] == "0"*64
+
+            # Explicit CASE-ID takes precedence over inherited, untrusted source hash.
+            fresh = client.post("/ask", json={"session_id": sid,
+                "question": f"Investigate {C1}"})
+            assert fresh.status_code == 200, fresh.text
+            assert fresh.json()["capability_plan"]["source"] == "validated_explicit_case_id"
+            assert last_committed_case_binding(sid)["source_sha256"] == store.release["runtime_sha256"]
+
+            with sqlite3.connect(db) as c:
+                c.execute("UPDATE messages SET evidence_json='corrupted' WHERE session_id=? AND role='assistant' AND id=(SELECT MAX(id) FROM messages WHERE session_id=? AND role='assistant')",
+                          (sid, sid))
+            missing = client.post("/ask", json={"session_id": sid,
+                "question": "Chính sách nào áp dụng?"})
+            assert missing.status_code == 422
+            assert "explicit CASE-ID" in missing.json()["detail"]
+    finally:
+        graph.close_checkpoint_graph()
+        graph._fiction_store_cached.cache_clear()
+
+
+def test_uc01_t03_failed_turn_checkpoint_is_not_committed_context(monkeypatch, fiction, tmp_path):
+    from fastapi.testclient import TestClient
+    from retailiq.api import app
+    from retailiq.api import http
+    from retailiq.infrastructure.sessions import last_committed_case_binding
+
+    graph, _, _ = _uc01_context_client(monkeypatch, tmp_path, fiction)
+    genuine_commit = http.add_turn
+
+    def failed_commit(*args, **kwargs):
+        raise RuntimeError("controlled commit failure")
+
+    try:
+        with TestClient(app) as client:
+            sid = client.post("/api/sessions", json={}).json()["id"]
+            monkeypatch.setattr(http, "add_turn", failed_commit)
+            failed = client.post("/ask", json={"session_id": sid,
+                "question": f"Investigate {C1}"})
+            assert failed.status_code == 503
+            monkeypatch.setattr(http, "add_turn", genuine_commit)
+            assert last_committed_case_binding(sid) is None
+            assert client.get(f"/api/sessions/{sid}").json()["messages"] == []
+            followup = client.post("/ask", json={"session_id": sid,
+                "question": "Chính sách nào áp dụng?"})
+            assert followup.status_code == 422
+            assert client.get(f"/api/sessions/{sid}").json()["messages"] == []
+    finally:
+        graph.close_checkpoint_graph()
+        graph._fiction_store_cached.cache_clear()
