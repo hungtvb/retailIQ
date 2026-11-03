@@ -62,6 +62,17 @@ def _file_identity(path: Path) -> tuple[int, int, int, int]:
     return stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns
 
 
+def _require_single_file_snapshot(path: Path) -> None:
+    """Reject WAL sidecars: the release hash covers only the main SQLite file.
+
+    Read-only SQLite connections still see committed WAL pages, which may differ
+    from the pinned main-file checksum. The released Fiction DB is DELETE-mode.
+    """
+    for suffix in ("-wal", "-shm"):
+        if path.with_name(path.name + suffix).exists():
+            raise FictionDataError("Fiction snapshot has an unverified SQLite WAL sidecar")
+
+
 def _aware_timestamp(raw: str) -> datetime:
     try:
         value = datetime.fromisoformat(raw.replace("Z", "+00:00"))
@@ -81,6 +92,7 @@ def verify_release(db_path: str | Path, manifest_path: str | Path) -> dict:
     db_path, manifest_path = Path(db_path).resolve(), Path(manifest_path).resolve()
     if not db_path.is_file() or not manifest_path.is_file():
         raise FictionDataError("Fiction SQLite and release manifest are both required")
+    _require_single_file_snapshot(db_path)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest.get("pack_version") != RELEASE or not re.fullmatch(
         r"[0-9a-f]{64}", str(manifest.get("runtime_sha256", ""))
@@ -94,6 +106,8 @@ def verify_release(db_path: str | Path, manifest_path: str | Path) -> dict:
         raise FictionDataError("Fiction binary SHA-256 does not match manifest")
     with closing(sqlite3.connect(db_path.as_uri() + "?mode=ro", uri=True)) as conn:
         conn.execute("PRAGMA query_only=ON")
+        if conn.execute("PRAGMA journal_mode").fetchone()[0].lower() != "delete":
+            raise FictionDataError("Fiction release requires DELETE journal mode, not WAL")
         if conn.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
             raise FictionDataError("Fiction integrity_check failed")
         if conn.execute("PRAGMA foreign_key_check").fetchone() is not None:
@@ -119,6 +133,7 @@ def verify_release(db_path: str | Path, manifest_path: str | Path) -> dict:
             expected_sku = "FR-" + sha256(canonical_id.encode()).hexdigest()[:16].upper()
             if sku != expected_sku:
                 raise FictionDataError("Fiction product_id / SKU mapping mismatch")
+    _require_single_file_snapshot(db_path)
     return {
         "pack_version": RELEASE,
         "runtime_sha256": manifest["runtime_sha256"],
@@ -150,9 +165,11 @@ class FictionStore:
         return cls(path, release, _token=_VERIFIED_CONSTRUCTION)
 
     def _q(self, sql: str, args: tuple = ()) -> list[dict]:
+        _require_single_file_snapshot(self.db_path)
         if _file_identity(self.db_path) != self._snapshot_identity:
             raise FictionDataError("Fiction snapshot changed since release verification")
         rows = query(sql, args, db_path=self.db_path)
+        _require_single_file_snapshot(self.db_path)
         if _file_identity(self.db_path) != self._snapshot_identity:
             raise FictionDataError("Fiction snapshot changed during SQL query")
         return rows
@@ -211,6 +228,9 @@ class FictionStore:
     def inventory(self, product: str, warehouse_id: str | None = None) -> dict:
         pid = self.resolve_product(product)
         wid = _id(warehouse_id) if warehouse_id is not None else None
+        scope = {"requested_product": product, "product_id": pid, "warehouse_id": wid}
+        if pid is None:
+            return self._result([], scope=scope, refs=[], limitations=["PRODUCT_NOT_FOUND"])
         rows = self._q("SELECT inventory_id, product_id, warehouse_id, quantity_on_hand, "
                        "reserved_quantity, last_restocked_date FROM inventory "
                        "WHERE product_id=? AND (? IS NULL OR warehouse_id=?) ORDER BY warehouse_id",
@@ -220,7 +240,7 @@ class FictionStore:
             if type(on_hand) is not int or type(reserved) is not int or not 0 <= reserved <= on_hand:
                 raise FictionDataError("Invalid stock evidence")
             row["available_snapshot"] = on_hand - reserved
-        return self._result(rows, scope={"product_id": pid, "warehouse_id": wid},
+        return self._result(rows, scope=scope,
                             refs=[f"inventory/{r['inventory_id']}" for r in rows],
                             limitations=["UNDATED_INVENTORY: snapshot time unknown; not current or historical-at-query-period stock"]
                             + (["NO_INVENTORY_RECORDS: not equivalent to zero stock"] if not rows else []))
