@@ -262,7 +262,7 @@ def test_verified_store_fails_closed_on_late_wal_sidecar(fiction):
 
 def _copy_policy(tmp_path):
     root = tmp_path / "knowledge"
-    (root / "policies").mkdir(parents=True)
+    (root / "policies").mkdir(parents=True, exist_ok=True)
     source = Path(__file__).resolve().parents[1] / "data/fiction/knowledge/policies/FR-WH-2026-10-04.md"
     shutil.copyfile(source, root / "policies/FR-WH-2026-10-04.md")
     return root
@@ -341,3 +341,8 @@ def test_uc01_m1_stale_evidence_and_bad_case_join(fiction, tmp_path):
     store = reseal(path, manifest)
     with pytest.raises(FictionDataError, match="mismatch"):
         investigate_backorder(store, C1, knowledge_root=root)
+
+
+def test_uc01_policy_document_copy_is_exact_pinned_release_bytes():
+    source = Path(__file__).resolve().parents[1] / "data/fiction/knowledge/policies/FR-WH-2026-10-04.md"
+    assert sha256(source.read_bytes()).hexdigest() == "f3ff7463e67e034360fd87b35c1c71286445be0de1431009591821489bd4d9c8"
