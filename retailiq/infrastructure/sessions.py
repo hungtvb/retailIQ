@@ -10,7 +10,9 @@ import sqlite3
 import threading
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from uuid import uuid4
+from uuid import UUID, uuid4
+from datetime import datetime
+import re
 
 DEFAULT_DB = Path(__file__).resolve().parents[2] / 'data' / 'chat_sessions.sqlite3'
 MAX_SESSION_MESSAGES = 200  # Bounded API response; older messages stay in SQLite.
@@ -165,6 +167,89 @@ def history(sid: str, limit: int = 12) -> list[dict]:
         return [dict(r) for r in reversed(rows)]
 
 
+
+def _valid_case_binding(value: object) -> bool:
+    """Validate bounded provenance shape, not the contents of a business database."""
+    if not isinstance(value, dict) or value.get('version') != 1:
+        return False
+    cid = value.get('case_id')
+    if not isinstance(cid, str) or not cid.startswith('CASE-') or len(cid) != 41:
+        return False
+    try:
+        if str(UUID(cid[5:])) != cid[5:]:
+            return False
+    except (ValueError, AttributeError):
+        return False
+    cutoff = value.get('cutoff')
+    if not isinstance(cutoff, str) or len(cutoff) > 40:
+        return False
+    try:
+        instant = datetime.fromisoformat(cutoff.replace('Z', '+00:00'))
+        if instant.tzinfo is None or instant.utcoffset() is None:
+            return False
+    except ValueError:
+        return False
+    return (value.get('source_id') == 'fiction-retail/sqlite'
+            and value.get('source_version') == 'fiction-retail-unified-v1.0.0'
+            and isinstance(value.get('source_sha256'), str)
+            and re.fullmatch(r'[0-9a-f]{64}', value['source_sha256']) is not None
+            and value.get('case_ref') == f'fulfillment_cases/{cid}'
+            and value.get('disposition') in
+            {'SUPPORTED', 'NEEDS_REVIEW', 'INSUFFICIENT_EVIDENCE'})
+
+
+def _committable_case_binding(response: dict) -> dict | None:
+    """Only source-backed output from our reviewed UC-01 tool can be inherited."""
+    if (response.get('intent') != 'backorder' or
+            response.get('active_agent') != 'backorder_agent' or
+            response.get('approval_status') != 'NOT_REQUESTED'):
+        return None
+    plan = response.get('capability_plan') or {}
+    if not isinstance(plan, dict) or plan.get('capabilities') != ['fiction.backorder.investigate']:
+        return None
+    source = response.get('source') or {}
+    temporal = response.get('temporal') or {}
+    refs = response.get('evidence_refs') or []
+    if not isinstance(source, dict) or not isinstance(temporal, dict) or not isinstance(refs, list):
+        return None
+    value = {
+        'version': 1,
+        'case_id': plan.get('case_id'),
+        'cutoff': temporal.get('evidence_cutoff'),
+        'source_id': source.get('id'),
+        'source_version': source.get('version'),
+        'source_sha256': source.get('sha256'),
+        'case_ref': f"fulfillment_cases/{plan.get('case_id')}",
+        'disposition': response.get('disposition'),
+        'source_request_id': response.get('request_id') if isinstance(response.get('request_id'), str) else None,
+    }
+    if value['case_ref'] not in refs or not _valid_case_binding(value):
+        return None
+    return value
+
+
+def last_committed_case_binding(sid: str) -> dict | None:
+    """Same-session latest *committed assistant turn* only; no chat text/checkpoints.
+
+    A topic switch, missing/truncated/corrupt evidence or a failed turn cannot
+    supply an inherited case. Authorization/ownership is separate (#29).
+    """
+    with _connect() as c:
+        row = c.execute('''SELECT intent, agent, evidence_json FROM messages
+            WHERE session_id=? AND role='assistant' ORDER BY id DESC LIMIT 1''', (sid,)).fetchone()
+    if row is None or row['intent'] != 'backorder' or row['agent'] != 'backorder_agent':
+        return None
+    raw = row['evidence_json']
+    if not isinstance(raw, str) or len(raw) > MAX_STORED_EVIDENCE_CHARS:
+        return None
+    try:
+        payload = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    binding = payload.get('case_binding') if isinstance(payload, dict) else None
+    return dict(binding) if _valid_case_binding(binding) else None
+
+
 def add_turn(sid: str, question: str, response: dict) -> None:
     """Atomic pair of messages; only called after successful execution."""
     with _connect() as c:
@@ -185,6 +270,9 @@ def add_turn(sid: str, question: str, response: dict) -> None:
                     'contexts': [{'source': str(item['source'])[:300]} for item in contexts[:100]
                                  if isinstance(item, dict) and isinstance(item.get('source'), str)]
                     if isinstance(contexts, list) else []}
+        binding = _committable_case_binding(response)
+        if binding is not None:
+            evidence['case_binding'] = binding
         evidence_json = json.dumps(evidence, ensure_ascii=False)
         if len(evidence_json) > MAX_STORED_EVIDENCE_CHARS:
             evidence_json = json.dumps({'intent': intent, 'as_of': response.get('as_of'),
