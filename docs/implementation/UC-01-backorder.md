@@ -148,7 +148,7 @@ flowchart LR
 - Decode the actual MCP result and reject tool execution errors before trusting content. Validate shape, source release/hash, UUID/SKU/warehouse/order identity and no unexpected extra scope. A timeout, unavailable subprocess, malformed payload or mismatch must fail closed, not manufacture success or unmarked direct-SQL fallback.
 - Emit mcp.tool.started/completed/failed for **actual** invocation only, with request/session correlation and sanitized metadata. Apply row and tool timeout bounds; do not log PII.
 - Retain the present pinned MCP SDK v1 range (mcp>=1.28,<2) and LangChain MCP adapters (<1) for this slice. SDK v2 renames FastMCP to MCPServer; defer that independent migration. Confirm exact installed versions and error handling at implementation.
-- Targeted code surfaces: retail iq MCP server/adapter and narrowly scoped graph integration; add domain order-line validation only when an observed gap requires it. Tests and smoke use Fiction fixtures. Update canonical DATA_API and FICTION_RUNTIME documentation with the code PR, not ahead of implementation.
+- Targeted code surfaces: existing RetailIQ MCP server/adapter and narrowly scoped graph integration; add domain order-line validation only when an observed gap requires it. Tests and smoke use Fiction fixtures. Update canonical DATA_API and FICTION_RUNTIME documentation with the code PR, not ahead of implementation.
 
 ### Acceptance / evidence gates
 
