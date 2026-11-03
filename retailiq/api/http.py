@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from retailiq.assistant import ask
 from retailiq.orchestration.week1_graph import InvalidCaseId
 from retailiq.rag.indexing import IndexNotReadyError
-from retailiq.infrastructure.sessions import history, add_turn, get_session, session_mutation, SessionBusyError, save_execution_trace, get_customer_memory
+from retailiq.infrastructure.sessions import history, add_turn, get_session, session_mutation, SessionBusyError, save_execution_trace, get_customer_memory, last_committed_case_binding
 from pathlib import Path
 from contextlib import nullcontext
 import time
@@ -158,12 +158,14 @@ def _perform_turn(data: AskBody) -> dict:
             else:
                 prior = history(data.session_id, limit=12)
                 memory = get_customer_memory(data.session_id)
+                context = (last_committed_case_binding(data.session_id)
+                           if os.getenv('RETAILIQ_MODE') == 'full' else None)
+                kwargs = {'history': prior, 'active_agent': current['active_agent']}
                 if memory['consent']:
-                    result = ask(data.question, history=prior,
-                                 active_agent=current['active_agent'], memory=memory)
-                else:
-                    result = ask(data.question, history=prior,
-                                 active_agent=current['active_agent'])
+                    kwargs['memory'] = memory
+                if context:
+                    kwargs['verified_case_context'] = context
+                result = ask(data.question, **kwargs)
                 add_turn(data.session_id, data.question, {**result, 'request_id': request_id()})
     log_event('chat.turn_result', agent=result.get('active_agent'),
               intent=result.get('intent'), skill=result.get('skill'),
