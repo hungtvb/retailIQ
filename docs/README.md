@@ -9,7 +9,7 @@ Use this index to load **only the documentation needed for the task**.
 | Course milestones and original planning sequence | [Roadmap / Course Plan](COURSE_PLAN.md) |
 | System design and implementation boundaries | [Architecture](ARCHITECTURE.md) |
 | Request paths, component behavior and detailed execution boundaries | [Basic & Detail Design](DESIGN.md) |
-| Implementation Detail for an approved vertical slice | [UC-01 Backorder Investigation](implementation/UC-01-backorder.md) (use its reviewed/merged revision) (others added only when scheduled) |
+| Per-use-case Implementation Detail | [UC-01 Backorder Investigation](implementation/UC-01-backorder.md) (approved/merged); [UC-03 Sales & Inventory Analysis](implementation/UC-03-sales-inventory-analysis.md) (**design proposal**, not an approved code contract until merged) |
 | KPI definitions and current HTTP/MCP contracts | [Data & API](DATA_API.md) |
 | Verified Fiction SQL release and local setup | [Fiction Runtime](FICTION_RUNTIME.md) |
 | Testing approach, scenarios and reproducible commands | [Testing & Scenario Acceptance](SCENARIO_ACCEPTANCE.md) |
