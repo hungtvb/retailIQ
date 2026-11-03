@@ -6,6 +6,7 @@ not an unverified constructor. The real uploaded SQLite is audited separately.
 from __future__ import annotations
 
 import json
+import shutil
 from hashlib import sha256
 import sqlite3
 from pathlib import Path
@@ -15,6 +16,7 @@ import sys
 import pytest
 
 from retailiq.domain.fiction import FictionStore, FictionDataError, _period, verify_release
+from retailiq.domain.backorder import investigate_backorder
 from retailiq.infrastructure.sqlite import query
 
 P1 = "11111111-1111-4111-8111-111111111111"
@@ -56,6 +58,8 @@ def fiction(tmp_path):
         CREATE TABLE operational_events(event_id TEXT, case_id TEXT, event_type TEXT, occurred_at TEXT, recorded_at TEXT);
         CREATE TABLE inventory_snapshots_v2(snapshot_id TEXT, case_id TEXT, product_id TEXT, warehouse_id TEXT, observed_at TEXT, received_at TEXT, on_hand INT, reserved INT);
         CREATE TABLE warehouse_eligibility(case_id TEXT, warehouse_id TEXT, eligible INT, reason_code TEXT);
+        CREATE TABLE fulfillment_policies(policy_id TEXT, policy_summary TEXT, requires_manager_approval INT, provenance TEXT);
+        CREATE TABLE knowledge_documents(document_id TEXT, product_id TEXT, policy_id TEXT, kind TEXT, relative_path TEXT, sha256 TEXT, provenance TEXT);
         CREATE TABLE metadata(key TEXT PRIMARY KEY, value TEXT);
         ''')
         # Mirror the final schema's 27 named business tables. Empty unrelated
@@ -64,7 +68,8 @@ def fiction(tmp_path):
         for table in manifest["table_counts"]:
             if table not in {"products", "orders", "order_items", "shipments", "inventory",
                              "returns", "fulfillment_cases", "operational_events",
-                             "inventory_snapshots_v2", "warehouse_eligibility", "metadata"}:
+                             "inventory_snapshots_v2", "warehouse_eligibility", "metadata",
+                              "fulfillment_policies", "knowledge_documents"}:
                 c.execute(f'CREATE TABLE "{table}" (dummy TEXT)')
         sku = lambda pid: "FR-" + sha256(pid.encode()).hexdigest()[:16].upper()
         c.executemany('INSERT INTO products VALUES(?,?,?,?,?,?)',
@@ -79,6 +84,13 @@ def fiction(tmp_path):
                   ("event1", C1, "evidence_cutoff_reached", "2026-10-16T12:00:00Z", "2026-10-16T12:01:00Z"))
         c.executemany("INSERT INTO warehouse_eligibility VALUES (?,?,?,?)",
                       [(C1, W1, 1, "ALLOWED"), (C1, W2, 1, "ALLOWED")])
+        policy_path = Path(__file__).resolve().parents[1] / "data/fiction/knowledge/policies/FR-WH-2026-10-04.md"
+        c.execute("INSERT INTO fulfillment_policies VALUES (?,?,?,?)",
+                  ("FR-WH-2026-10-04", "Warehouse transfer policy", 1, "scenario_generated"))
+        c.execute("INSERT INTO knowledge_documents VALUES (?,?,?,?,?,?,?)",
+                  ("DOC-test-warehouse-policy", None, "FR-WH-2026-10-04", "business_policy",
+                   "policies/FR-WH-2026-10-04.md", sha256(policy_path.read_bytes()).hexdigest(),
+                   "scenario_generated"))
         manifest["content_sha256"] = "mini-release-fixture-content"
         manifest["dataset_business_as_of"] = "2026-11-03T00:00:00+07:00"
         c.executemany("INSERT INTO metadata VALUES (?,?)", [
@@ -247,3 +259,123 @@ def test_verified_store_fails_closed_on_late_wal_sidecar(fiction):
             FictionStore.open(path, manifest)
     finally:
         sidecar.unlink(missing_ok=True)
+
+def _copy_policy(tmp_path):
+    root = tmp_path / "knowledge"
+    (root / "policies").mkdir(parents=True, exist_ok=True)
+    source = Path(__file__).resolve().parents[1] / "data/fiction/knowledge/policies/FR-WH-2026-10-04.md"
+    shutil.copyfile(source, root / "policies/FR-WH-2026-10-04.md")
+    return root
+
+
+def test_uc01_m1_candidate_and_scoped_negative_and_missing_evidence(fiction, tmp_path):
+    path, manifest, store = fiction
+    root = _copy_policy(tmp_path)
+
+    missing = investigate_backorder(store, C1, knowledge_root=root)
+    assert missing["disposition"] == "INSUFFICIENT_EVIDENCE"
+    assert "NO_CASE_SNAPSHOT" in missing["reason_codes"]
+    assert missing["approval_status"] == "NOT_REQUESTED"
+    assert missing["data"]["policy"]["applicable_at_cutoff"] is True
+
+    add_snapshot(path, "recent-alternative", W2, "2026-10-16T11:00:00Z",
+                 "2026-10-16T11:05:00Z", on_hand=5, reserved=1)
+    store = reseal(path, manifest)
+    candidate = investigate_backorder(store, C1, knowledge_root=root)
+    assert candidate["disposition"] == "NEEDS_REVIEW"
+    assert candidate["reason_codes"] == []
+    assert candidate["data"]["evidence_candidates"][0]["snapshot_id"] == "recent-alternative"
+    assert candidate["data"]["evidence_candidates"][0]["available_at_observation"] == 4
+    assert f"knowledge_documents/DOC-test-warehouse-policy" in candidate["record_refs"]
+    assert candidate["scope"]["finding_scope"] == "recorded_case_alternative_warehouses_only"
+
+    with sqlite3.connect(path) as conn:
+        conn.execute("UPDATE inventory_snapshots_v2 SET on_hand=1, reserved=0 WHERE snapshot_id='recent-alternative'")
+    store = reseal(path, manifest)
+    negative = investigate_backorder(store, C1, knowledge_root=root)
+    assert negative["disposition"] == "SUPPORTED"
+    assert negative["data"]["evidence_candidates"] == []
+    assert negative["data"]["snapshots"][0]["exclusion_reasons"] == ["INSUFFICIENT_AVAILABLE"]
+
+
+def test_uc01_m1_policy_cutoff_and_missing_source_fail_closed(fiction, tmp_path):
+    path, manifest, _ = fiction
+    root = _copy_policy(tmp_path)
+    add_snapshot(path, "good", W2, "2026-10-16T11:00:00Z", "2026-10-16T11:01:00Z")
+    store = reseal(path, manifest)
+
+    policy_file = root / "policies/FR-WH-2026-10-04.md"
+    policy_file.unlink()
+    missing = investigate_backorder(store, C1, knowledge_root=root)
+    assert missing["disposition"] == "INSUFFICIENT_EVIDENCE"
+    assert missing["reason_codes"] == ["POLICY_DOCUMENT_MISSING"]
+
+    root = _copy_policy(tmp_path)
+    policy_file.write_bytes(policy_file.read_bytes() + b"\n# tampered")
+    with pytest.raises(FictionDataError, match="SHA-256 mismatch"):
+        investigate_backorder(store, C1, knowledge_root=root)
+
+    root = _copy_policy(tmp_path)
+    with sqlite3.connect(path) as conn:
+        conn.execute("UPDATE operational_events SET occurred_at='2026-11-03T00:00:00Z' WHERE case_id=?", (C1,))
+    store = reseal(path, manifest)
+    expired = investigate_backorder(store, C1, knowledge_root=root)
+    assert expired["disposition"] == "INSUFFICIENT_EVIDENCE"
+    assert "POLICY_NOT_EFFECTIVE_AT_CUTOFF" in expired["reason_codes"]
+
+
+def test_uc01_m1_stale_evidence_and_bad_case_join(fiction, tmp_path):
+    path, manifest, _ = fiction
+    root = _copy_policy(tmp_path)
+    add_snapshot(path, "stale", W2, "2026-10-15T10:00:00Z",
+                 "2026-10-15T10:05:00Z", on_hand=50)
+    store = reseal(path, manifest)
+    stale = investigate_backorder(store, C1, knowledge_root=root)
+    assert stale["disposition"] == "INSUFFICIENT_EVIDENCE"
+    assert "NO_USABLE_SNAPSHOT_FOR_ELIGIBLE_ROUTE" in stale["reason_codes"]
+    assert "STALE_OBSERVATION" in stale["data"]["snapshots"][0]["exclusion_reasons"]
+
+    with sqlite3.connect(path) as conn:
+        conn.execute("UPDATE fulfillment_cases SET order_item_id=? WHERE case_id=?",
+                     ("00000000-0000-4000-8000-000000000000", C1))
+    store = reseal(path, manifest)
+    with pytest.raises(FictionDataError, match="mismatch"):
+        investigate_backorder(store, C1, knowledge_root=root)
+
+
+def test_uc01_policy_document_copy_is_exact_pinned_release_bytes():
+    source = Path(__file__).resolve().parents[1] / "data/fiction/knowledge/policies/FR-WH-2026-10-04.md"
+    assert sha256(source.read_bytes()).hexdigest() == "f3ff7463e67e034360fd87b35c1c71286445be0de1431009591821489bd4d9c8"
+
+
+def test_uc01_one_verified_candidate_does_not_require_every_route_snapshot(fiction, tmp_path):
+    path, manifest, _ = fiction
+    root = _copy_policy(tmp_path)
+    add_snapshot(path, "good", W2, "2026-10-16T11:00:00Z", "2026-10-16T11:05:00Z")
+    with sqlite3.connect(path) as conn:
+        conn.execute("INSERT INTO warehouse_eligibility VALUES (?,?,?,?)",
+                     (C1, "99999999-9999-4999-8999-999999999999", 1, "ALLOWED"))
+    store = reseal(path, manifest)
+    result = investigate_backorder(store, C1, knowledge_root=root)
+    assert result["disposition"] == "NEEDS_REVIEW"
+    assert "NO_USABLE_SNAPSHOT_FOR_ELIGIBLE_ROUTE" in result["reason_codes"]
+    assert [c["snapshot_id"] for c in result["data"]["evidence_candidates"]] == ["good"]
+
+
+def test_uc01_untrusted_competing_policy_requires_authority_review(fiction, tmp_path):
+    path, manifest, _ = fiction
+    root = _copy_policy(tmp_path)
+    add_snapshot(path, "good", W2, "2026-10-16T11:00:00Z",
+                 "2026-10-16T11:05:00Z", on_hand=5, reserved=1)
+    # Controlled adversarial fixture, NOT a case in published Fiction v1.
+    with sqlite3.connect(path) as conn:
+        conn.execute("INSERT INTO fulfillment_policies VALUES (?,?,?,?)",
+                     ("FR-WH-UNREVIEWED", "Conflicting warehouse authority", 1,
+                      "fixture_only"))
+    store = reseal(path, manifest)
+    result = investigate_backorder(store, C1, knowledge_root=root)
+    assert result["data"]["evidence_candidates"]
+    assert result["data"]["policy"] is None
+    assert result["reason_codes"] == ["POLICY_CONFLICT"]
+    assert result["disposition"] == "NEEDS_REVIEW"  # Policy review, NOT transfer.
+    assert result["approval_status"] == "NOT_REQUESTED"
