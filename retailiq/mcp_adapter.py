@@ -11,6 +11,7 @@ from uuid import UUID
 from hashlib import sha256
 
 from retailiq.observability import observed
+from retailiq.domain.fiction import _money
 
 ROOT = Path(__file__).resolve().parents[1]
 FR_SKU = re.compile(r"^FR-[0-9A-F]{16}$")
@@ -85,13 +86,14 @@ def _source_expected() -> str:
 
 
 def _verify_envelope(result: dict, expected_sha: str, tool: str, arguments: dict) -> dict:
-    if not isinstance(result, dict) or set(result) - {
-        "data", "source", "scope", "record_refs", "temporal", "limitations", "aggregate_evidence"
+    if not isinstance(result, dict) or set(result) != {
+        "data", "source", "scope", "record_refs", "temporal", "limitations"
     }:
         raise ValueError("Unexpected Fiction MCP envelope")
     source, scope = result.get("source"), result.get("scope")
     refs, limits = result.get("record_refs"), result.get("limitations")
-    if (not isinstance(source, dict) or source.get("id") != "fiction-retail/sqlite" or
+    if (not isinstance(source, dict) or set(source) != {"id", "version", "sha256"} or
+            source.get("id") != "fiction-retail/sqlite" or
             source.get("version") != "fiction-retail-unified-v1.0.0" or
             source.get("sha256") != expected_sha or not isinstance(scope, dict) or
             not isinstance(refs, list) or len(refs) > 100 or
@@ -101,6 +103,8 @@ def _verify_envelope(result: dict, expected_sha: str, tool: str, arguments: dict
         raise ValueError("Fiction MCP temporal metadata missing")
     if tool == "inventory_lookup":
         product = arguments["product"]
+        if set(scope) != {"requested_product", "product_id", "warehouse_id"}:
+            raise ValueError("Inventory MCP scope contains unexpected fields")
         if scope.get("requested_product") != product:
             raise ValueError("Inventory MCP changed product scope")
         wid = arguments.get("warehouse_id")
@@ -144,6 +148,8 @@ def _verify_envelope(result: dict, expected_sha: str, tool: str, arguments: dict
             raise ValueError("Inventory MCP missing evidence status")
     elif tool == "order_lookup":
         oid = arguments["order_id"]
+        if set(scope) != {"order_id"}:
+            raise ValueError("Order MCP scope contains unexpected fields")
         if scope.get("order_id") != oid:
             raise ValueError("Order MCP changed order scope")
         data = result.get("data")
@@ -155,12 +161,15 @@ def _verify_envelope(result: dict, expected_sha: str, tool: str, arguments: dict
         else:
             order = data["order"]
             lines, shipments = data["lines"], data["shipments"]
-            if (not isinstance(order, dict) or order.get("order_id") != oid or
+            if (not isinstance(order, dict) or
+                    set(order) != {"order_id", "order_date", "order_status", "total_amount"} or
+                    order.get("order_id") != oid or
                     not isinstance(lines, list) or not isinstance(shipments, list) or
                     len(lines) > 100 or len(shipments) > 100):
                 raise ValueError("Order MCP invalid identity/size")
-            if any(k in order for k in ("customer_id", "name", "email", "address", "payment_method")):
-                raise ValueError("Order MCP leaked customer data")
+            # Reject *all* unapproved fields, not just a short list of known
+            # PII names; new contact/payment fields must never leak by default.
+            _money(order["total_amount"])
             expected_refs = ["orders/" + oid]
             for line in lines:
                 if not isinstance(line, dict) or set(line) != {
@@ -170,6 +179,7 @@ def _verify_envelope(result: dict, expected_sha: str, tool: str, arguments: dict
                 _uuid(line["product_id"])
                 if type(line["quantity"]) is not int or line["quantity"] <= 0:
                     raise ValueError("Order MCP invalid line quantity")
+                _money(line["unit_price"])
                 if type(line["discount_pct"]) is not int or not 0 <= line["discount_pct"] <= 100:
                     raise ValueError("Order MCP invalid discount")
                 expected_refs.append("order_items/" + _uuid(line["order_item_id"]))
