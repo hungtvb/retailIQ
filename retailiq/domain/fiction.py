@@ -209,33 +209,86 @@ class FictionStore:
                             limitations=["Imported list price has no effective date or verified currency-specific offer"] if rows else ["PRODUCT_NOT_FOUND"])
 
     def order(self, order_id: str) -> dict:
+        """Verified, bounded order facts; shipment state is release-recorded, not historic at case cutoff."""
         oid = _id(order_id)
         orders = self._q("SELECT order_id, order_date, order_status, total_amount "
                          "FROM orders WHERE order_id=?", (oid,))
         if not orders:
             return self._result(None, scope={"order_id": oid}, refs=[], limitations=["ORDER_NOT_FOUND"])
-        lines = self._q("SELECT order_item_id, product_id, quantity, unit_price, discount_pct "
+        if len(orders) != 1 or _id(orders[0]["order_id"]) != oid:
+            raise FictionDataError("Inconsistent order identity")
+        _money(orders[0]["total_amount"])
+        lines = self._q("SELECT order_item_id, order_id, product_id, quantity, unit_price, discount_pct "
                         "FROM order_items WHERE order_id=? ORDER BY order_item_id", (oid,))
-        shipments = self._q("SELECT shipment_id, warehouse_id, shipped_date, delivered_date, shipment_state "
+        shipments = self._q("SELECT shipment_id, order_id, warehouse_id, shipped_date, delivered_date, shipment_state "
                             "FROM shipments WHERE order_id=? ORDER BY shipment_id", (oid,))
+        if len(lines) > _LIMIT or len(shipments) > _LIMIT:
+            raise FictionDataError("Order detail exceeds bounded response limit")
+        line_ids: set[str] = set()
+        product_ids: set[str] = set()
+        for line in lines:
+            lid = _id(line.pop("order_item_id"))
+            if lid in line_ids or _id(line.pop("order_id")) != oid:
+                raise FictionDataError("Duplicate or mismatched order line")
+            line_ids.add(lid)
+            line["order_item_id"] = lid
+            pid = _id(line["product_id"])
+            product_ids.add(pid)
+            line["product_id"] = pid
+            if type(line["quantity"]) is not int or line["quantity"] <= 0:
+                raise FictionDataError("Invalid order line quantity")
+            _money(line["unit_price"])
+            if type(line["discount_pct"]) is not int or not 0 <= line["discount_pct"] <= 100:
+                raise FictionDataError("Invalid order line discount")
+        if product_ids:
+            placeholders = ",".join("?" for _ in product_ids)
+            known = self._q("SELECT product_id FROM products WHERE product_id IN ("
+                            + placeholders + ")", tuple(sorted(product_ids)))
+            if {row["product_id"] for row in known} != product_ids:
+                raise FictionDataError("Order line references unknown product")
+        shipment_ids: set[str] = set()
+        for shipment in shipments:
+            sid = _id(shipment.pop("shipment_id"))
+            if sid in shipment_ids or _id(shipment.pop("order_id")) != oid:
+                raise FictionDataError("Duplicate or mismatched shipment")
+            shipment_ids.add(sid)
+            shipment["shipment_id"] = sid
+            shipment["warehouse_id"] = _id(shipment["warehouse_id"])
         return self._result({"order": orders[0], "lines": lines, "shipments": shipments},
                             scope={"order_id": oid}, refs=[f"orders/{oid}"] +
                             [f"order_items/{r['order_item_id']}" for r in lines] +
                             [f"shipments/{r['shipment_id']}" for r in shipments],
-                            temporal={"order_date": orders[0]["order_date"]},
-                            limitations=["Order status does not prove payment settlement or live delivery status"])
+                            temporal={"order_date": orders[0]["order_date"],
+                                      "dataset_business_as_of": self.release["dataset_business_as_of"]},
+                            limitations=["Order/shipment state is release-recorded, NOT state at a historical case cutoff; payment settlement and live delivery remain unverified"])
 
     def inventory(self, product: str, warehouse_id: str | None = None) -> dict:
+        """Undated base inventory, never case-cutoff or live-stock evidence."""
         pid = self.resolve_product(product)
         wid = _id(warehouse_id) if warehouse_id is not None else None
         scope = {"requested_product": product, "product_id": pid, "warehouse_id": wid}
         if pid is None:
             return self._result([], scope=scope, refs=[], limitations=["PRODUCT_NOT_FOUND"])
+        # Real unified Fiction release contains a warehouses master. A missing
+        # warehouse must not masquerade as a stock-record absence.
+        if wid is not None:
+            known_warehouse = self._q("SELECT warehouse_id FROM warehouses WHERE warehouse_id=?", (wid,))
+            if not known_warehouse:
+                return self._result([], scope=scope, refs=[], limitations=["WAREHOUSE_NOT_FOUND"])
         rows = self._q("SELECT inventory_id, product_id, warehouse_id, quantity_on_hand, "
                        "reserved_quantity, last_restocked_date FROM inventory "
                        "WHERE product_id=? AND (? IS NULL OR warehouse_id=?) ORDER BY warehouse_id",
-                       (pid, wid, wid)) if pid else []
+                       (pid, wid, wid))
+        if len(rows) > _LIMIT:
+            raise FictionDataError("Inventory result exceeds bounded response limit")
+        seen: set[str] = set()
         for row in rows:
+            iid = _id(row["inventory_id"])
+            if iid in seen or _id(row["product_id"]) != pid or _id(row["warehouse_id"]) != row["warehouse_id"]:
+                raise FictionDataError("Mismatched inventory scope or duplicate inventory ID")
+            if wid and row["warehouse_id"] != wid:
+                raise FictionDataError("Inventory returned wrong warehouse")
+            seen.add(iid)
             on_hand, reserved = row["quantity_on_hand"], row["reserved_quantity"]
             if type(on_hand) is not int or type(reserved) is not int or not 0 <= reserved <= on_hand:
                 raise FictionDataError("Invalid stock evidence")
