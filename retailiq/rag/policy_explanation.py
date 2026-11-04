@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from retailiq.domain.fiction import RELEASE
 from retailiq.language import is_vietnamese
+from retailiq.observability import observed
 
 POLICY_ID = "FR-WH-2026-10-04"
 POLICY_PATH = "policies/FR-WH-2026-10-04.md"
@@ -118,7 +119,8 @@ CLAIMS = {
 
 def explain_policy(question: str, policy: dict, knowledge_root: str | Path, model) -> dict:
     """Exact source -> relevant clauses -> model quote -> validated claim."""
-    sections = verified_sections(policy, knowledge_root)
+    with observed('rag.policy_retrieval', agent='backorder_agent', tool='policy.exact_section'):
+        sections = verified_sections(policy, knowledge_root)
     passages = {key: sections[key] for key in _choices(question)}
     messages = [
         ("system", "Pick ONE relevant section and a 35-320 character contiguous "
@@ -130,7 +132,8 @@ def explain_policy(question: str, policy: dict, knowledge_root: str | Path, mode
                              ensure_ascii=False)),
     ]
     try:
-        choice = model.with_structured_output(PolicyQuote).invoke(messages)
+        with observed('llm.policy_explanation', agent='backorder_agent', tool='policy.quote_selection'):
+            choice = model.with_structured_output(PolicyQuote).invoke(messages)
     except Exception as exc:
         raise PolicyExplanationUnavailable("Explanation provider failed") from exc
     section, quote = getattr(choice, "section", None), getattr(choice, "quote", None)
