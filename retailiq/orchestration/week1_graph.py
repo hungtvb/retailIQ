@@ -191,7 +191,7 @@ def _fiction_inventory_request(question: str) -> tuple[str, str | None] | None:
     """Only explicit single-FR-SKU stock questions enter the new MCP path."""
     lower = question.casefold()
     stock_words = ('stock', 'inventory', 'tồn kho', 'còn hàng', 'available', 'còn bao nhiêu')
-    if not any(token in lower for token in stock_words) or 'fr-' not in lower:
+    if 'case-' in lower or not any(token in lower for token in stock_words) or 'fr-' not in lower:
         return None
     matches = _FR_SKU_MATCH.findall(question.upper())
     if len(matches) != 1 or question.casefold().count('fr-') != 1:
@@ -199,7 +199,7 @@ def _fiction_inventory_request(question: str) -> tuple[str, str | None] | None:
     # The undated stock table cannot answer historical/live source-time questions.
     if any(token in lower for token in (
             'hiện tại', 'ngay lúc này', 'hôm nay', 'hôm qua', 'tuần trước',
-            'tháng trước', ' at ', 'as of', 'today', 'yesterday', 'now',
+            'tháng trước', ' at 20', ' on 20', 'as of', 'today', 'yesterday', 'now',
             'right now', 'current', 'live', 'realtime', 'real-time')):
         raise InvalidFictionScope('UNSUPPORTED_TEMPORAL_SCOPE: Fiction stock has no observation timestamp')
     from retailiq.domain.fiction import _id
@@ -861,7 +861,7 @@ def run(q: str, *, history: list[dict] | None = None, active_agent: str = '',
                         ('evidence_refs', 'limitations', 'source', 'temporal')})
     if result['intent'] == 'fiction_stock':
         payload['mode'] = 'LangGraph + Fiction MCP stdio (undated stock)'
-        payload['as_of'] = result.get('temporal', {}).get('dataset_business_as_of')
+        payload['as_of'] = None  # release business date is not a stock observation timestamp
     if result['intent'] == 'backorder' and result.get('uc01_followup_kind') == 'order_details':
         payload['mode'] = 'LangGraph + Fiction SQL + real Order MCP stdio'
     return payload
