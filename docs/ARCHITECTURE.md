@@ -1,6 +1,6 @@
 # Architecture & Tech Stack
 
-**Execution boundary (2026-11-03):** Existing legacy questions still use the synthetic retail runtime. Fiction M0 and UC-01 T01 read-only evidence are implemented; **the first explicit CASE-ID investigation in `RETAILIQ_MODE=full` now follows `/ask → LangGraph → verified Fiction SQL`** ([#37](https://github.com/hungtvb/retailIQ/pull/37), [#40](https://github.com/hungtvb/retailIQ/pull/40)). That single fixed template has **mock-provider fixture coverage**, not live-provider/full Fiction E2E acceptance. PR #44 adds **narrow committed-session UC-01 policy/alternative-warehouse follow-ups**, verified against the case source/cutoff (fixture scenarios; full #22 context, Fiction MCP/RAG and authenticated HITL remain pending). See [Fiction Runtime](FICTION_RUNTIME.md) and [Data/API](DATA_API.md).
+**Execution boundary (2026-11-04):** Existing legacy questions still use their synthetic retail runtime. Fiction M0/T01 read-only facts, UC-01 T03 verified-session follow-ups and T04 scoped stdio MCP are implemented. The first explicit CASE-ID in `RETAILIQ_MODE=full` follows `/ask → one compiled LangGraph → source-verified Fiction SQL/policy`; **one bounded G1 passed on the actual LLM and published Fiction release** ([live CI 41776582027](https://github.com/hungtvb/retailIQ/actions/runs/41776582027)). This does **not** prove generalized Fiction routing, policy RAG, authenticated HITL, browser E2E or real-time freshness. [Refactor R1 design](DESIGN.md) only proposes moving Fiction-specific code behind stable graph adapters; the current runtime remains unchanged until a reviewed implementation PR merges.
 
 **Business goal:** Reduce user interaction complexity and, where supported by measurement, end-to-end task completion time for retail information access, **without sacrificing correctness** (Faster · Easier · Reliable). Inventory/Sales data is the initial domain; Replenishment Review is a multi-source demo case, not the only outcome. This is a **proposed value hypothesis**, not proven ROI.
 
@@ -102,7 +102,7 @@ The 2026-10-29 local full-mode run has scripted LangGraph/Chroma evidence, a thr
 | Public chat/API | `retailiq/assistant.py`, `retailiq/api/`; localhost application |
 | Agent orchestration | `retailiq/orchestration/week1_graph.py`; router, explicit transfer, scoped supervisor |
 | Legacy chat KPI/SQL truth | `retailiq/domain/analytics.py`, `retailiq/queries.py`; vetted read-only queries, no arbitrary generated SQL |
-| Fiction M0 business reads | `retailiq/domain/fiction.py`, `retailiq/infrastructure/sqlite.py`, `data/fiction/manifest.json`; release-verified, read-only, not chat-connected |
+| Fiction M0 business reads | `retailiq/domain/fiction.py`, `retailiq/infrastructure/sqlite.py`, `data/fiction/manifest.json`; source-verified and read-only, exposed only through reviewed Fiction scope in the existing full-mode LangGraph/MCP |
 | Product document retrieval | `retailiq/rag/`, `retailiq/retrieval.py`; citation-grounded facts, not stock truth |
 | User-facing reply | `retailiq/reply.py`, `web/index.html`; display and graph activity separate from source verification |
 | Observability | `retailiq/observability.py` local JSONL/SSE; remote LangSmith is a different evidence source |
