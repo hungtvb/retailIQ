@@ -1,9 +1,11 @@
 """Local workflow graph demo API; no real authentication or business mutations."""
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 import os
 from pydantic import BaseModel, Field
 from typing import Literal
 from retailiq.domain.workflow_demo import definitions, run_demo, read_run, review_run
+from retailiq.infrastructure import auth as local_auth
+from retailiq.api.auth import _principal
 from retailiq.domain.semantic import contracts
 from retailiq.domain.freshness_routing import route_freshness, plan_question_sources
 
@@ -118,9 +120,13 @@ def get_semantics():
 
 
 @router.post("/run")
-def create_run(data: RunInput):
+def create_run(data: RunInput, request: Request):
+    principal = _principal(request)
+    local_auth.assert_active(principal)
     try:
-        return run_demo(data.scenario, data.sku, data.quantity, data.role)
+        # Caller-selected role is explicitly simulated; owner is server-derived.
+        return run_demo(data.scenario, data.sku, data.quantity, data.role,
+                        owner_user_id=principal.user_id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     except Exception as exc:
@@ -130,17 +136,20 @@ def create_run(data: RunInput):
 
 
 @router.get("/runs/{run_id}")
-def get_run(run_id: str):
-    item = read_run(run_id)
+def get_run(run_id: str, request: Request):
+    item = read_run(run_id, owner_user_id=_principal(request).user_id)
     if item is None:
         raise HTTPException(status_code=404, detail="Workflow not found")
     return item
 
 
 @router.post("/runs/{run_id}/review")
-def manager_review(run_id: str, data: ReviewInput):
+def manager_review(run_id: str, data: ReviewInput, request: Request):
+    principal = _principal(request)
+    local_auth.assert_active(principal)
     try:
-        return review_run(run_id, data.role, data.decision)
+        return review_run(run_id, data.role, data.decision,
+                          owner_user_id=principal.user_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="Workflow not found") from None
     except PermissionError:
