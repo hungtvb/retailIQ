@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
+from tests.auth_client import signed_in_client
 
 from retailiq.api import app
 from retailiq import assistant
@@ -46,6 +47,7 @@ def mocked_full(monkeypatch, tmp_path):
     }])
     try:
         with TestClient(app) as client:
+            signed_in_client(app, client=client)
             yield client
     finally:
         graph.close_checkpoint_graph()
