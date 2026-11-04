@@ -53,6 +53,7 @@ def fiction(tmp_path):
         CREATE TABLE order_items(order_item_id TEXT, order_id TEXT, product_id TEXT, quantity INT, unit_price REAL, discount_pct INT);
         CREATE TABLE shipments(shipment_id TEXT, order_id TEXT, warehouse_id TEXT, shipped_date TEXT, delivered_date TEXT, shipment_state TEXT);
         CREATE TABLE inventory(inventory_id TEXT, product_id TEXT, warehouse_id TEXT, quantity_on_hand INT, reserved_quantity INT, last_restocked_date TEXT);
+        CREATE TABLE warehouses(warehouse_id TEXT, name TEXT);
         CREATE TABLE returns(return_id TEXT, order_id TEXT, product_id TEXT, return_date TEXT, refund_amount REAL, return_reason_code TEXT);
         CREATE TABLE fulfillment_cases(case_id TEXT, order_id TEXT, order_item_id TEXT, product_id TEXT, request_qty INT, assigned_warehouse_id TEXT, case_date TEXT);
         CREATE TABLE operational_events(event_id TEXT, case_id TEXT, event_type TEXT, occurred_at TEXT, recorded_at TEXT);
@@ -69,7 +70,7 @@ def fiction(tmp_path):
             if table not in {"products", "orders", "order_items", "shipments", "inventory",
                              "returns", "fulfillment_cases", "operational_events",
                              "inventory_snapshots_v2", "warehouse_eligibility", "metadata",
-                              "fulfillment_policies", "knowledge_documents"}:
+                              "fulfillment_policies", "knowledge_documents", "warehouses"}:
                 c.execute(f'CREATE TABLE "{table}" (dummy TEXT)')
         sku = lambda pid: "FR-" + sha256(pid.encode()).hexdigest()[:16].upper()
         c.executemany('INSERT INTO products VALUES(?,?,?,?,?,?)',
@@ -77,6 +78,7 @@ def fiction(tmp_path):
                        (P2, sku(P2), "Other", "electronics", "Brand", 25.0)])
         c.execute("INSERT INTO orders VALUES (?,?,?,?,?)", (O1, "CUSTOMER_SECRET", "2026-10-15", "delivered", 20.0))
         c.execute("INSERT INTO order_items VALUES (?,?,?,?,?,?)", (I1, O1, P1, 2, 10.0, 0))
+        c.executemany("INSERT INTO warehouses VALUES (?,?)", [(W1, "Assigned"), (W2, "Alternative")])
         c.execute("INSERT INTO inventory VALUES (?,?,?,?,?,?)", (I1, P1, W1, 4, 1, "2026-10-01"))
         c.execute("INSERT INTO returns VALUES (?,?,?,?,?,?)", (R1, O1, P1, "2026-10-18", 30.0, "DAMAGED"))
         c.execute("INSERT INTO fulfillment_cases VALUES (?,?,?,?,?,?,?)", (C1, O1, I1, P1, 2, W1, "2026-10-16"))
@@ -847,3 +849,159 @@ def test_uc01_t03_explicit_other_case_replaces_committed_context(monkeypatch, fi
     finally:
         graph.close_checkpoint_graph()
         graph._fiction_store_cached.cache_clear()
+
+
+def test_t04_order_and_inventory_shared_domain_contract(fiction):
+    path, manifest, store = fiction
+    order = store.order(O1)
+    assert order["scope"]["order_id"] == O1
+    assert order["data"]["lines"][0]["order_item_id"] == I1
+    assert order["record_refs"] == [f"orders/{O1}", f"order_items/{I1}"]
+    assert "CUSTOMER_SECRET" not in str(order)
+    assert "release-recorded" in " ".join(order["limitations"])
+
+    assert store.inventory(P1, W1)["data"][0]["available_snapshot"] == 3
+    unknown_warehouse = "00000000-0000-4000-8000-000000000000"
+    result = store.inventory(P1, unknown_warehouse)
+    assert result["data"] == []
+    assert result["limitations"] == ["WAREHOUSE_NOT_FOUND"]
+    assert result["scope"]["warehouse_id"] == unknown_warehouse
+
+
+@pytest.mark.parametrize("field,value,reason", [
+    ("quantity", 0, "quantity"),
+    ("discount_pct", 101, "discount"),
+    ("unit_price", -1, "financial amount"),
+    ("product_id", "99999999-9999-4999-8999-999999999999", "unknown product"),
+])
+def test_t04_order_rejects_corrupt_line_source(fiction, field, value, reason):
+    path, manifest, store = fiction
+    with sqlite3.connect(path) as conn:
+        conn.execute(f"UPDATE order_items SET {field}=? WHERE order_item_id=?", (value, I1))
+    with pytest.raises(FictionDataError, match="changed since release"):
+        store.order(O1)
+    store = reseal(path, manifest)
+    with pytest.raises(FictionDataError, match=reason):
+        store.order(O1)
+
+
+def test_t04_order_rejects_invalid_shipment_identity(fiction):
+    path, manifest, _ = fiction
+    with sqlite3.connect(path) as conn:
+        conn.execute("INSERT INTO shipments VALUES (?,?,?,?,?,?)",
+                     ("not-a-uuid", O1, W1, "2026-10-17", "2026-10-18", "delivered"))
+    store = reseal(path, manifest)
+    with pytest.raises(ValueError, match="canonical Fiction UUID"):
+        store.order(O1)
+
+
+def test_t04_adapter_rejects_error_before_decoding_and_wrong_source(fiction):
+    from retailiq.mcp_adapter import decode_tool_result, _verify_envelope
+    from types import SimpleNamespace
+
+    malicious = SimpleNamespace(status="error", artifact={
+        "data": [], "source": {"id": "fiction-retail/sqlite"},
+        "scope": {}, "record_refs": [], "limitations": [],
+    })
+    with pytest.raises(ValueError, match="execution error"):
+        decode_tool_result(malicious)
+
+    _, _, store = fiction
+    result = store.inventory(P1)
+    with pytest.raises(ValueError, match="source or evidence invalid"):
+        _verify_envelope(result, "0" * 64, "inventory_lookup", {"product": P1, "warehouse_id": None})
+    assert _verify_envelope(result, store.release["runtime_sha256"],
+                            "inventory_lookup", {"product": P1, "warehouse_id": None}) == result
+
+
+@pytest.mark.parametrize("question,has_warehouse", [
+    ("Tồn kho của {sku} là bao nhiêu?", False),
+    ("Tồn kho {sku} tại kho {warehouse}", True),
+    ("Show stock for {sku} across all warehouses", False),
+    ("Stock of {sku} at warehouse {warehouse}", True),
+    ("tồn kho của {sku} ở các kho?", False),
+])
+def test_t04_bounded_stock_route_vietnamese_and_english(question, has_warehouse):
+    from retailiq.orchestration.week1_graph import _fiction_inventory_request
+    sku = "FR-" + sha256(P1.encode()).hexdigest()[:16].upper()
+    parsed = _fiction_inventory_request(question.format(sku=sku, warehouse=W1))
+    assert parsed == (sku, W1 if has_warehouse else None)
+
+
+@pytest.mark.parametrize("question", [
+    "Tồn kho {sku} ngày 20/10/2026?",
+    "Tồn kho {sku} tháng 10?",
+    "Tồn kho {sku} trong tuần trước?",
+    "Stock for {sku} as of 2026-10-20",
+    "Stock for {sku} in October 2026",
+    "Stock for {sku} today?",
+    "Show current stock for {sku}",
+    "Show stock for {sku} in 10/2026",
+])
+def test_t04_stock_time_scope_never_silently_dropped(question):
+    from retailiq.orchestration.week1_graph import _fiction_inventory_request, InvalidFictionScope
+    sku = "FR-" + sha256(P1.encode()).hexdigest()[:16].upper()
+    with pytest.raises(InvalidFictionScope, match="UNSUPPORTED_TEMPORAL_SCOPE"):
+        _fiction_inventory_request(question.format(sku=sku))
+
+
+@pytest.mark.parametrize("question", [
+    "Tồn kho và doanh thu của {sku}?",
+    "Stock and revenue for {sku}",
+    "So sánh tồn kho {sku} và đơn hàng",
+    "Stock for {sku} and order status",
+])
+def test_t04_stock_mixed_intent_is_not_dropped(question):
+    from retailiq.orchestration.week1_graph import _fiction_inventory_request, InvalidFictionScope
+    sku = "FR-" + sha256(P1.encode()).hexdigest()[:16].upper()
+    with pytest.raises(InvalidFictionScope, match="MULTI_INTENT_UNSUPPORTED"):
+        _fiction_inventory_request(question.format(sku=sku))
+
+
+def test_t04_stock_unbound_warehouse_id_is_rejected():
+    from retailiq.orchestration.week1_graph import _fiction_inventory_request, InvalidFictionScope
+    sku = "FR-" + sha256(P1.encode()).hexdigest()[:16].upper()
+    with pytest.raises(InvalidFictionScope, match="warehouse UUID"):
+        _fiction_inventory_request(f"Stock {sku} at {W1}")
+
+
+def test_t04_corrupt_shipment_warehouse_rejected_from_shared_domain(fiction):
+    path, manifest, _ = fiction
+    shipment_id = "88888888-8888-4888-8888-888888888888"
+    unknown = "99999999-9999-4999-8999-999999999999"
+    with sqlite3.connect(path) as conn:
+        conn.execute("INSERT INTO shipments VALUES (?,?,?,?,?,?)",
+                     (shipment_id, O1, unknown, "2026-10-17", None, "shipped"))
+    store = reseal(path, manifest)
+    with pytest.raises(FictionDataError, match="unknown warehouse"):
+        store.order(O1)
+
+
+def test_t04_mcp_strict_field_allowlist_blocks_unexpected_pii(fiction):
+    import copy
+    from retailiq.mcp_adapter import _verify_envelope
+    _, _, store = fiction
+    evidence = store.order(O1)
+    expected = store.release["runtime_sha256"]
+    assert _verify_envelope(evidence, expected, "order_lookup",
+                            {"order_id": O1}) == evidence
+
+    injected = copy.deepcopy(evidence)
+    injected["data"]["order"]["customer_phone"] = "+1-555-0100"
+    with pytest.raises(ValueError, match="invalid identity/size"):
+        _verify_envelope(injected, expected, "order_lookup", {"order_id": O1})
+
+    injected = copy.deepcopy(evidence)
+    injected["scope"]["customer_email"] = "secret@example.invalid"
+    with pytest.raises(ValueError, match="scope contains unexpected fields"):
+        _verify_envelope(injected, expected, "order_lookup", {"order_id": O1})
+
+    injected = copy.deepcopy(evidence)
+    injected["source"]["credentials"] = "unexpected"
+    with pytest.raises(ValueError, match="source or evidence invalid"):
+        _verify_envelope(injected, expected, "order_lookup", {"order_id": O1})
+
+    injected = copy.deepcopy(evidence)
+    injected["data"]["lines"][0]["unit_price"] = -1
+    with pytest.raises(ValueError, match="financial amount"):
+        _verify_envelope(injected, expected, "order_lookup", {"order_id": O1})

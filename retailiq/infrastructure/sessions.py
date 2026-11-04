@@ -205,7 +205,9 @@ def _committable_case_binding(response: dict) -> dict | None:
             response.get('approval_status') != 'NOT_REQUESTED'):
         return None
     plan = response.get('capability_plan') or {}
-    if not isinstance(plan, dict) or plan.get('capabilities') != ['fiction.backorder.investigate']:
+    allowed = (['fiction.backorder.investigate'],
+               ['fiction.backorder.investigate', 'mcp.order_lookup'])
+    if not isinstance(plan, dict) or plan.get('capabilities') not in allowed:
         return None
     source = response.get('source') or {}
     temporal = response.get('temporal') or {}
