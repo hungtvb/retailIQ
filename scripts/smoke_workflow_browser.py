@@ -9,6 +9,9 @@ import os
 from datetime import date, datetime, timedelta, timezone
 from contextlib import closing
 from pathlib import Path
+from secrets import token_urlsafe
+from uuid import uuid4
+from unittest.mock import patch
 import sqlite3
 import tempfile
 import shutil
@@ -27,7 +30,7 @@ SCREENSHOT = Path("data/workflow_week4_chromium.png")
 def wait_for_app() -> None:
     for _ in range(60):
         try:
-            with urlopen(BASE + "/api/workflows/definitions", timeout=1) as response:
+            with urlopen(BASE + "/health", timeout=1) as response:
                 if response.status == 200:
                     return
         except OSError:
@@ -314,6 +317,13 @@ def main() -> None:
                    RETAILIQ_CHAT_DB=str(directory/"chat.sqlite3"),
                    RETAILIQ_WORKFLOW_DB=str(directory/"runs.sqlite3"),
                    RETAILIQ_CHECKPOINT_DB=str(directory/"checkpoints.sqlite3"))
+        # Real local provisioning under the same disposable app SQLite as the
+        # child server. No auth bypass, fixed credentials or leaked secrets.
+        from retailiq.infrastructure import auth
+        username = "browser_" + uuid4().hex[:20]
+        password = token_urlsafe(32)
+        with patch.dict(os.environ, {"RETAILIQ_CHAT_DB": str(directory/"chat.sqlite3")}):
+            auth.create_local_user(username, "analyst", password)
         server = subprocess.Popen(
             [sys.executable, "-m", "uvicorn", "retailiq.api:app",
              "--host", "127.0.0.1", "--port", "8767", "--log-level", "warning"],
@@ -328,6 +338,25 @@ def main() -> None:
                 )
                 try:
                     page = browser.new_page(viewport={"width": 1440, "height": 960})
+                    # Legacy visual regression runner, not an end-user login UI.
+                    # BrowserContext request shares cookie state with the page.
+                    login = page.request.post(
+                        BASE + "/api/auth/login",
+                        data={"username": username, "password": password},
+                        headers={"Origin": BASE})
+                    assert login.status == 200, "Legacy browser smoke real login failed"
+                    me = page.request.get(BASE + "/api/auth/me")
+                    assert me.status == 200, "Legacy browser smoke CSRF bootstrap failed"
+                    csrf = me.json()["csrf_token"]
+                    password = None
+                    def attach_csrf(route):
+                        if route.request.method in ("POST", "PUT", "PATCH", "DELETE"):
+                            route.continue_(headers={**route.request.headers,
+                                                     "origin": BASE,
+                                                     "x-csrf-token": csrf})
+                        else:
+                            route.continue_()
+                    page.route("**/*", attach_csrf)
                     journey(page)
                     chat_query_journey(page, db)
                     workflow_edge_journey(page, db)
