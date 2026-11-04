@@ -133,8 +133,13 @@ def _verify_envelope(result: dict, expected_sha: str, tool: str, arguments: dict
             if any(type(n) is not int for n in (on, reserved, available)) or not 0 <= reserved <= on or available != on - reserved:
                 raise ValueError("Inventory MCP arithmetic mismatch")
             expected_refs.append("inventory/" + iid)
-        if refs != expected_refs or not any(x.startswith("UNDATED_INVENTORY") for x in limits):
-            raise ValueError("Inventory MCP lacks verified refs or undated warning")
+        if refs != expected_refs:
+            raise ValueError("Inventory MCP source references mismatch")
+        known_missing = ("PRODUCT_NOT_FOUND" in limits or "WAREHOUSE_NOT_FOUND" in limits)
+        if not known_missing and not any(x.startswith("UNDATED_INVENTORY") for x in limits):
+            raise ValueError("Inventory MCP lacks undated warning")
+        if known_missing and (rows or refs):
+            raise ValueError("Inventory MCP claims absence with records")
         if not rows and pid and not any(x.startswith("NO_INVENTORY_RECORDS") or x == "WAREHOUSE_NOT_FOUND" for x in limits):
             raise ValueError("Inventory MCP missing evidence status")
     elif tool == "order_lookup":
