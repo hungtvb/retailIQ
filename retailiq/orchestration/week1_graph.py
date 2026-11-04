@@ -195,20 +195,20 @@ def _fiction_inventory_request(question: str) -> tuple[str, str | None] | None:
         return None
     matches = _FR_SKU_MATCH.findall(question.upper())
     if len(matches) != 1 or question.casefold().count('fr-') != 1:
-        raise InvalidCaseId('Exactly one complete FR-SKU is required for Fiction inventory')
+        raise InvalidFictionScope('Exactly one complete FR-SKU is required for Fiction inventory')
     # The undated stock table cannot answer historical/live source-time questions.
     if any(token in lower for token in (
             'hiện tại', 'ngay lúc này', 'hôm nay', 'hôm qua', 'tuần trước',
             'tháng trước', ' at ', 'as of', 'today', 'yesterday', 'now',
             'right now', 'current', 'live', 'realtime', 'real-time')):
-        raise InvalidCaseId('UNSUPPORTED_TEMPORAL_SCOPE: Fiction stock has no observation timestamp')
+        raise InvalidFictionScope('UNSUPPORTED_TEMPORAL_SCOPE: Fiction stock has no observation timestamp')
     from retailiq.domain.fiction import _id
     wants_warehouse = 'warehouse' in lower or 'kho ' in lower
     ids = _UUID_IN_QUESTION.findall(question)
     if wants_warehouse and len(ids) != 1:
-        raise InvalidCaseId('Specify exactly one warehouse UUID or omit warehouse filter')
+        raise InvalidFictionScope('Specify exactly one warehouse UUID or omit warehouse filter')
     if ids and not wants_warehouse:
-        raise InvalidCaseId('Unscoped UUID in Fiction inventory question')
+        raise InvalidFictionScope('Unscoped UUID in Fiction inventory question')
     warehouse = _id(ids[0]) if ids else None
     return matches[0], warehouse
 
@@ -372,6 +372,10 @@ _CASE_ID = re.compile(
 
 class InvalidCaseId(ValueError):
     """Invalid/ambiguous UC-01 input, not a provider or data-source failure."""
+
+
+class InvalidFictionScope(InvalidCaseId):
+    """Invalid or unsupported Fiction inventory query constraint (HTTP 422)."""
 
 
 
