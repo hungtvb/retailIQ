@@ -49,21 +49,61 @@ def execute_policy_turns(db: Path, manifest: Path, knowledge: Path, oracle: dict
                     quote="An authorized Operations Manager must approve the request before any transfer, reservation or order change is executed.")
         original_factory = lambda: FixtureModel()
     calls = {"route": 0, "policy_quote": 0}
+    # Provider metadata only; never invent token counts for the fake-model oracle.
+    structured_calls: list[dict] = []
 
     class ObservedModel:
         def __init__(self, model):
             self.model = model
 
         def with_structured_output(self, schema):
-            actual = self.model.with_structured_output(schema)
             kind = "route" if schema.__name__ == "Route" else (
                 "policy_quote" if schema.__name__ == PolicyQuote.__name__ else "unexpected")
             _check(kind != "unexpected", "Unregistered provider structured call")
+            # include_raw preserves LangChain's parsed schema and exposes model
+            # usage metadata without logging prompts or the full raw response.
+            actual = (self.model.with_structured_output(schema)
+                      if offline_fake_model else
+                      self.model.with_structured_output(schema, include_raw=True))
 
             class ActualCall:
                 def invoke(self, messages):
-                    result = actual.invoke(messages)
+                    started = time.perf_counter()
+                    response = actual.invoke(messages)
+                    elapsed = round(time.perf_counter() - started, 3)
+                    usage = None
+                    if not offline_fake_model:
+                        _check(isinstance(response, dict)
+                               and response.get("parsing_error") is None
+                               and response.get("parsed") is not None
+                               and response.get("raw") is not None,
+                               "Provider structured response lacks raw/parsed evidence")
+                        raw = response["raw"]
+                        provider_usage = getattr(raw, "usage_metadata", None)
+                        if not isinstance(provider_usage, dict):
+                            metadata = getattr(raw, "response_metadata", None)
+                            raw_usage = (metadata.get("token_usage")
+                                         if isinstance(metadata, dict) else None)
+                            if isinstance(raw_usage, dict):
+                                provider_usage = {
+                                    "input_tokens": raw_usage.get("prompt_tokens"),
+                                    "output_tokens": raw_usage.get("completion_tokens"),
+                                    "total_tokens": raw_usage.get("total_tokens"),
+                                }
+                        _check(isinstance(provider_usage, dict)
+                               and all(type(provider_usage.get(key)) is int
+                                       and provider_usage[key] >= 0
+                                       for key in ("input_tokens", "output_tokens", "total_tokens")),
+                               f"Provider token usage unavailable for {kind}")
+                        usage = {key: provider_usage[key]
+                                 for key in ("input_tokens", "output_tokens", "total_tokens")}
+                        result = response["parsed"]
+                    else:
+                        result = response
                     calls[kind] += 1
+                    structured_calls.append({
+                        "kind": kind, "elapsed_s": elapsed, "token_usage": usage,
+                    })
                     return result
 
             return ActualCall()
@@ -103,9 +143,9 @@ def execute_policy_turns(db: Path, manifest: Path, knowledge: Path, oracle: dict
                     _check(initial_result.get("as_of") == CUTOFF and
                            initial_result.get("source", {}).get("sha256") == RELEASE_SHA,
                            "Initial case cutoff/source differs from oracle")
-                    _check(any(r.get("snapshot_id") == SNAPSHOT and
-                               r.get("warehouse_id") == WAREHOUSE and
-                               r.get("available_at_observation") == 5
+                    _check(any(r.get("snapshot_id") == oracle["snapshot_id"] and
+                               r.get("warehouse_id") == oracle["warehouse_id"] and
+                               r.get("available_at_observation") == oracle["available"]
                                for r in initial_result.get("records", [])),
                            "Initial G1 candidate mismatch")
                     _check(calls == {"route": 1, "policy_quote": 0},
@@ -133,8 +173,16 @@ def execute_policy_turns(db: Path, manifest: Path, knowledge: Path, oracle: dict
                                and data.get("approval_status") == "NOT_REQUESTED",
                                "Model changed historical case facts/approval")
                         _check(data.get("capability_plan", {}).get("source") == "committed_session_case"
+                               and data.get("capability_plan", {}).get("case_id") == oracle["case_id"]
                                and ref in data.get("evidence_refs", []),
                                "Missing committed case or exact passage reference")
+                        _check(data.get("source", {}).get("version") == oracle["release_version"]
+                               and data.get("temporal", {}).get("evidence_cutoff") == oracle["cutoff"]
+                               and any(r.get("snapshot_id") == oracle["snapshot_id"]
+                                       and r.get("warehouse_id") == oracle["warehouse_id"]
+                                       and r.get("available_at_observation") == oracle["available"]
+                                       for r in data.get("records", [])),
+                               "Follow-up changed source/cutoff/candidate from G1 oracle")
                         contexts = data.get("contexts") or []
                         _check(len(contexts) == 1 and
                                contexts[0].get("source") == ref and
@@ -142,11 +190,12 @@ def execute_policy_turns(db: Path, manifest: Path, knowledge: Path, oracle: dict
                                and contexts[0]["metadata"].get("section") == section,
                                "Incorrect policy source/section/hash")
                         answer = data.get("answer") or ""
-                        _check("[S1]" in answer and
-                               contexts[0]["text"] and
-                               any(line.strip()[2:] in contexts[0]["text"] for line in
-                                   answer.splitlines() if line.strip().startswith("> ")),
-                               "Quoted source text not present in exact policy")
+                        quotes = [line[2:] for line in answer.splitlines()
+                                  if line.startswith("> ")]
+                        _check("[S1] " in answer and ref in answer
+                               and len(quotes) == 1
+                               and quotes[0] in contexts[0].get("text", ""),
+                               "Exact citation/quote not present in verified policy section")
                         _check("POLICY_EXPLANATION_UNVERIFIED" not in data.get("limitations", []),
                                "Explanation actually failed validation")
                         rid = data.get("request_id")
@@ -159,10 +208,21 @@ def execute_policy_turns(db: Path, manifest: Path, knowledge: Path, oracle: dict
                                "Actual RAG/model/SQL event lineage missing")
                         _check(not any(str(x).startswith("mcp.tool.") for x in kinds),
                                "Ghost MCP event from policy explanation")
-                        responses.append({"section": section, "source_ref": ref,
-                                          "evidence_refs": len(data["evidence_refs"]),
-                                          "elapsed_s": elapsed,
-                                          "trace_event_types": sorted(kinds)})
+                        responses.append({
+                            "section": section, "source_ref": ref, "quote": quotes[0],
+                            "source_sha256": contexts[0]["metadata"]["source_sha256"],
+                            "verified_candidate": {
+                                "snapshot_id": oracle["snapshot_id"],
+                                "warehouse_id": oracle["warehouse_id"],
+                                "available": oracle["available"],
+                            },
+                            "case_id": oracle["case_id"], "cutoff": data["as_of"],
+                            "disposition": data["disposition"],
+                            "approval_status": data["approval_status"],
+                            "evidence_refs": len(data["evidence_refs"]),
+                            "elapsed_s": elapsed,
+                            "trace_event_types": sorted(kinds),
+                        })
                     _check(calls == {"route": 1, "policy_quote": 2},
                            "Provider call count or router reuse differs")
                     # Invalid quoted evidence must NOT replace the trusted business result.
@@ -189,6 +249,15 @@ def execute_policy_turns(db: Path, manifest: Path, knowledge: Path, oracle: dict
                     return {"provider_calls": ("FAKE_ROUTER_AND_QUOTE_NO_LLM" if offline_fake_model
                                        else "ACTUAL_CONFIGURED_LLM"),
                             "observed_structured_calls": calls,
+                            "structured_call_evidence": structured_calls,
+                            "expected_g1": oracle,
+                            "observed_initial_g1": {
+                                "source": initial_result["source"],
+                                "cutoff": initial_result["as_of"],
+                                "candidates": initial_result["records"],
+                                "disposition": initial_result["disposition"],
+                                "approval_status": initial_result["approval_status"],
+                            },
                             "case_id": CASE, "cutoff": CUTOFF,
                             "policy_id": POLICY, "policy_sha256": POLICY_SHA,
                             "source_sha256": RELEASE_SHA,
@@ -216,6 +285,7 @@ def main() -> None:
               "mode": ("PROVIDER_BACKED_POLICY_RAG_REAL_FICTION" if args.confirm_live
                        else "REAL_FICTION_POLICY_RAG_FAKE_ROUTER_AND_QUOTE_NO_LLM"),
               "case_id": CASE, "commit_sha": os.getenv("GITHUB_SHA", "local"),
+              "pr_head_sha": os.getenv("RETAILIQ_PR_HEAD_SHA") or None,
               "workflow_run_id": os.getenv("GITHUB_RUN_ID") or None}
     stage = "configuration"
     try:
