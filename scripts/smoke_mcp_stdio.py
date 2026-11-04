@@ -164,6 +164,13 @@ def main() -> None:
                 assert any(e.get("event") == "mcp.tool.completed" and
                            e.get("tool") == "order_lookup"
                            for kind, e in follow if kind == "log")
+                historical = client.post("/ask", json={
+                    "session_id": case_session,
+                    "question": "Trạng thái đơn hàng này tại thời điểm cutoff?",
+                })
+                assert historical.status_code == 200
+                assert historical.json()["disposition"] == "INSUFFICIENT_EVIDENCE"
+                assert "ORDER_STATUS_AT_CUTOFF_UNVERIFIED" in historical.json()["reason_codes"]
                 trace = client.get(
                     f"/api/sessions/{case_session}/traces/{answer['request_id']}")
                 assert trace.status_code == 200
