@@ -326,9 +326,12 @@ def main() -> None:
                  else "INDEPENDENT_REAL_FICTION_SQL_POLICY_ORACLE_NO_LLM"),
         "status": "FAIL", "case_id": CASE,
         "commit_sha": os.getenv("GITHUB_SHA", "local"),
+        "pr_head_sha": os.getenv("RETAILIQ_PR_HEAD_SHA") or None,
         "workflow_run_id": os.getenv("GITHUB_RUN_ID") or None,
         "source_sha256_expected": RELEASE_SHA,
     }
+    stage = "configuration"
+    started = time.perf_counter()
     try:
         if args.confirm_live:
             _check(os.getenv("RETAILIQ_UC01_LIVE") == "true",
@@ -338,16 +341,21 @@ def main() -> None:
             _check(status.get("provider_ready") is True,
                    "Live provider configuration missing")
             report["model"] = status["chat_model"]
+        stage = "source_and_sql_policy_oracle"
         oracle = independent_oracle(
             args.db, args.manifest, args.knowledge_root, args.retailiq_manifest
         )
-        report["oracle"] = {"case_id": CASE, "cutoff": CUTOFF, "warehouse_id": WAREHOUSE,
-                            "snapshot_id": SNAPSHOT, "available": 5,
-                            "policy_document_id": DOCUMENT, "source_sha256": RELEASE_SHA}
+        report["expected_g1"] = {"case_id": CASE, "cutoff": CUTOFF,
+                                  "warehouse_id": WAREHOUSE, "snapshot_id": SNAPSHOT,
+                                  "available": 5, "policy_document_id": DOCUMENT,
+                                  "source_sha256": RELEASE_SHA}
+        report["observed_sql_policy_oracle"] = oracle
         if args.confirm_live:
-            report["observed"] = live_golden_case(
+            stage = "actual_provider_langgraph_case"
+            report["observed_provider_graph"] = live_golden_case(
                 args.db, args.manifest, args.knowledge_root, oracle
             )
+        stage = "no_write_integrity"
         _check(_hash_file(args.db.resolve()) == RELEASE_SHA,
                "Read-only validation changed the published SQLite bytes")
         report["status"] = "PASS"
@@ -355,6 +363,8 @@ def main() -> None:
         # The provider may put endpoint/credential content in error messages.
         # Report only its exception class, never message, traceback or inputs.
         report["error_type"] = type(error).__name__
+        report["failure_stage"] = stage
+    report["elapsed_seconds"] = round(time.perf_counter() - started, 3)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n",
                         encoding="utf-8")
