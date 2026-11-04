@@ -388,7 +388,9 @@ function App(){
   }
 
   async function refreshSessions(){
+    const epoch=accountEpoch.current;
     const list=await readJson<{sessions:SessionItem[]}>(await secureFetch('/api/sessions'));
+    if(epoch!==accountEpoch.current)return [];
     setSessions(list.sessions ?? []);
     return list.sessions ?? [];
   }
@@ -534,6 +536,7 @@ function App(){
           method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({title:content.slice(0,78)})
         }));
+        if(serial!==requestSerial.current)return;
         sessionId=created.id;activeIdRef.current=sessionId;setActiveId(sessionId);
         localStorage.setItem('retailiq-workspace-session',sessionId);
         await refreshSessions();
@@ -557,6 +560,7 @@ function App(){
           streamError=typeof data.message==='string'?data.message:'Execution failed';
         }else if(type==='done'){hasDone=true}
       });
+      if(serial!==requestSerial.current)return;
       if(streamError)throw new Error(streamError);
       if(!hasDone||!result)throw new Error('Stream ended before the answer was received.');
       setGraph(prev=>finishGraph(prev,true));
@@ -568,6 +572,7 @@ function App(){
       }
       await refreshSessions();
     }catch(e){
+      if(serial!==requestSerial.current)return;
       setGraph(prev=>finishGraph(prev,false));
       setError((e as Error).message);
       setPhase('error');
@@ -577,7 +582,9 @@ function App(){
           if(serial===requestSerial.current)setMessages(saved.messages??[]);
         }catch{/* Preserve the user question if the network is down. */}
       }
-    }finally{inFlight.current=false}
+    }finally{
+      if(serial===requestSerial.current)inFlight.current=false;
+    }
   }
   const statusLabel=busy?'Processing':phase==='error'?'Execution failed':
     phase==='complete'?'Complete':'Ready';
