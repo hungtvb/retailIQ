@@ -15,6 +15,7 @@ from retailiq.infrastructure import sessions
 from retailiq.infrastructure import uc01_proposals as persistence
 from tests.auth_client import signed_in_client, active_principal
 from tests.test_t06_proposals import candidate, committed_case
+from tests.test_fiction_unified import fiction  # dependency of candidate fixture
 
 
 def pending_submission(client, store):
