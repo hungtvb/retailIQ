@@ -14,6 +14,8 @@ from retailiq.observability import observed
 
 POLICY_ID = "FR-WH-2026-10-04"
 POLICY_PATH = "policies/FR-WH-2026-10-04.md"
+# Claim templates are reviewed only against these exact immutable policy bytes.
+EXPECTED_POLICY_SHA = "f3ff7463e67e034360fd87b35c1c71286445be0de1431009591821489bd4d9c8"
 MAX_BYTES = 16384
 HEADINGS = {
     "transfer-eligibility": "Transfer eligibility",
@@ -42,7 +44,8 @@ def verified_sections(policy: dict, knowledge_root: str | Path) -> dict[str, str
             or not isinstance(policy.get("document_id"), str)
             or not policy.get("document_id")
             or not isinstance(policy.get("sha256"), str)
-            or not re.fullmatch(r"[0-9a-f]{64}", policy["sha256"])):
+            or not re.fullmatch(r"[0-9a-f]{64}", policy["sha256"])
+            or policy["sha256"] != EXPECTED_POLICY_SHA):
         raise PolicyExplanationUnavailable("Unverified warehouse policy binding")
     root = Path(knowledge_root).resolve()
     relative = Path(policy["relative_path"])
