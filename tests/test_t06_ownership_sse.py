@@ -58,7 +58,7 @@ def test_two_users_session_memory_trace_and_delete_are_isolated(api):
     sid = created.json()["id"]
     assert created.json()["owner_user_id"] == user_a
     saved = api.put(f"/api/sessions/{sid}/memory", headers=a_headers,
-                    json={"consent": True, "preferences": {"language": "vi"}})
+                    json={"consent": True, "preferences": {"preferred_channel": "online"}})
     assert saved.status_code == 200, saved.text
 
     # Reuse the same TestClient and SQLite while replacing its auth cookie by login.
