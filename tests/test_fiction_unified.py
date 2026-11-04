@@ -14,7 +14,7 @@ import subprocess
 import sys
 
 import pytest
-from tests.auth_client import signed_in_client
+from tests.auth_client import signed_in_client, active_principal
 
 from retailiq.domain.fiction import FictionStore, FictionDataError, _period, verify_release
 from retailiq.domain.backorder import investigate_backorder
@@ -665,7 +665,7 @@ def test_uc01_t03_followup_uses_committed_case_even_without_snapshots(monkeypatc
             assert first.status_code == 200, first.text
             assert first.json()["disposition"] == "INSUFFICIENT_EVIDENCE"
             assert first.json()["records"] == []
-            committed = last_committed_case_binding(sid)
+            committed = last_committed_case_binding(sid, owner_user_id=active_principal(client).user_id)
             assert committed["case_id"] == C1
             assert committed["cutoff"] == "2026-10-16T12:00:00Z"
             assert committed["source_sha256"] == store.release["runtime_sha256"]
@@ -850,8 +850,8 @@ def test_uc01_t03_session_scope_topic_switch_and_ambiguous_warehouse(monkeypatch
             # A successful independent topic breaks implicit case inheritance.
             add_turn(a, "What are top products?", {
                 "intent": "top", "active_agent": "sales_agent", "answer": "Sample ranking",
-                "records": [], "contexts": []})
-            assert last_committed_case_binding(a) is None
+                "records": [], "contexts": []}, principal=active_principal(client))
+            assert last_committed_case_binding(a, owner_user_id=active_principal(client).user_id) is None
             unrelated = client.post("/ask", json={"session_id": a,
                 "question": "Chính sách nào áp dụng?"})
             assert unrelated.status_code == 422
@@ -887,14 +887,14 @@ def test_uc01_t03_tampered_evidence_and_explicit_case_override(monkeypatch, fict
                 "question": "Chính sách nào áp dụng?"})
             assert stale.status_code == 422
             assert "source/cutoff changed" in stale.json()["detail"]
-            assert last_committed_case_binding(sid)["source_sha256"] == "0"*64
+            assert last_committed_case_binding(sid, owner_user_id=active_principal(client).user_id)["source_sha256"] == "0"*64
 
             # Explicit CASE-ID takes precedence over inherited, untrusted source hash.
             fresh = client.post("/ask", json={"session_id": sid,
                 "question": f"Investigate {C1}"})
             assert fresh.status_code == 200, fresh.text
             assert fresh.json()["capability_plan"]["source"] == "validated_explicit_case_id"
-            assert last_committed_case_binding(sid)["source_sha256"] == store.release["runtime_sha256"]
+            assert last_committed_case_binding(sid, owner_user_id=active_principal(client).user_id)["source_sha256"] == store.release["runtime_sha256"]
 
             with sqlite3.connect(db) as c:
                 c.execute("UPDATE messages SET evidence_json='corrupted' WHERE session_id=? AND role='assistant' AND id=(SELECT MAX(id) FROM messages WHERE session_id=? AND role='assistant')",
@@ -929,7 +929,7 @@ def test_uc01_t03_failed_turn_checkpoint_is_not_committed_context(monkeypatch, f
                 "question": f"Investigate {C1}"})
             assert failed.status_code == 503
             monkeypatch.setattr(http, "add_turn", genuine_commit)
-            assert last_committed_case_binding(sid) is None
+            assert last_committed_case_binding(sid, owner_user_id=active_principal(client).user_id) is None
             assert client.get(f"/api/sessions/{sid}").json()["messages"] == []
             followup = client.post("/ask", json={"session_id": sid,
                 "question": "Chính sách nào áp dụng?"})
@@ -973,7 +973,7 @@ def test_uc01_t03_explicit_other_case_replaces_committed_context(monkeypatch, fi
             assert explicit.status_code == 200, explicit.text
             assert explicit.json()["capability_plan"]["case_id"] == second_case
             assert explicit.json()["capability_plan"]["source"] == "validated_explicit_case_id"
-            assert last_committed_case_binding(sid)["case_id"] == second_case
+            assert last_committed_case_binding(sid, owner_user_id=active_principal(client).user_id)["case_id"] == second_case
 
             followup = client.post("/ask", json={"session_id": sid,
                 "question": "Which warehouse policy applies?"})
