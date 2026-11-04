@@ -85,6 +85,8 @@ def journey(page, base: str, analyst: tuple[str, str],
     sign_in(page, base, *analyst, "analyst")
     expect(page.locator(".review-item")).to_contain_text(
         "APPROVED LOCAL", timeout=30000)
+    # UI must not invite a second review cycle once an immutable decision exists.
+    expect(page.get_by_role("button", name="Submit for Manager review")).to_have_count(0)
     expect(page.locator(".session-row")).to_have_count(1)
     expect(page.locator(".review-boundary")).to_contain_text("No warehouse transfer")
     page.get_by_role("button", name="Sign out").click()
