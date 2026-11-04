@@ -388,6 +388,7 @@ def test_uc01_t02_explicit_case_langgraph_api_with_real_fixture(monkeypatch, fic
     """Compiled LangGraph + actual FastAPI /ask; fake *router provider*, real SQL fixture."""
     from types import SimpleNamespace
     from fastapi.testclient import TestClient
+from tests.auth_client import signed_in_client
     from retailiq.api import app
     from retailiq.orchestration import week1_graph as graph
 
@@ -416,6 +417,7 @@ def test_uc01_t02_explicit_case_langgraph_api_with_real_fixture(monkeypatch, fic
     monkeypatch.setattr(graph, "chat_model", lambda: RouterModel())
     try:
         with TestClient(app) as client:
+            signed_in_client(app, client=client)
             direct = graph.run(f"Investigate backorder {C1}")
             assert direct["disposition"] == "NEEDS_REVIEW"
             result = client.post("/ask", json={"question": f"Investigate backorder {C1}"})
@@ -490,6 +492,7 @@ def test_uc01_t02_live_provider_route_with_verified_sql_fixture(monkeypatch, fic
     monkeypatch.setattr(backorder_domain, "investigate_backorder", tool)
     try:
         with TestClient(app) as client:
+            signed_in_client(app, client=client)
             response = client.post("/ask", json={"question": f"Investigate the backorder {C1}"})
             assert response.status_code == 200, response.text[:300]
             result = response.json()
@@ -574,6 +577,7 @@ def test_uc01_t02_rejects_invalid_case_before_llm_and_sql(monkeypatch, tmp_path)
     ]
     try:
         with TestClient(app) as client:
+            signed_in_client(app, client=client)
             for question in questions:
                 response = client.post("/ask", json={"question": question})
                 assert response.status_code == 422, response.text
@@ -595,6 +599,7 @@ def test_uc01_api_does_not_misreport_internal_key_error_as_missing_session(monke
 
     monkeypatch.setattr(http, "ask", invalid_domain)
     with TestClient(app) as client:
+        signed_in_client(app, client=client)
         response = client.post("/ask", json={"question": "Investigate business evidence"})
         assert response.status_code == 503
         assert "Session not found" not in response.text
@@ -653,6 +658,7 @@ def test_uc01_t03_followup_uses_committed_case_even_without_snapshots(monkeypatc
     monkeypatch.setattr(backorder_domain, "investigate_backorder", tracked_tool)
     try:
         with TestClient(app) as client:
+            signed_in_client(app, client=client)
             sid = client.post("/api/sessions", json={}).json()["id"]
             first = client.post("/ask", json={
                 "session_id": sid, "question": f"Investigate backorder {C1}"})
@@ -722,6 +728,7 @@ def test_uc01_t05_policy_clauses_via_graph_and_http(monkeypatch, fiction, tmp_pa
     monkeypatch.setattr(graph, "chat_model", lambda: SafeModel())
     try:
         with TestClient(app) as client:
+            signed_in_client(app, client=client)
             sid = client.post("/api/sessions", json={}).json()["id"]
             first = client.post("/ask", json={
                 "session_id": sid, "question": f"Investigate backorder {C1}"})
@@ -791,6 +798,7 @@ def test_uc01_t05_wrong_model_quote_keeps_verified_base_result(monkeypatch, fict
     monkeypatch.setattr(graph, "chat_model", lambda: BadQuoteModel())
     try:
         with TestClient(app) as client:
+            signed_in_client(app, client=client)
             sid = client.post("/api/sessions", json={}).json()["id"]
             assert client.post("/ask", json={
                 "session_id": sid, "question": f"Investigate {C1}"}).status_code == 200
@@ -816,6 +824,7 @@ def test_uc01_t03_session_scope_topic_switch_and_ambiguous_warehouse(monkeypatch
                                                        with_candidate=True)
     try:
         with TestClient(app) as client:
+            signed_in_client(app, client=client)
             a = client.post("/api/sessions", json={}).json()["id"]
             b = client.post("/api/sessions", json={}).json()["id"]
             assert client.post("/ask", json={"session_id": a,
@@ -861,6 +870,7 @@ def test_uc01_t03_tampered_evidence_and_explicit_case_override(monkeypatch, fict
     graph, _, store = _uc01_context_client(monkeypatch, tmp_path, fiction)
     try:
         with TestClient(app) as client:
+            signed_in_client(app, client=client)
             sid = client.post("/api/sessions", json={}).json()["id"]
             assert client.post("/ask", json={"session_id": sid,
                 "question": f"Investigate {C1}"}).status_code == 200
@@ -912,6 +922,7 @@ def test_uc01_t03_failed_turn_checkpoint_is_not_committed_context(monkeypatch, f
 
     try:
         with TestClient(app) as client:
+            signed_in_client(app, client=client)
             sid = client.post("/api/sessions", json={}).json()["id"]
             monkeypatch.setattr(http, "add_turn", failed_commit)
             failed = client.post("/ask", json={"session_id": sid,
@@ -953,6 +964,7 @@ def test_uc01_t03_explicit_other_case_replaces_committed_context(monkeypatch, fi
     graph, _, _ = _uc01_context_client(monkeypatch, tmp_path, fiction)
     try:
         with TestClient(app) as client:
+            signed_in_client(app, client=client)
             sid = client.post("/api/sessions", json={}).json()["id"]
             assert client.post("/ask", json={"session_id": sid,
                 "question": f"Investigate backorder {C1}"}).status_code == 200
