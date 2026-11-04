@@ -219,10 +219,10 @@ class FictionStore:
             raise FictionDataError("Inconsistent order identity")
         _money(orders[0]["total_amount"])
         lines = self._q("SELECT order_item_id, order_id, product_id, quantity, unit_price, discount_pct "
-                        "FROM order_items WHERE order_id=? ORDER BY order_item_id", (oid,))
+                        "FROM order_items WHERE order_id=? ORDER BY order_item_id LIMIT ?", (oid, _LIMIT + 1))
         shipments = self._q("SELECT shipment_id, order_id, warehouse_id, shipped_date, delivered_date, shipment_state "
-                            "FROM shipments WHERE order_id=? ORDER BY shipment_id", (oid,))
-        if len(lines) > _LIMIT or len(shipments) > _LIMIT:
+                            "FROM shipments WHERE order_id=? ORDER BY shipment_id LIMIT ?", (oid, _LIMIT + 1))
+        if 1 + len(lines) + len(shipments) > _LIMIT:
             raise FictionDataError("Order detail exceeds bounded response limit")
         line_ids: set[str] = set()
         product_ids: set[str] = set()
@@ -247,6 +247,7 @@ class FictionStore:
             if {row["product_id"] for row in known} != product_ids:
                 raise FictionDataError("Order line references unknown product")
         shipment_ids: set[str] = set()
+        warehouse_ids: set[str] = set()
         for shipment in shipments:
             sid = _id(shipment.pop("shipment_id"))
             if sid in shipment_ids or _id(shipment.pop("order_id")) != oid:
@@ -254,6 +255,13 @@ class FictionStore:
             shipment_ids.add(sid)
             shipment["shipment_id"] = sid
             shipment["warehouse_id"] = _id(shipment["warehouse_id"])
+            warehouse_ids.add(shipment["warehouse_id"])
+        if warehouse_ids:
+            placeholders = ",".join("?" for _ in warehouse_ids)
+            known = self._q("SELECT warehouse_id FROM warehouses WHERE warehouse_id IN ("
+                            + placeholders + ")", tuple(sorted(warehouse_ids)))
+            if {row["warehouse_id"] for row in known} != warehouse_ids:
+                raise FictionDataError("Shipment references unknown warehouse")
         return self._result({"order": orders[0], "lines": lines, "shipments": shipments},
                             scope={"order_id": oid}, refs=[f"orders/{oid}"] +
                             [f"order_items/{r['order_item_id']}" for r in lines] +
@@ -277,8 +285,8 @@ class FictionStore:
                 return self._result([], scope=scope, refs=[], limitations=["WAREHOUSE_NOT_FOUND"])
         rows = self._q("SELECT inventory_id, product_id, warehouse_id, quantity_on_hand, "
                        "reserved_quantity, last_restocked_date FROM inventory "
-                       "WHERE product_id=? AND (? IS NULL OR warehouse_id=?) ORDER BY warehouse_id",
-                       (pid, wid, wid))
+                       "WHERE product_id=? AND (? IS NULL OR warehouse_id=?) ORDER BY warehouse_id LIMIT ?",
+                       (pid, wid, wid, _LIMIT + 1))
         if len(rows) > _LIMIT:
             raise FictionDataError("Inventory result exceeds bounded response limit")
         seen: set[str] = set()
