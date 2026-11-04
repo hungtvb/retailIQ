@@ -50,6 +50,7 @@ def backorder_update(
     committed: dict | None,
     read_order: Callable[[str], dict],
     capability: str,
+    policy_explanation: dict | None = None,
 ) -> dict:
     """Compose findings from already verified facts; no new policy decisions."""
     data = investigation['data']
@@ -164,7 +165,7 @@ def backorder_update(
                      if disposition == 'SUPPORTED' else 'Transfer feasibility is not verified',
                      'evidence_refs': evidence_refs[:20]}]
 
-    return {
+    base = {
         'answer': answer, 'records': records, 'contexts': [],
         'active_agent': 'backorder_agent',
         'disposition': disposition, 'evidence_refs': evidence_refs,
@@ -181,3 +182,21 @@ def backorder_update(
                                        else 'validated_explicit_case_id'),
                             'source_request_id': committed.get('source_request_id') if followup else None},
     }
+
+    # Policy explanation is optional, strictly subordinate to the verified
+    # business investigation. It never changes authority or approval status.
+    if followup == 'policy':
+        if policy_explanation is not None and policy_ref:
+            base['answer'] += '\n\n' + policy_explanation['answer']
+            base['contexts'] = [policy_explanation['context']]
+            ref = policy_explanation['evidence_ref']
+            base['evidence_refs'] = list(dict.fromkeys(base['evidence_refs'] + [ref]))[:100]
+            base['findings'].append({
+                'text': f"Verified source clause: {policy_explanation['section']}",
+                'evidence_refs': [ref],
+            })
+        else:
+            base['limitations'] = list(dict.fromkeys(
+                base['limitations'] + ['POLICY_EXPLANATION_UNVERIFIED']
+            ))
+    return base
