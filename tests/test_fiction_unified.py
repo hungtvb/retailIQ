@@ -849,3 +849,66 @@ def test_uc01_t03_explicit_other_case_replaces_committed_context(monkeypatch, fi
     finally:
         graph.close_checkpoint_graph()
         graph._fiction_store_cached.cache_clear()
+
+
+def test_t04_order_and_inventory_shared_domain_contract(fiction):
+    path, manifest, store = fiction
+    order = store.order(O1)
+    assert order["scope"]["order_id"] == O1
+    assert order["data"]["lines"][0]["order_item_id"] == I1
+    assert order["record_refs"] == [f"orders/{O1}", f"order_items/{I1}"]
+    assert "CUSTOMER_SECRET" not in str(order)
+    assert "release-recorded" in " ".join(order["limitations"])
+
+    assert store.inventory(P1, W1)["data"][0]["available_snapshot"] == 3
+    unknown_warehouse = "00000000-0000-4000-8000-000000000000"
+    result = store.inventory(P1, unknown_warehouse)
+    assert result["data"] == []
+    assert result["limitations"] == ["WAREHOUSE_NOT_FOUND"]
+    assert result["scope"]["warehouse_id"] == unknown_warehouse
+
+
+@pytest.mark.parametrize("field,value,reason", [
+    ("quantity", 0, "quantity"),
+    ("discount_pct", 101, "discount"),
+    ("unit_price", -1, "financial amount"),
+    ("product_id", "99999999-9999-4999-8999-999999999999", "unknown product"),
+])
+def test_t04_order_rejects_corrupt_line_source(fiction, field, value, reason):
+    path, manifest, store = fiction
+    with sqlite3.connect(path) as conn:
+        conn.execute(f"UPDATE order_items SET {field}=? WHERE order_item_id=?", (value, I1))
+    with pytest.raises(FictionDataError, match="changed since release"):
+        store.order(O1)
+    store = reseal(path, manifest)
+    with pytest.raises(FictionDataError, match=reason):
+        store.order(O1)
+
+
+def test_t04_order_rejects_invalid_shipment_identity(fiction):
+    path, manifest, _ = fiction
+    with sqlite3.connect(path) as conn:
+        conn.execute("INSERT INTO shipments VALUES (?,?,?,?,?,?)",
+                     ("not-a-uuid", O1, W1, "2026-10-17", "2026-10-18", "delivered"))
+    store = reseal(path, manifest)
+    with pytest.raises(ValueError, match="canonical Fiction UUID"):
+        store.order(O1)
+
+
+def test_t04_adapter_rejects_error_before_decoding_and_wrong_source(fiction):
+    from retailiq.mcp_adapter import decode_tool_result, _verify_envelope
+    from types import SimpleNamespace
+
+    malicious = SimpleNamespace(status="error", artifact={
+        "data": [], "source": {"id": "fiction-retail/sqlite"},
+        "scope": {}, "record_refs": [], "limitations": [],
+    })
+    with pytest.raises(ValueError, match="execution error"):
+        decode_tool_result(malicious)
+
+    _, _, store = fiction
+    result = store.inventory(P1)
+    with pytest.raises(ValueError, match="source or evidence invalid"):
+        _verify_envelope(result, "0" * 64, "inventory_lookup", {"product": P1, "warehouse_id": None})
+    assert _verify_envelope(result, store.release["runtime_sha256"],
+                            "inventory_lookup", {"product": P1, "warehouse_id": None}) == result
