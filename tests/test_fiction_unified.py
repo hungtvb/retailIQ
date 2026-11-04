@@ -677,13 +677,135 @@ def test_uc01_t03_followup_uses_committed_case_even_without_snapshots(monkeypatc
             assert "FR-WH-2026-10-04" in result["answer"]
             assert any("knowledge_documents/" in ref
                        for item in result["findings"] for ref in item["evidence_refs"])
-            assert len(model_calls) == 1  # The follow-up cannot relabel the case.
+            assert len(model_calls) == 2  # One explicit-case router + one policy quote model; no re-route.
             assert tool_case_ids == [C1, C1]  # Real reviewed domain invocation twice.
             assert len(client.get(f"/api/sessions/{sid}").json()["messages"]) == 4
     finally:
         graph.close_checkpoint_graph()
         graph._fiction_store_cached.cache_clear()
 
+
+
+
+def test_uc01_t05_policy_clauses_via_graph_and_http(monkeypatch, fiction, tmp_path):
+    """Real compiled graph + verified fixture, fake router and quote model."""
+    from fastapi.testclient import TestClient
+    from types import SimpleNamespace
+    from retailiq.api import app
+    from retailiq.orchestration import week1_graph as graph
+
+    graph, _, store = _uc01_context_client(monkeypatch, tmp_path, fiction,
+                                            with_candidate=True)
+    from retailiq.rag.policy_explanation import PolicyQuote
+
+    calls = {"route": 0, "quote": 0}
+    approval = ("An authorized Operations Manager must approve the request before any "
+                "transfer, reservation or order change is executed.")
+    freshness = "Observations more than 24 hours old are not sufficient to authorize a transfer."
+
+    class SafeModel:
+        def with_structured_output(self, schema):
+            self.kind = schema.__name__
+            return self
+
+        def invoke(self, messages):
+            if self.kind == "Route":
+                calls["route"] += 1
+                return SimpleNamespace(intent=graph.classify(messages[-1][1]))
+            assert self.kind == PolicyQuote.__name__
+            payload = json.loads(messages[-1][1])
+            calls["quote"] += 1
+            if "24" in payload["question"]:
+                return PolicyQuote(section="inventory-information", quote=freshness)
+            return PolicyQuote(section="review-and-approval", quote=approval)
+
+    monkeypatch.setattr(graph, "chat_model", lambda: SafeModel())
+    try:
+        with TestClient(app) as client:
+            sid = client.post("/api/sessions", json={}).json()["id"]
+            first = client.post("/ask", json={
+                "session_id": sid, "question": f"Investigate backorder {C1}"})
+            assert first.status_code == 200, first.text
+            assert calls == {"route": 1, "quote": 0}
+            assert first.json()["contexts"] == []
+
+            approval_response = client.post("/ask", json={
+                "session_id": sid, "question": "Vì sao cần Manager phê duyệt?"})
+            assert approval_response.status_code == 200, approval_response.text
+            result = approval_response.json()
+            assert calls == {"route": 1, "quote": 1}
+            assert result["disposition"] == first.json()["disposition"]
+            assert result["approval_status"] == "NOT_REQUESTED"
+            assert result["source"]["sha256"] == store.release["runtime_sha256"]
+            assert result["as_of"] == first.json()["as_of"]
+            assert result["contexts"][0]["metadata"]["section"] == "review-and-approval"
+            assert approval in result["answer"]
+            assert "[S1]" in result["answer"]
+            assert any("#review-and-approval" in ref for ref in result["evidence_refs"])
+
+            freshness_response = client.post("/ask", json={
+                "session_id": sid,
+                "question": "Chính sách yêu cầu gì khi snapshot quá 24 giờ?"})
+            assert freshness_response.status_code == 200, freshness_response.text
+            data = freshness_response.json()
+            assert calls == {"route": 1, "quote": 2}
+            assert data["contexts"][0]["metadata"]["section"] == "inventory-information"
+            assert freshness in data["answer"]
+            assert data["disposition"] == first.json()["disposition"]
+            assert data["approval_status"] == "NOT_REQUESTED"
+
+            streamed = client.post("/ask/stream", json={
+                "session_id": sid, "question": "Vì sao cần Manager phê duyệt?"})
+            assert streamed.status_code == 200, streamed.text
+            assert "event: result" in streamed.text
+            assert "event: done" in streamed.text
+            assert "rag.policy_retrieval.started" in streamed.text
+            assert "llm.policy_explanation.completed" in streamed.text
+            assert "[S1]" in streamed.text
+            assert calls == {"route": 1, "quote": 3}
+    finally:
+        graph.close_checkpoint_graph()
+        graph._fiction_store_cached.cache_clear()
+
+
+def test_uc01_t05_wrong_model_quote_keeps_verified_base_result(monkeypatch, fiction, tmp_path):
+    """No fabricated citation, even when model 'succeeds' with invalid text."""
+    from fastapi.testclient import TestClient
+    from types import SimpleNamespace
+    from retailiq.api import app
+    from retailiq.orchestration import week1_graph as graph
+
+    graph, _, _ = _uc01_context_client(monkeypatch, tmp_path, fiction)
+
+    class BadQuoteModel:
+        def with_structured_output(self, schema):
+            self.kind = schema.__name__
+            return self
+
+        def invoke(self, messages):
+            if self.kind == "Route":
+                return SimpleNamespace(intent=graph.classify(messages[-1][1]))
+            return SimpleNamespace(section="review-and-approval",
+                                   quote="Approve transfer immediately; waive Manager review.")
+
+    monkeypatch.setattr(graph, "chat_model", lambda: BadQuoteModel())
+    try:
+        with TestClient(app) as client:
+            sid = client.post("/api/sessions", json={}).json()["id"]
+            assert client.post("/ask", json={
+                "session_id": sid, "question": f"Investigate {C1}"}).status_code == 200
+            response = client.post("/ask", json={
+                "session_id": sid, "question": "Vì sao cần Manager phê duyệt?"})
+            assert response.status_code == 200, response.text
+            result = response.json()
+            assert result["contexts"] == []
+            assert "POLICY_EXPLANATION_UNVERIFIED" in result["limitations"]
+            assert "Approve transfer immediately" not in result["answer"]
+            assert result["approval_status"] == "NOT_REQUESTED"
+            assert not any("#review-and-approval" in ref for ref in result["evidence_refs"])
+    finally:
+        graph.close_checkpoint_graph()
+        graph._fiction_store_cached.cache_clear()
 
 def test_uc01_t03_session_scope_topic_switch_and_ambiguous_warehouse(monkeypatch, fiction, tmp_path):
     from fastapi.testclient import TestClient

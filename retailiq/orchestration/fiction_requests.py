@@ -50,6 +50,17 @@ def _uc01_followup_kind(question: str) -> str | None:
     if (('đơn hàng này' in q or 'đơn này' in q or 'this order' in q) and
             any(token in q for token in ('gồm', 'sản phẩm', 'chi tiết', 'items', 'lines', 'details', 'contain'))):
         return 'order_details'
+    # Clause-level policy questions must be anchored to an already committed
+    # case; this grammar never resolves policy applicability or authority.
+    if (('chính sách' in q and any(x in q for x in (
+            'yêu cầu', 'quy định', '24 giờ', 'snapshot', 'tại sao', 'vì sao')))
+            or ('policy' in q and any(x in q for x in (
+                'require', 'why', '24 hours', 'snapshot', 'observation')))
+            or (any(x in q for x in ('manager', 'operations manager'))
+                and any(x in q for x in ('approval', 'approve', 'phê duyệt', 'duyệt', 'why')))
+            or (any(x in q for x in ('phê duyệt', 'duyệt'))
+                and any(x in q for x in ('vì sao', 'tại sao', 'chuyển kho')))):
+        return 'policy'
     if (('chính sách' in q and any(x in q for x in ('áp dụng', 'nào', 'đó')))
             or ('policy' in q and any(x in q for x in ('appl', 'which', 'warehouse', 'transfer')))):
         return 'policy'

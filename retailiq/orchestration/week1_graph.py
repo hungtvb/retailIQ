@@ -399,8 +399,28 @@ def backorder_agent(state: State):
                      or f"fulfillment_cases/{case_id}" != committed['case_ref']):
         raise UnresolvedCaseReference(
             'Historical case source/cutoff changed; please investigate the CASE-ID again')
+    # Explanation may only consume an already verified policy/cutoff.
+    # No model is invoked by initial G1, non-policy follow-ups or invalid bindings.
+    policy_explanation = None
+    if (followup == 'policy' and investigation['data'].get('policy')
+            and investigation['data']['policy'].get('applicable_at_cutoff') is True):
+        from retailiq.rag.policy_explanation import (
+            PolicyExplanationUnavailable, explain_policy,
+        )
+        try:
+            policy_explanation = explain_policy(
+                state['question'], investigation['data']['policy'],
+                knowledge, chat_model(),
+            )
+        except PolicyExplanationUnavailable:
+            log_event('rag.policy_explanation_unavailable', level='WARNING',
+                      agent='backorder_agent', error_type='PolicyExplanationUnavailable')
+        except (ValueError, RuntimeError, OSError):
+            # Provider configuration/transport cannot change verified case facts.
+            log_event('rag.policy_explanation_unavailable', level='WARNING',
+                      agent='backorder_agent', error_type='ProviderUnavailable')
+
     # Lazy callback: only the verified order-details follow-up invokes MCP.
-    # Keep event order and existing adapter monkeypatch points intact.
     def _read_order(order_id: str) -> dict:
         from retailiq.mcp_adapter import read_fiction_order
         return read_fiction_order(order_id)
@@ -408,7 +428,7 @@ def backorder_agent(state: State):
     return Command(update=backorder_update(
         state, investigation, case_id,
         followup=followup, committed=committed, read_order=_read_order,
-        capability=_BACKORDER_CAPABILITY,
+        capability=_BACKORDER_CAPABILITY, policy_explanation=policy_explanation,
     ), goto='retailiq_reply')
 
 
