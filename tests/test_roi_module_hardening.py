@@ -69,8 +69,10 @@ def test_zero_workload_and_zero_build_have_explicit_nonfiction_semantics():
     assert report['agent_cost_estimate']['monthly_token_cost_usd'] == 0
 
 
-def test_roi_api_rejects_nonfinite_json_numbers():
-    client = TestClient(app)
+def test_roi_api_rejects_nonfinite_json_numbers(tmp_path, monkeypatch):
+    from tests.auth_client import signed_in_client
+    monkeypatch.setenv('RETAILIQ_CHAT_DB', str(tmp_path / 'roi.sqlite'))
+    client = signed_in_client(app)
     for key in ('assisted_share', 'input_usd_per_1m', 'minutes_saved'):
         response = client.post('/api/roi/estimate', content=
                                '{"' + key + '": "NaN"}',
