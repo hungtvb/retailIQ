@@ -53,9 +53,11 @@ def update_customer_memory(session_id: str, body: CustomerMemoryBody, request: R
         with session_mutation(session_id):
             return save_customer_memory(session_id, consent=body.consent,
                                         preferences=body.preferences,
-                                        owner_user_id=principal.user_id)
+                                        owner_user_id=principal.user_id, principal=principal)
     except KeyError:
         raise HTTPException(status_code=404, detail='Session not found') from None
+    except PermissionError:
+        raise HTTPException(status_code=401, detail='Authentication required') from None
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from None
     except SessionBusyError:
@@ -69,9 +71,11 @@ def clear_customer_memory(session_id: str, request: Request):
     try:
         with session_mutation(session_id):
             save_customer_memory(session_id, consent=False, preferences={},
-                                 owner_user_id=principal.user_id)
+                                 owner_user_id=principal.user_id, principal=principal)
     except KeyError:
         raise HTTPException(status_code=404, detail='Session not found') from None
+    except PermissionError:
+        raise HTTPException(status_code=401, detail='Authentication required') from None
     except SessionBusyError:
         raise HTTPException(status_code=409, detail='Session is processing another request') from None
     return Response(status_code=204)
@@ -105,7 +109,9 @@ def remove_session(session_id: str, request: Request):
                 log_event('chat.checkpoint_delete_failed', level='ERROR',
                           error_type=type(error).__name__)
                 raise HTTPException(status_code=503, detail='Checkpoint cleanup failed') from None
-            delete_session(session_id, owner_user_id=principal.user_id)
+            delete_session(session_id, owner_user_id=principal.user_id, principal=principal)
+    except PermissionError:
+        raise HTTPException(status_code=401, detail='Authentication required') from None
     except SessionBusyError:
         raise HTTPException(status_code=409, detail='Session is processing another request') from None
     with bind_context(session=session_id):
