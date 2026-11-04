@@ -4,7 +4,7 @@
 [REQUIREMENTS.md](REQUIREMENTS.md); original teaching sequence: [COURSE_PLAN.md](COURSE_PLAN.md).
 **Development mode:** independent; the four "weeks" are milestones, not deadlines.
 **Integration baseline for recorded checks:** `main` + `feature/product-workspace-v1` (historical; since integrated).
-**General evidence baseline:** 2026-10-30 (historical, not automatically re-tested on latest `main`). **W2-03/T04 updated separately on 2026-11-04** using tested PR head `ff1c9939` / merged main commit `abbe5fd9` and the explicitly linked CI; other capability rows retain their stated earlier evidence scope.
+**General evidence baseline:** 2026-10-30 (historical, not automatically re-tested on latest `main`). **Scoped updates, 2026-11-04:** T04 local MCP on main `abbe5fd9` ([CI](https://github.com/hungtvb/retailIQ/actions/runs/41768927458)); **UC-01 T02 real-provider G1** on main `ece87044` ([live CI](https://github.com/hungtvb/retailIQ/actions/runs/41776582027)). Other capability evidence remains scoped to its recorded baseline.
 
 This is the **single owner of per-capability acceptance and open gaps**. For the reproducible scenario plan and test commands see [Testing & Scenario Acceptance](SCENARIO_ACCEPTANCE.md). For dated Week 1 results see [Historical Execution Evidence](archive/2026-11-03/week-01/EVIDENCE.md). Entries below describe the **last documented assessment**, not an automatic claim about untested later commits. A green CI run establishes only its explicit scenarios, not full provider quality or course completion.
 
@@ -22,7 +22,7 @@ This is the **single owner of per-capability acceptance and open gaps**. For the
 
 | ID | Instructor requirement | Implementation | Evidence / status | Acceptance still required |
 |---|---|---|---|---|
-| W1-01 | LangGraph router, SQL Inventory/Sales | `retailiq/orchestration/week1_graph.py`, `retailiq/domain/analytics.py` | LOCAL + MOCKED PASS: compiled graph tests and SQL acceptance | Current-commit real LLM execution and request trace |
+| W1-01 | LangGraph router, SQL Inventory/Sales | `retailiq/orchestration/week1_graph.py`, `retailiq/domain/analytics.py`, `domain/backorder.py` | LOCAL + MOCKED PASS for legacy Inventory/Sales. **SCOPED PROVIDER-BACKED PASS** for *UC-01 T02 G1 only*: actual ChatOpenAI → compiled LangGraph → 1 governed Fiction SQL/policy capability on pinned real 209 MB release; matched independent G1 oracle, 6 evidence refs, no fallback, `NEEDS_REVIEW`, no DB write ([run 41776582027](https://github.com/hungtvb/retailIQ/actions/runs/41776582027), main `ece87044`; artifact `uc01_t02_g1.json`) | Provider-backed **Inventory/Sales** routing accuracy and multi-capability planner still pending; UC-01 T05–T08, LangSmith remote trace, RAG/browser/HITL and Faster/ROI not proven by this G1 run |
 | W1-02 | Product RAG, LangChain, vector database | `retailiq/rag/indexing.py`, `retrieval.py`, `orchestration/agents.py` | LOCAL parser/index-contract tests; IMPLEMENTED / LIVE PENDING | Indexed Chroma query with actual embeddings, source grounded answer |
 | W1-03 | RAGAS | `scripts/eval_ragas.py` | IMPLEMENTED / LIVE PENDING | Current-commit metric report and failed cases |
 | W1-04 | LangSmith | `retailiq/core/config.py`, graph tracing | IMPLEMENTED / LIVE PENDING | Current-commit remote trace with correlated request ID |
