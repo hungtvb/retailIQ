@@ -184,32 +184,63 @@ def resolve_followup(question: str, history: list[dict] | None = None,
 
 
 _FR_SKU_MATCH = re.compile(r"(?<![A-Za-z0-9-])FR-[0-9A-F]{16}(?![A-Za-z0-9-])")
-_UUID_IN_QUESTION = re.compile(r"(?<![A-Za-z0-9])(?:[0-9a-f]{8}-)(?:[0-9a-f]{4}-){3}[0-9a-f]{12}(?![A-Za-z0-9])", re.I)
+_UUID_IN_QUESTION = re.compile(
+    r"(?<![A-Za-z0-9])(?:[0-9a-f]{8}-)(?:[0-9a-f]{4}-){3}[0-9a-f]{12}(?![A-Za-z0-9])",
+    re.I,
+)
+_WAREHOUSE_ID_IN_QUESTION = re.compile(
+    r"(?<!\w)(?:warehouse|kho)(?:\s+id)?\s*[:=#]?\s*"
+    r"([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})(?![A-Za-z0-9])",
+    re.I,
+)
+_STOCK_DATE = re.compile(
+    r"(?<!\d)(?:20\d{2}[-/]\d{1,2}(?:[-/]\d{1,2})?"
+    r"|\d{1,2}[-/]\d{1,2}(?:[-/]\d{2,4})?)(?!\d)"
+)
+_STOCK_TIME_WORDS = (
+    'hiện tại', 'hiện nay', 'hiện giờ', 'ngay lúc này', 'bây giờ',
+    'hôm nay', 'hôm qua', 'hôm kia', 'ngày', 'tháng', 'năm', 'tuần',
+    'tính đến', 'tại thời điểm', 'vào lúc', 'cuối kỳ', 'đầu kỳ',
+    'today', 'yesterday', 'tomorrow', 'now', 'currently', 'current',
+    'right now', 'at the moment', 'as of', 'as at', 'last week',
+    'last month', 'last year', 'next week', 'next month',
+    'since', 'before', 'after', 'historical', 'historic', 'realtime',
+    'real-time', 'real time', 'live', 'latest',
+)
 
 
 def _fiction_inventory_request(question: str) -> tuple[str, str | None] | None:
-    """Only explicit single-FR-SKU stock questions enter the new MCP path."""
+    """Only an unambiguous, undated single-SKU inventory request can use MCP.
+
+    No LLM or unverified chat history can supply identity, location or time
+    scope. Reject unsupported qualified asks instead of dropping constraints.
+    """
     lower = question.casefold()
     stock_words = ('stock', 'inventory', 'tồn kho', 'còn hàng', 'available', 'còn bao nhiêu')
     if 'case-' in lower or not any(token in lower for token in stock_words) or 'fr-' not in lower:
         return None
     matches = _FR_SKU_MATCH.findall(question.upper())
-    if len(matches) != 1 or question.casefold().count('fr-') != 1:
+    if len(matches) != 1 or lower.count('fr-') != 1:
         raise InvalidFictionScope('Exactly one complete FR-SKU is required for Fiction inventory')
-    # The undated stock table cannot answer historical/live source-time questions.
-    if any(token in lower for token in (
-            'hiện tại', 'ngay lúc này', 'hôm nay', 'hôm qua', 'tuần trước',
-            'tháng trước', ' at 20', ' on 20', 'as of', 'today', 'yesterday', 'now',
-            'right now', 'current', 'live', 'realtime', 'real-time')):
+    if _STOCK_DATE.search(lower) or any(token in lower for token in _STOCK_TIME_WORDS) or re.search(
+        r'\b(?:at|on|in|during)\s+(?:20\d{2}|january|february|march|april|may|june|'
+        r'july|august|september|october|november|december)\b', lower
+    ):
         raise InvalidFictionScope('UNSUPPORTED_TEMPORAL_SCOPE: Fiction stock has no observation timestamp')
+    # A multi-intent query cannot be silently reduced to one SKU's stock.
+    if (re.search(r'\b(?:revenue|profit|sales|orders?|refund|returns?|compare|backorder)\b', lower)
+            or any(token in lower for token in (
+                'doanh thu', 'doanh số', 'lợi nhuận', 'bán chạy',
+                'so sánh', 'đơn hàng', 'hoàn tiền', 'đổi trả'))):
+        raise InvalidFictionScope('MULTI_INTENT_UNSUPPORTED: request only undated stock for one SKU')
     from retailiq.domain.fiction import _id
-    wants_warehouse = 'warehouse' in lower or 'kho ' in lower
     ids = _UUID_IN_QUESTION.findall(question)
-    if wants_warehouse and len(ids) != 1:
-        raise InvalidFictionScope('Specify exactly one warehouse UUID or omit warehouse filter')
-    if ids and not wants_warehouse:
-        raise InvalidFictionScope('Unscoped UUID in Fiction inventory question')
-    warehouse = _id(ids[0]) if ids else None
+    warehouses = _WAREHOUSE_ID_IN_QUESTION.findall(question)
+    if len(ids) > 1 or len(warehouses) != len(ids):
+        raise InvalidFictionScope('Specify at most one explicitly labeled warehouse UUID')
+    # "tồn kho FR-..." contains the word "kho", but that is not a
+    # warehouse filter unless a separate canonical warehouse UUID follows it.
+    warehouse = _id(warehouses[0]) if warehouses else None
     return matches[0], warehouse
 
 
