@@ -340,7 +340,7 @@ def get_customer_memory(sid: str, *, owner_user_id: str) -> dict:
 
 
 def save_customer_memory(sid: str, *, consent: bool, preferences: dict,
-                         owner_user_id: str) -> dict:
+                         owner_user_id: str, principal: SecurityContext) -> dict:
     """Opt-in persistence; opting out also deletes prior values transactionally.
 
     Caller must use session_mutation(sid) for consistency with chat/delete.
@@ -349,10 +349,16 @@ def save_customer_memory(sid: str, *, consent: bool, preferences: dict,
     if not isinstance(consent, bool):
         raise ValueError('Memory consent must be explicitly true or false')
     safe = validate_preferences(preferences)
+    if principal.user_id != owner_user_id:
+        raise PermissionError('Authenticated owner required')
     with _connect() as c:
+        c.execute('BEGIN IMMEDIATE')
         if c.execute('SELECT 1 FROM sessions WHERE id=? AND owner_user_id=?',
                      (sid, owner_user_id)).fetchone() is None:
             raise KeyError('Unknown session')
+        # Revocation and this mutation acquire the same application SQLite
+        # writer lock. A stale preflight cannot authorize a later write.
+        _assert_owned_active_in_transaction(c, sid, principal)
         if not consent:
             if safe:
                 raise ValueError('Cannot save preferences without consent')
@@ -368,8 +374,17 @@ def save_customer_memory(sid: str, *, consent: bool, preferences: dict,
         return {'consent': True, 'preferences': safe, 'scope': 'session_only'}
 
 
-def delete_session(sid: str, *, owner_user_id: str) -> bool:
+def delete_session(sid: str, *, owner_user_id: str,
+                   principal: SecurityContext) -> bool:
+    if principal.user_id != owner_user_id:
+        raise PermissionError('Authenticated owner required')
     with _connect() as c:
+        c.execute('BEGIN IMMEDIATE')
+        row = c.execute('SELECT 1 FROM sessions WHERE id=? AND owner_user_id=?',
+                        (sid, owner_user_id)).fetchone()
+        if row is None:
+            return False
+        _assert_owned_active_in_transaction(c, sid, principal)
         return c.execute('DELETE FROM sessions WHERE id=? AND owner_user_id=?',
                          (sid, owner_user_id)).rowcount > 0
 
