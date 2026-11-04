@@ -105,7 +105,8 @@ async def record_http(request: Request, call_next):
             'detail': 'Remote access is unavailable. Connect through the configured trusted host.'
         })
     path = request.url.path
-    protected = path.startswith('/api/') or path in ('/ask', '/ask/stream')
+    protected = path.startswith('/api/') or path in (
+        '/ask', '/ask/stream', '/docs', '/redoc', '/openapi.json')
     mutating = request.method in ('POST', 'PUT', 'PATCH', 'DELETE')
     # Check credentials and CSRF before dispatching any route, SQL, MCP or LLM.
     if protected and mutating and not _same_origin(request):
