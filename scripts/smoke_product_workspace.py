@@ -14,6 +14,9 @@ import time
 from datetime import date
 from pathlib import Path
 from urllib.request import urlopen
+from secrets import token_urlsafe
+from uuid import uuid4
+from unittest.mock import patch
 
 from playwright.sync_api import expect, sync_playwright
 
@@ -48,11 +51,17 @@ def assert_no_node_overlap(page):
                 f"{horizontal:.1f}x{vertical:.1f}px")
 
 
-def run_journey(page):
+def run_journey(page, username: str, password: str):
     js_errors = []
     page.on("pageerror", lambda error: js_errors.append(str(error)))
     page.goto(BASE + "/workspace", wait_until="domcontentloaded")
+    expect(page.get_by_role("heading", name="Sign in")).to_be_visible()
+    page.locator("#auth-username").fill(username)
+    page.locator("#auth-password").fill(password)
+    page.get_by_role("button", name="Sign in").click()
     expect(page.locator(".network-pane")).to_be_visible()
+    expect(page.locator(".header-account")).to_contain_text("analyst")
+    expect(page.locator(".auth-logout")).to_be_visible()
     expect(page.locator(".chat-pane")).to_be_visible()
     expect(page.locator(".matrix-empty")).to_contain_text("Execution network")
     assert page.locator("#tab-workflows").count() == 0, "Legacy Graph tab leaked into the new workspace"
@@ -157,6 +166,13 @@ def run_journey(page):
     page.locator(".session-row.selected .session-delete").click()
     expect(page.locator(".session-row")).to_have_count(old_sessions)
     expect(page.locator(".chat-onboarding")).to_be_visible()
+    # Auth-bound account switch clears the selected chat and cannot restore
+    # a previously owned session under another user's identity.
+    page.locator(".auth-logout").click()
+    expect(page.get_by_role("heading", name="Sign in")).to_be_visible()
+    assert page.locator(".network-pane").count() == 0
+    page.reload(wait_until="domcontentloaded")
+    expect(page.get_by_role("heading", name="Sign in")).to_be_visible()
     assert not js_errors, f"Browser exceptions: {js_errors}"
 
 
@@ -180,6 +196,11 @@ def main():
                    RETAILIQ_WORKFLOW_DB=str(root / "runs.sqlite3"),
                    RETAILIQ_CHECKPOINT_DB=str(root / "checkpoints.sqlite3"),
                    RETAILIQ_LOG_FILE=str(root / "events.jsonl"))
+        from retailiq.infrastructure import auth
+        username = "workspace_" + uuid4().hex[:18]
+        password = token_urlsafe(32)
+        with patch.dict(os.environ, {"RETAILIQ_CHAT_DB": str(root / "chat.sqlite3")}):
+            auth.create_local_user(username, "analyst", password)
         server = subprocess.Popen(
             [sys.executable, "-m", "uvicorn", "retailiq.api:app",
              "--host", "127.0.0.1", "--port", "8769", "--log-level", "warning"],
@@ -194,7 +215,7 @@ def main():
                 )
                 try:
                     page = browser.new_page(viewport={"width": 1440, "height": 900})
-                    run_journey(page)
+                    run_journey(page, username, password)
                 finally:
                     browser.close()
         finally:
