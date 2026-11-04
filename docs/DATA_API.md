@@ -109,7 +109,7 @@ Inspect `GET /openapi.json` from the running FastAPI app for precise runtime sch
 
 ### Chat and interface
 
-**T06 Draft branch only (not accepted/merged):** `POST /api/auth/login` accepts CLI-provisioned local credentials with matching Origin and sets an opaque `HttpOnly` session cookie; `GET /api/auth/me` returns local user metadata and a CSRF token; `POST /api/auth/logout` revokes the cookie. Business, sessions, workflow, ROI and diagnostics endpoints require a valid user cookie (`401` otherwise). Stateful requests also require same-origin `Origin` or verified `Referer` and `X-CSRF-Token` (`403` otherwise). Only static/login assets and `/health` remain public; the browser login/CSRF integration is **pending Task 5**. No hardcoded user or password.
+**T06 Draft branch only (not accepted/merged):** `POST /api/auth/login` accepts CLI-provisioned local credentials with matching Origin and sets an opaque `HttpOnly` session cookie; `GET /api/auth/me` returns local user metadata and a CSRF token; `POST /api/auth/logout` revokes the cookie. Business, sessions, workflow, ROI and diagnostics endpoints require a valid user cookie (`401` otherwise). Stateful requests also require same-origin `Origin` or verified `Referer` and `X-CSRF-Token` (`403` otherwise). Only static/login assets and `/health` remain public. **The React Workspace login/logout, CSRF and Manager review controls have been implemented on the Draft branch but are awaiting Chromium and security acceptance.** No hardcoded user or password.
 
 | Method / path | Input | Success / meaningful errors |
 |---|---|---|
@@ -134,6 +134,23 @@ Inspect `GET /openapi.json` from the running FastAPI app for precise runtime sch
 | `GET /api/sessions/{session_id}/traces/{request_id}` | Recorded, allowlisted local execution event trace; `404` if session/trace absent (including older/non-streamed turns) |
 
 **T06 Draft branch only:** all session, history, consent and trace reads/writes now filter by the validated `owner_user_id`; unknown/foreign/ownerless sessions return indistinguishable `404`. A session UUID never grants ownership. Turns recheck active auth and owner atomically in the application SQLite write transaction; SSE rechecks auth before releasing queued events. These local staff accounts are not customer identity records.
+
+### UC-01 historical Analyst proposal and Manager local decision (T06 Draft)
+
+These APIs use **the application SQLite** for immutable proposals and decisions. They recompute canonical Fiction facts and effective warehouse policy from the **pinned SQL release at the recorded evidence cutoff**. A historical `NEEDS_REVIEW` finding remains unchanged after local review. There is **no stock transfer, inventory reservation, order update or LangGraph interrupt/resume**.
+
+| Method / path | Authorization and result |
+|---|---|
+| `GET /api/uc01/eligibility?session_id=...` | Analyst owner only: provisional, source-reverified candidate; `eligible=false` for missing/invalid case binding |
+| `POST /api/uc01/proposals` | Analyst only: `{"session_id":"UUID","candidate_snapshot_id":null}`; optional snapshot ID required when several verified candidates; `201` new, `200` identical same-owner idempotent, `409` existing conflicting review cycle, `422` invalid or changed historical source |
+| `GET /api/uc01/my-proposals` | Analyst owner only: bounded proposal statuses, including reviewed/expired |
+| `GET /api/uc01/proposals` | Manager-only bounded pending inbox, with no Analyst chat/memory/trace |
+| `GET /api/uc01/proposals/{proposal_id}` | Manager-only immutable proposal facts and local review status |
+| `POST /api/uc01/proposals/{proposal_id}/decision` | Authenticated Manager only: `{"decision":"approve"|"reject","expected_version":1}`. The backend independently re-verifies source, cutoff, selected snapshot and policy before atomic CAS. `200` returns `APPROVED_LOCAL`/`REJECTED_LOCAL`, version 2, reviewer and timestamp; `409` stale/expired/duplicate, `403` unauthorized/CSRF, `503` SQLite transaction failure |
+
+One review cycle exists per `(case_id, source_sha256, cutoff)`, independent of conversation. Identity and active auth are rechecked within the same app-SQLite write transaction as proposal insertion or Manager decision. Effective `EXPIRED` proposals are excluded from the Manager inbox. These routes do **not** return client-provided authorization fields, raw prompts, customer records or Analyst chat.
+
+**Evidence modes:** Python synthetic sealed 27-table fixture tests, independent published Fiction LFS G1 oracle with authenticated HTTP + fake intent router (no paid LLM), and planned real Chromium Workspace tests. The published G1 oracle verifies Fiction SHA-256 is unchanged after the complete local Manager decision. **Draft code is not production RBAC certification.**
 
 ### Freshness, semantic layer, workflow simulation
 
