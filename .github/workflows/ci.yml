@@ -21,7 +21,7 @@ jobs:
       # authenticated HTTP fixtures in T06 Task 2. Never bypass auth in tests.
       - name: T06 authentication / CSRF focused tests
         if: github.event_name == 'pull_request' && contains(github.event.pull_request.title, 'T06')
-        run: python -m pytest -q tests/test_t06_auth.py tests/test_t06_ownership_sse.py tests/test_t06_workflow_ownership.py tests/test_t06_proposals.py tests/test_t06_manager_decision.py
+        run: python -m pytest -q tests/test_t06_auth.py tests/test_t06_ownership_sse.py tests/test_t06_workflow_ownership.py tests/test_t06_proposals.py tests/test_t06_manager_decision.py tests/test_t06_real_release_runner.py
       - name: Regression and compiled graph tests
         env:
           RETAILIQ_REQUIRE_LANGGRAPH: 'true'
