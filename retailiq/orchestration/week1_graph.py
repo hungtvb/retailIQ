@@ -772,7 +772,9 @@ def validate_graph_result(result: dict) -> dict:
         if (not isinstance(result.get('source'), dict) or
                 not isinstance(result.get('evidence_refs'), list) or
                 not isinstance(result.get('limitations'), list) or
-                not any('UNDATED_INVENTORY' in x for x in result['limitations'])):
+                not any(any(tag in x for tag in ('UNDATED_INVENTORY', 'PRODUCT_NOT_FOUND',
+                                                  'WAREHOUSE_NOT_FOUND'))
+                        for x in result['limitations'])):
             raise GraphResultError('Fiction inventory lacks verified undated evidence')
     if category == 'revenue' and result.get('query_plan') is not None:
         from retailiq.domain.revenue_plan import RevenuePlan, verify_revenue_evidence
