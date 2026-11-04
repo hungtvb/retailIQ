@@ -183,3 +183,46 @@ flowchart TD
 **Boundaries:** Preserve T01 authority and T03 session bindings; no dynamic planner, extra agent, Text-to-SQL, new verifier, claim of current inventory, RAG, browser, manager HITL, full UC-01 T08, tokens/cost or ROI. Keep provider-specific structured-output incompatibility visible rather than silently switching methods.
 
 **Technical references:** [LangChain ChatOpenAI structured output](https://reference.langchain.com/python/langchain-openai/chat_models/base/ChatOpenAI/with_structured_output); [GitHub manual workflow dispatch](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow?tool=webui).
+
+## 9. T05 — Source-verified policy explanation RAG (PROPOSED)
+
+**Gate:** design proposal, **not approved for code** until this PR is reviewed and merged. Owner [RAG #27](https://github.com/hungtvb/retailIQ/issues/27), parent [UC-01 #34](https://github.com/hungtvb/retailIQ/issues/34). Baseline main `1618fd8fe88665b9a3e2a65ad7f376ebf530c72f`; [R1 #51](https://github.com/hungtvb/retailIQ/issues/51) passed actual-provider G1 after refactor. A code PR must cite the **approved T05 design merge SHA**.
+
+**Business outcome:** staff asks “Vì sao cần Manager phê duyệt?” or “Chính sách yêu cầu gì khi snapshot quá 24 giờ?” after a **verified same-session case**. Answer with the applicable *warehouse transfer policy's specific clause*, exact source/cutoff and supporting passage, not just its policy ID. T05 must never let embeddings, document text, a model or chat history select policy applicability or approve a transfer.
+
+### Flow and decision
+
+```mermaid
+flowchart TD
+    Q[Verified policy follow-up] --> C[Existing UC-01 case/source/cutoff verifier]
+    C -->|Applicable exact policy| D[Local document ID/path/SHA re-check]
+    C -->|Missing, expired, conflicting| F[No policy explanation]
+    D --> R[Bounded heading-aware clause retrieval]
+    R --> L[Actual LLM: cited explanation only]
+    L --> V[Validate section IDs, quote spans and source binding]
+    V -->|Supported| O[Existing answer/findings/contexts/evidence_refs]
+    V -->|Invalid or provider error| F
+```
+
+**Selected retrieval:** **2-step RAG with exact-document, section-aware retrieval**, not a new global vector search. T01's `domain/backorder.py::_effective_warehouse_policy` already verifies a unique `FR-WH-2026-10-04`, document registry, original Markdown hash, `[2026-10-04, 2026-11-03)` cutoff and Manager-review rule. The source file is ~1.7 KB with five named clauses. A Chroma index for a single already-identified policy adds unnecessary rebuild/stale-index failure modes; the broad 5,003-source Chroma/vector/hybrid ingestion and evaluation remains **OPEN in #27**. If exact passage selection fails measured acceptance, review filtered Chroma retrieval rather than silently adding a second index.
+
+### Implementation contract (one reviewed code PR, vertical slice)
+
+1. **Entry and guard:** Only `uc01_followup_kind='policy'` after verified committed session binding and existing `backorder_agent` source/version/sha/cutoff checks. Original explicit CASE-ID G1, legacy routes, LangGraph state, node names, `Command` destinations, SQL/MCP calls and business disposition **unchanged**. Policy ID/cutoff/path from the user or LLM have no authority.
+2. **Source:** Require `investigation['data']['policy']` to be non-null, `applicable_at_cutoff=true`, matching case release. Verify original bytes from `knowledge_root/<verified relative_path>` **again** immediately before retrieval, bounded file size, inside root, no symlink/traversal, with SHA against the already trusted document registry. Do **not** recalculate effective-date policy rules in RAG; T01 owns them. Missing/conflicting/expired policy => no detailed RAG explanation.
+3. **Retrieval:** Reuse existing safe Markdown loader and add a minimal heading-aware clause selector under `retailiq/rag/` (e.g. `policy_explanation.py`, extend `rag/chunking.py` only if needed). Select from **only the verified policy document**: `Transfer eligibility`, `Inventory information`, `Review and approval`, `Exceptions`; keep section headings, bounded excerpts and stable refs `knowledge_documents/<document_id>` + section ID/quote. No generated `rag/chunks.jsonl`, legacy `EL-` corpus, broad corpus scan, new Chroma store, persistent cache or runtime GitHub read.
+4. **Generation:** full-mode configured LLM receives bounded passages as **untrusted data**, explains only selected source text with exact quote spans/section citations. Reuse `rag/grounding.py` source-label machinery but do not mistake a syntactically valid `[S1]` for semantic proof. Enforce bounded structured output, exact source/section IDs, quote substring match and no model-authored approval, stock/current-time/cutoff or policy applicability. Fail invalid/unsupported claims closed; semantic support also needs scenario and provider-backed review.
+5. **Output/failure:** inject a narrowly scoped optional explanation callable from existing `week1_graph.backorder_agent` into `fiction_handlers.backorder_update`; preserve existing `answer`, `findings`, `contexts`, `evidence_refs`, `limitations`, `source`, `disposition`, `approval_status`, schema and committed context. On retrieval/model/grounding failure return **qualified verified base facts only**, add `POLICY_EXPLANATION_UNVERIFIED`, no fabricated passage or approval. Instrument **actual** retrieval/model calls in existing observability; never emit fake tool events.
+
+### Acceptance and evidence
+
+| Mode / scenario | Required assertion |
+|---|---|
+| Offline + compiled LangGraph/FastAPI/SSE | G1 verified policy follow-up “why approval?” cites `Review and approval`; “24-hour snapshots?” cites `Inventory information`; EN/VN works. Original source SHA, cutoff, candidate/5 units, `NEEDS_REVIEW`, `NOT_REQUESTED`, binding, traces and no-write remain unchanged. |
+| Negative / adversarial | Wrong returns/pricing policy, nonexistent/mutated source, symlink/traversal, wrong/expired cutoff, mismatched release/section ref, missing or cross-session context, injected instructions, unsupported quote/citation/approval, provider timeout => abstain/qualify, no transfer execution or false source claim. |
+| Published Fiction release | Exact G1 case oracle from §5: policy `FR-WH-2026-10-04`, document `DOC-de8b393e-45d7-53f3-b1d4-9366a5d0c134`, bytes SHA `f3ff7463e67e034360fd87b35c1c71286445be0de1431009591821489bd4d9c8` and original section excerpt; no policy selected by ranking/model. |
+| Provider-backed paid gate | A new **explicit opt-in `uc01_policy`** suite within the *existing* `live-llm.yml` after code merge on new main: actual retrieval + LLM calls, cited exact passages, negative unsupported-output case and recorded latency/tokens. Prior T02 G1 live run `41790444949` **does not** prove T05. |
+
+**Stop/rollback:** If the policy explanation cannot add useful accurate clause-level information beyond T03's verified deterministic sentence, or grounded generation cannot pass scenarios, keep the existing safe answer and report T05 pending; no needless agent, indexing of 5,003 documents, policy authority rewrite or fabricated RAG PASS. Once implemented, update #27/#34, relevant docs and Capability Ledger by *execution evidence*, not by PR status.
+
+**Technical references:** [LangChain retrieval and 2-step RAG](https://docs.langchain.com/oss/python/deepagents/retrieval); [Chroma query metadata filtering](https://docs.trychroma.com/docs/querying-collections/metadata-filtering) (future scoped vector comparison, not a T05 dependency).
