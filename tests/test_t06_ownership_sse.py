@@ -37,7 +37,23 @@ def _login(api: TestClient, name: str) -> tuple[str, dict]:
 def test_ownerless_legacy_migration_fails_closed(api):
     # Existing pre-auth chat has no owner; migration must never adopt it.
     legacy = "11111111-1111-4111-8111-111111111111"
-    with sessions._connect() as db:
+    # Reproduce a real database from BEFORE the owner_user_id migration.
+    with sqlite3.connect(sessions._path()) as db:
+        db.executescript("""
+            CREATE TABLE sessions (
+                id TEXT PRIMARY KEY, title TEXT NOT NULL,
+                active_agent TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+                role TEXT NOT NULL, content TEXT NOT NULL, intent TEXT,
+                agent TEXT, evidence_json TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
         db.execute("INSERT INTO sessions(id,title) VALUES (?,?)", (legacy, "Old private chat"))
         db.execute("INSERT INTO messages(session_id,role,content) VALUES (?,?,?)",
                    (legacy, "user", "PRIVATE_LEGACY_MESSAGE"))
