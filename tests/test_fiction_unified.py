@@ -753,6 +753,16 @@ def test_uc01_t05_policy_clauses_via_graph_and_http(monkeypatch, fiction, tmp_pa
             assert freshness in data["answer"]
             assert data["disposition"] == first.json()["disposition"]
             assert data["approval_status"] == "NOT_REQUESTED"
+
+            streamed = client.post("/ask/stream", json={
+                "session_id": sid, "question": "Vì sao cần Manager phê duyệt?"})
+            assert streamed.status_code == 200, streamed.text
+            assert "event: result" in streamed.text
+            assert "event: done" in streamed.text
+            assert "rag.policy_retrieval.started" in streamed.text
+            assert "llm.policy_explanation.completed" in streamed.text
+            assert "[S1]" in streamed.text
+            assert calls == {"route": 1, "quote": 3}
     finally:
         graph.close_checkpoint_graph()
         graph._fiction_store_cached.cache_clear()
