@@ -4,7 +4,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from retailiq.assistant import ask
-from retailiq.orchestration.week1_graph import InvalidCaseId
+from retailiq.orchestration.week1_graph import InvalidCaseId, InvalidFictionScope
 from retailiq.rag.indexing import IndexNotReadyError
 from retailiq.infrastructure.sessions import history, add_turn, get_session, session_mutation, SessionBusyError, save_execution_trace, get_customer_memory, last_committed_case_binding
 from pathlib import Path
@@ -265,7 +265,7 @@ def stream_answer(data: AskBody, request: Request):
                             log_exception('chat.trace_persist_failed', error)
                     enqueue_final('result', result)
                 except InvalidCaseId as error:
-                    enqueue_final('error', {'code': 'invalid_case_id',
+                    enqueue_final('error', {'code': ('invalid_fiction_scope' if isinstance(error, InvalidFictionScope) else 'invalid_case_id'),
                                            'message': str(error), 'request_id': rid})
                 except SessionBusyError:
                     enqueue_final('error', {'code': 'session_busy',
