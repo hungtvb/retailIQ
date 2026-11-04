@@ -1,6 +1,6 @@
 # RetailIQ — Basic Design & Detail Design
 
-**Status (2026-11-03):** this document describes **current legacy/local behavior** and shared architecture boundaries. **Fiction M0 (read-only unified DB/SQL)** is implemented on `main` via [PR #33](https://github.com/hungtvb/retailIQ/pull/33); **UC-01 explicit CASE-ID and narrowly scoped verified-session follow-ups use existing LangGraph** ([T01 #37](https://github.com/hungtvb/retailIQ/pull/37), [T02 #40](https://github.com/hungtvb/retailIQ/pull/40), [T03 #44](https://github.com/hungtvb/retailIQ/pull/44)); mock-provider fixtures passed, **real-provider UC-01 and broader Fiction MCP/RAG/HITL acceptance remain pending**. The [UC-01 Backorder Implementation Detail](implementation/UC-01-backorder.md) is the proposed target contract; **only its reviewed/merged design commit** authorizes implementation, and design approval is never an E2E PASS. This is one shared Basic Design plus just-in-time per-use-case detail, not two speculative document sets.
+**Status (2026-11-04):** this document owns shared flow boundaries; legacy/local paths remain active alongside Fiction. Fiction M0 [#33](https://github.com/hungtvb/retailIQ/pull/33), scoped T04 read-only stdio MCP [#46](https://github.com/hungtvb/retailIQ/pull/46) and **UC-01 T02 G1 actual LLM on pinned Fiction release** ([live run 41776582027](https://github.com/hungtvb/retailIQ/actions/runs/41776582027)) have passed their specific acceptance gates. T03 committed-session follow-ups are fixture-verified. **Broader Fiction planning, policy RAG, HITL, browser E2E and legacy migration remain open.** Use the reviewed/merged [UC-01 Implementation Detail](implementation/UC-01-backorder.md) for that use case; no design PR or outdated fixture result substitutes for executable evidence.
 
 [Product](PROJECT.md) · [Requirements](REQUIREMENTS.md) · [Architecture](ARCHITECTURE.md) · [Data and API contracts](DATA_API.md) · [Capability status](CAPABILITY_LEDGER.md)
 
@@ -64,11 +64,11 @@ Read `AGENTS.md` and the [documentation index](README.md) first. Start at the **
 
 ## Fiction target design and implementation ownership (from 2026-11-03)
 
-**Implemented now:** `FictionStore.open()` validates the pinned 27-table unified SQLite release; `fulfillment_case()`, `order()`, `inventory()`, `top_sellers()`, `refund()` return scoped **read-only facts** with source IDs, limitations and temporal information. See [Fiction Runtime](FICTION_RUNTIME.md), [PR #33](https://github.com/hungtvb/retailIQ/pull/33) and [Issue #31](https://github.com/hungtvb/retailIQ/issues/31). **UC-01 explicit CASE-ID** now reaches a fixed LangGraph business capability via `/ask`, tested with a mock routing provider and verified SQLite fixture. This is **not** generalized Fiction Agent planning, provider-backed UC-01 acceptance or Fiction RAG.
+**Implemented now:** `FictionStore.open()` validates the pinned unified SQLite release; `fulfillment_case()`, `order()`, `inventory()`, `top_sellers()`, `refund()` return scoped **read-only facts** with source IDs, limitations and temporal information. See [Fiction Runtime](FICTION_RUNTIME.md), [PR #33](https://github.com/hungtvb/retailIQ/pull/33) and [#31](https://github.com/hungtvb/retailIQ/issues/31). UC-01 explicit CASE-ID reaches `/ask` via a fixed graph path, including **provider-backed real-release G1** acceptance on [run 41776582027](https://github.com/hungtvb/retailIQ/actions/runs/41776582027). This **does not** establish generalized Fiction planning or policy RAG.
 
 **Approved architecture / pending implementation:** Reviews 01–10, tracked by [#21–23](https://github.com/hungtvb/retailIQ/issues/23) and [#26–30](https://github.com/hungtvb/retailIQ/issues/30), require verified-first execution: committed context (#22), bounded capability plan (#23), shared SQL/MCP (#26), sourced policy RAG (#27), evidence fitness (#28), authenticated HITL (#29), and truthful event-driven UI (#21/#30). Do not present a deterministic workflow illustration as actual Agent execution.
 
-**Next proposed vertical slice:** [UC-01 Backorder Investigation — Implementation Detail](implementation/UC-01-backorder.md). Its diagram, input/output, component mapping and acceptance matrix are **design proposals**. The document must be reviewed and merged before feature coding. Other use cases get their own short detail **only when implementation begins**; shared decisions stay here and in [Data/API](DATA_API.md).
+**Next design work:** [UC-01](implementation/UC-01-backorder.md) is already an approved and partially implemented use case, with T05–T08 still open in [parent #34](https://github.com/hungtvb/retailIQ/issues/34). Before extending orchestration, [Refactor R1 #51](https://github.com/hungtvb/retailIQ/issues/51) proposes a limited Fiction boundary extraction below. Future UC details are written just in time; shared decisions remain here and in [Data/API](DATA_API.md).
 
 **Important separation:** legacy flows below are a record of **existing behavior** using the old retail fixture (`EL-###`, VND, completed-order semantics); they are **not** the Fiction target contract (Fiction product UUID/FR-SKU, USD, delivered orders and time-qualified policy). Do not reuse legacy business semantics without explicit validation.
 
@@ -143,3 +143,53 @@ Read `AGENTS.md` and the [documentation index](README.md) first. Start at the **
 2. **Smallest truthful design:** diagrams and descriptions must match actual execution, with simulated and provider-backed paths labeled independently.
 3. **One source of truth:** Product/Requirements own goals; this Design owns flow boundaries; `DATA_API.md` owns metrics/contracts; the capability ledger owns acceptance status.
 4. **Future change:** update the relevant flow and acceptance scenario with the code change, not an unrelated pile of documents. Record substantial architectural trade-offs as short wiki/decision notes when needed.
+
+## Refactor R1 — isolate Fiction orchestration (PROPOSED; issue #51)
+
+**Status:** design proposal based on `main@ae9fe6549357a7ab36152a51311b50fc2c528175`. **NOT approved for code** until this design PR is reviewed and merged. The only objective is maintainability/source isolation before T05; **no behavior, trust policy, source semantics, graph topology or HTTP contract change**.
+
+### Why this slice, not a full rewrite
+
+- `retailiq/orchestration/week1_graph.py` is 923 lines and owns router, legacy nodes, Fiction request rules, Fiction backorder/inventory handlers, state, compilation, checkpoint lifecycle and final validation. Legacy uses `EL-###`/VND/completed-order semantics; Fiction uses verified UUID/`FR-` SKU/USD/case-cutoff policy. Their business data must never fall back across domains.
+- Existing callers include `retailiq/graph.py` (compatibility `run` re-export), `retailiq/assistant.py` (offline/full), `retailiq/api/http.py` (the two scope exceptions), and `retailiq/api/sessions.py` (checkpoint cleanup). Tests patch `week1_graph.chat_model`, `_fiction_store_cached`, `_uc01_inputs`, `build_graph`, and legacy agent functions directly. Extraction must keep those observable seams.
+- **Keep the existing single LangGraph**: extracting pure helpers is sufficient. No separate Fiction graph/agent runtime, framework, registry, dependency-injection container, context store or migration of the two UIs.
+
+### Approved target *if this proposal is merged*
+
+```mermaid
+flowchart TD
+    API[Existing /ask and /ask/stream] --> A[assistant.ask: full or offline]
+    A --> G[Existing week1_graph: State / router / graph / checkpoint / run]
+    G --> P[fiction_requests: validated CASE and FR-SKU scopes]
+    G --> N[fiction_handlers: scoped fact-to-result composition]
+    N --> D[Existing domain.backorder and FictionStore]
+    N --> M[Existing read-only inventory / order MCP adapter]
+    G --> L[Existing legacy Sales / Inventory / Product nodes]
+    G --> V[Existing terminal verifier and response envelope]
+```
+
+- **R1-A — pure request boundary:** move only `_fiction_inventory_request`, `_uc01_followup_kind`, `_case_id_for_uc01` plus their regex/constants and shared exception identities into `retailiq/orchestration/fiction_requests.py`. Re-export/adapt original names in `week1_graph.py` so existing API and direct tests retain the same exception classes and call points. The `route` function itself and its real `chat_model`/fallback behavior stay in `week1_graph.py`; it never accepts LLM-supplied business identifiers.
+- **R1-B — execution boundary:** move the fact-to-answer/state-update logic of `fiction_inventory_agent` and `backorder_agent` to `retailiq/orchestration/fiction_handlers.py`. Keep both **existing named node wrapper functions** in `week1_graph.py`; wrappers resolve trusted store/config/actual MCP call at execution and call the new handlers with explicit, narrow inputs/callables. Handlers do **not** import `week1_graph`, build graphs, own global state, or decide policy eligibility. The wrapper retains `Command(update=..., goto='retailiq_reply')`, node names, source/cutoff checks, `capability.selected` and observed `tool.sql.*`/`mcp.tool.*` semantics; no extra invocation or silent fallback.
+- **Unchanged ownership:** `domain/fiction.py` and `domain/backorder.py` remain authoritative for identity, stock arithmetic, policy effectiveness, source SHA and disposition. `week1_graph.py` retains `State`, `AGENT_FOR_INTENT`, legacy nodes, LLM router, `build_graph`, `run`, graph-result validation, existing SQLite checkpoint cache/close/delete, public constants and test seams. `retailiq/graph.py` remains the compatibility shim; HTTP API/session/SSE remain untouched unless a narrowly verified import adjustment is necessary.
+
+### External contract and regression oracle
+
+| Boundary | Must remain identical |
+|---|---|
+| HTTP + session | `/ask`, `/ask/stream`, response fields, errors 422 for invalid case/Fiction scope, request/session IDs, bounded history, committed case binding, checkpoint deletion and event timing |
+| LangGraph | Node names/edges, retries (idempotent SQL only), recursion limit 12, `Command` routing, fallback classification, no ghost MCP/agent events |
+| Fiction G1–G3 | Pinned release/source SHA, explicit CASE ID, order/item/product, evidence cutoff, snapshots, exact policy SHA, `NEEDS_REVIEW`/`NOT_REQUESTED`; no transfer/order/stock writes |
+| Fiction inventory/MCP | FR-SKU/warehouse scope, undated-stock limitation, reject ambiguous/multi-intent/temporal questions, actual stdio tool identity and error propagation; no legacy-source fallback |
+| Legacy | Existing offline/full Sales/Inventory/Product/revenue/handoff/retry behavior preserved; no removal based on filename or line count |
+
+### Implementation gates (separate code PRs; never commit on main)
+
+1. **Design approval:** review/merge this proposal; link final design commit in [#51](https://github.com/hungtvb/retailIQ/issues/51) and code PRs. No code edits before this gate.
+2. **PR R1-A:** extract only request parsing and original exception identity, add targeted negative and import-compatibility tests. Relevant regression CI PASS before any second extraction; review before merge.
+3. **PR R1-B:** extract only Fiction handlers using explicit narrow arguments; preserve wrappers and test monkeypatch seams or migrate a test only after verifying it represents the same runtime behavior. Observe exact SQL/MCP invocation and trace; review before merge.
+4. **Acceptance:** run existing Python tests, business audits, real-MCP stdio, API/SSE/browser regression as applicable; source-backed Fiction G1 oracle on pinned release. After final code merge run the manually dispatched, secret-scoped `Live LLM Acceptance suite=uc01` on **the new main commit**. Compare model route (`route_fallback=false`), G1 SQL/policy oracle, events, source SHA, disposition and no-write contract against [pre-refactor live run 41776582027](https://github.com/hungtvb/retailIQ/actions/runs/41776582027). **Old live PASS is not evidence for new code.**
+5. **Stop/rollback:** if an extraction changes business semantics, evidence lineage, session isolation, checkpoint ownership or observable route/tool edges, revert the affected PR slice; review a separate behavior-changing design rather than broadening this refactor. No unnecessary full CI for documentation-only updates.
+
+**Explicitly deferred:** remove legacy analytics/fixture after Fiction replacement UCs, MCP SDK migration, dynamic planner #23, policy RAG T05, authenticated HITL T06, product UI consolidation, new agent infrastructure and ROI optimization. These are **not hidden work in R1**.
+
+**Technical reference:** [LangGraph Python Graph API checklist](https://docs.langchain.com/oss/python/langgraph/use-graph-api) — shared state, `Command` control transfer and runtime dependency boundaries; no new LangGraph API or version upgrade is proposed.
