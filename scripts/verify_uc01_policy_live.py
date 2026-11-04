@@ -124,7 +124,7 @@ def execute_policy_turns(db: Path, manifest: Path, knowledge: Path, oracle: dict
                         answer = data.get("answer") or ""
                         _check("[S1]" in answer and
                                contexts[0]["text"] and
-                               any(line.strip() in contexts[0]["text"] for line in
+                               any(line.strip()[2:] in contexts[0]["text"] for line in
                                    answer.splitlines() if line.strip().startswith("> ")),
                                "Quoted source text not present in exact policy")
                         _check("POLICY_EXPLANATION_UNVERIFIED" not in data.get("limitations", []),
