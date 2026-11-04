@@ -135,10 +135,11 @@ jobs:
             --manifest "$RUNNER_TEMP/fiction-retail/manifest.json" \
             --retailiq-manifest data/fiction/manifest.json
 
-  # PR-scoped dataset gate, no model or environment secrets. The paid G1
-  # follows only after code is merged and manually dispatched on main.
+  # PR-scoped T02/graph-boundary regression on published Fiction, no provider secrets.
+  # Refactor R1-A/R1-B can alter G1 routing; use the same oracle gate, no new workflow.
+  # The paid G1 follows only after code merge and manual main dispatch.
   fiction-t02-oracle:
-    if: github.event_name == 'pull_request' && contains(github.event.pull_request.title, 'T02')
+    if: github.event_name == 'pull_request' && (contains(github.event.pull_request.title, 'T02') || contains(github.event.pull_request.title, 'R1-A') || contains(github.event.pull_request.title, 'R1-B'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
