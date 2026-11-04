@@ -1,44 +1,56 @@
-"""Optional real stdio MCP Inventory + Order tools (read-only synthetic SQLite).
+"""Read-only Fiction Retail Inventory/Order MCP tools over local stdio.
 
-Install requirements-mcp.txt then run: python -m retailiq.mcp_server
-Never expose this unauthenticated demo service to an untrusted network.
+The server verifies the pinned Fiction SQLite release; it never falls back to
+the legacy retail fixture or treats undated stock as live/current inventory.
+Do not expose this unauthenticated process to an untrusted network.
 """
-import re
+from functools import lru_cache
+import os
+from pathlib import Path
+
 from mcp.server.fastmcp import FastMCP
+from retailiq.domain.fiction import FictionStore
 
-from retailiq.domain.analytics import inventory
-from retailiq.domain.semantic import semantic_summary
-from retailiq.infrastructure.sqlite import query
+ROOT = Path(__file__).resolve().parents[1]
+mcp = FastMCP("RetailIQ Fiction Read-only Tools")
 
-mcp = FastMCP("RetailIQ Synthetic Retail Tools")
+
+@lru_cache(maxsize=1)
+def _store(db: str, manifest: str) -> FictionStore:
+    """Verify release once per immutable process-local snapshot."""
+    return FictionStore.open(db, manifest)
+
+
+def _fiction() -> FictionStore:
+    db = os.getenv("RETAILIQ_FICTION_DB") or str(ROOT / "data/fiction/fiction_retail.sqlite")
+    manifest = os.getenv("RETAILIQ_FICTION_MANIFEST") or str(ROOT / "data/fiction/manifest.json")
+    return _store(str(Path(db).resolve()), str(Path(manifest).resolve()))
 
 
 @mcp.tool()
-def inventory_lookup(sku: str) -> dict:
-    """Read available stock for a known product SKU across synthetic locations."""
-    rows = inventory(sku)
-    return {"sku": sku, "records": rows,
-            "available": sum(row["available"] for row in rows),
-            "source": "local_readonly_sqlite", "freshness": "snapshot_timestamp_only"}
+def inventory_lookup(product: str, warehouse_id: str | None = None) -> dict:
+    """Read recorded, UNDATED base stock for one Fiction UUID or FR-SKU.
+
+    Not historical-as-of or live inventory. Missing observations never mean 0.
+    """
+    return _fiction().inventory(product, warehouse_id)
 
 
 @mcp.tool()
 def order_lookup(order_id: str) -> dict:
-    """Read a synthetic order and its lines; never update order status."""
-    if not re.fullmatch(r"ORD-[0-9]{4}", order_id):
-        raise ValueError("Invalid demo order ID")
-    orders = query("""SELECT id,ordered_at,channel,status FROM orders
-                      WHERE id=? LIMIT 1""", (order_id,))
-    lines = query("""SELECT sku,quantity,unit_price_vnd,discount_vnd
-                     FROM order_lines WHERE order_id=? ORDER BY id""", (order_id,))
-    return {"order": orders[0] if orders else None, "lines": lines if orders else [],
-            "source": "local_readonly_sqlite"}
+    """Read a validated Fiction order, lines and shipments without customer PII.
+
+    The release's shipment/order state is not state at a backorder case cutoff.
+    """
+    return _fiction().order(order_id)
 
 
 @mcp.resource("retailiq://semantics")
 def semantic_definitions() -> str:
-    """Definitions shared with the local retail analytics query layer."""
-    return semantic_summary() + "; source timestamps are required for freshness claims"
+    """Minimal source semantics; not the legacy analytics metric contract."""
+    return ("Fiction unified v1 local read-only snapshot. Inventory is UNDATED, "
+            "not live or case-cutoff stock. Order/shipment state is release-recorded; "
+            "case evidence and policies have separate historical time scopes.")
 
 
 if __name__ == "__main__":
