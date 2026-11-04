@@ -157,6 +157,21 @@ def test_model_cannot_invent_or_swap_source_evidence(policy, section, quote):
                        QuoteModel(section, quote))
 
 
+def test_quote_must_match_verified_passage_verbatim(policy):
+    metadata, root, _ = policy
+    changed_spacing = APPROVAL.replace("must approve the request", "must  approve the request")
+    with pytest.raises(PolicyExplanationUnavailable, match="quote"):
+        explain_policy("Why Manager approval?", metadata, root,
+                       QuoteModel(quote=changed_spacing))
+
+
+def test_unhashable_model_section_is_rejected_as_unverified(policy):
+    metadata, root, _ = policy
+    with pytest.raises(PolicyExplanationUnavailable, match="quote"):
+        explain_policy("Why Manager approval?", metadata, root,
+                       QuoteModel(section=[], quote=APPROVAL))
+
+
 def test_provider_timeout_is_not_a_business_explanation(policy):
     metadata, root, _ = policy
     with pytest.raises(PolicyExplanationUnavailable, match="provider failed"):
