@@ -40,7 +40,9 @@ def verified_sections(policy: dict, knowledge_root: str | Path) -> dict[str, str
             or policy.get("source_release") != RELEASE
             or policy.get("applicable_at_cutoff") is not True
             or not isinstance(policy.get("document_id"), str)
-            or not re.fullmatch(r"[0-9a-f]{64}", policy.get("sha256", ""))):
+            or not policy.get("document_id")
+            or not isinstance(policy.get("sha256"), str)
+            or not re.fullmatch(r"[0-9a-f]{64}", policy["sha256"])):
         raise PolicyExplanationUnavailable("Unverified warehouse policy binding")
     root = Path(knowledge_root).resolve()
     relative = Path(policy["relative_path"])
