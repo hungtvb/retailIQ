@@ -190,10 +190,24 @@ def _verify_envelope(result: dict, expected_sha: str, tool: str, arguments: dict
 async def _call(tool_name: str, args: dict) -> dict:
     from langchain_mcp_adapters.client import MultiServerMCPClient
 
+    # MCP stdio clients may launch subprocesses with a restricted default
+    # environment. Pass only the allowlisted, trusted Fiction paths (never
+    # model input, provider secrets or unrestricted parent environment).
+    db = Path(os.getenv("RETAILIQ_FICTION_DB") or
+              ROOT / "data/fiction/fiction_retail.sqlite").resolve()
+    manifest = Path(os.getenv("RETAILIQ_FICTION_MANIFEST") or
+                    ROOT / "data/fiction/manifest.json").resolve()
+    stdio_env = {
+        "RETAILIQ_FICTION_DB": str(db),
+        "RETAILIQ_FICTION_MANIFEST": str(manifest),
+        "PATH": os.environ.get("PATH", ""),
+        "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
+        "HOME": os.environ.get("HOME", ""),
+    }
     client = MultiServerMCPClient({
         "retailiq": {"command": sys.executable,
                      "args": ["-m", "retailiq.mcp_server"],
-                     "transport": "stdio"}
+                     "transport": "stdio", "env": stdio_env}
     }, handle_tool_errors=False)
     expected_sha = _source_expected()
     tools = await client.get_tools()
