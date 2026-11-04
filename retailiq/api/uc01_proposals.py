@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from functools import lru_cache
 import os
+import sqlite3
+from typing import Literal
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -17,6 +19,7 @@ from retailiq.infrastructure.sessions import (
 )
 from retailiq.infrastructure.uc01_proposals import (
     ProposalConflict, submit_proposal, my_proposals, manager_inbox, manager_proposal,
+    snapshot_for_manager, decide_proposal,
 )
 
 router = APIRouter(prefix="/api/uc01", tags=["uc01-local-review"])
@@ -145,3 +148,51 @@ def manager_review_detail(proposal_id: str, request: Request):
     if item is None:
         raise HTTPException(status_code=404, detail="Proposal not found")
     return item
+
+
+class ManagerDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: Literal["approve", "reject"]
+    expected_version: int = Field(ge=1)
+
+
+@router.post("/proposals/{proposal_id}/decision")
+def manager_decide(proposal_id: str, data: ManagerDecision, request: Request):
+    principal = _principal(request)
+    if principal.role != "manager":
+        raise HTTPException(status_code=403, detail="Manager access required")
+    auth.assert_active(principal)
+    try:
+        persisted = snapshot_for_manager(principal, proposal_id)
+        if persisted is None:
+            raise HTTPException(status_code=404, detail="Proposal not found")
+        # Reconstruct context only from immutable app-SQLite evidence, never
+        # the Analyst conversation or caller JSON.
+        binding = {
+            "version": 1,
+            "case_id": persisted["case_id"],
+            "case_ref": f"fulfillment_cases/{persisted['case_id']}",
+            "source_id": persisted["source_id"],
+            "source_version": persisted["source_version"],
+            "source_sha256": persisted["source_sha256"],
+            "cutoff": persisted["cutoff"],
+            "disposition": "NEEDS_REVIEW",
+            "source_request_id": persisted.get("source_request_id"),
+        }
+        try:
+            reverified = _candidate(binding, persisted["snapshot_id"])
+        except HTTPException:
+            raise HTTPException(status_code=409,
+                                detail="Pinned source or policy is no longer verified") from None
+        return decide_proposal(proposal_id, data.decision, data.expected_version,
+                               principal, verified_snapshot=reverified)
+    except ProposalConflict:
+        raise HTTPException(status_code=409,
+                            detail="Historical proposal cannot be decided") from None
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Proposal not found") from None
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Manager review not permitted") from None
+    except sqlite3.DatabaseError:
+        # A transaction abort/crash must never be reported as success.
+        raise HTTPException(status_code=503, detail="Local decision transaction failed") from None
