@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
+from tests.auth_client import signed_in_client, active_principal
 from retailiq.api import app
 from retailiq.observability import bind_context, bind_event_sink, log_event
 
@@ -13,7 +14,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv('RETAILIQ_MODE', 'offline')
     monkeypatch.setenv('RETAILIQ_CHAT_DB', str(tmp_path / 'sessions.sqlite3'))
     monkeypatch.setenv('RETAILIQ_LOG_FILE', str(tmp_path / 'events.jsonl'))
-    return TestClient(app)
+    return signed_in_client(app)
 
 
 def parse_sse(text):
@@ -121,7 +122,7 @@ def test_chat_ui_uses_sse_with_in_place_live_trace(client):
     assert 'textContent' in js
 
 
-def test_first_sse_frame_arrives_before_slow_agent_completes(monkeypatch):
+def test_first_sse_frame_arrives_before_slow_agent_completes(monkeypatch, tmp_path):
     """Prove the backend does not generate all events after finishing the job."""
     from types import SimpleNamespace
     from threading import Event
@@ -137,8 +138,11 @@ def test_first_sse_frame_arrives_before_slow_agent_completes(monkeypatch):
         return original(*args, **kwargs)
 
     monkeypatch.setenv('RETAILIQ_MODE', 'offline')
+    monkeypatch.setenv('RETAILIQ_CHAT_DB', str(tmp_path / 'direct-sse.sqlite'))
+    actor = signed_in_client(app)
     monkeypatch.setattr(http, 'ask', slow_ask)
-    req = SimpleNamespace(state=SimpleNamespace(request_id='streaming-test-req'))
+    req = SimpleNamespace(state=SimpleNamespace(
+        request_id='streaming-test-req', principal=active_principal(actor)))
     response = http.stream_answer(http.AskBody(question='Which products are top sellers?'), req)
 
     async def inspect():
