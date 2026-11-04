@@ -1,7 +1,7 @@
 """UC-01 T02 G1: real published Fiction oracle and opt-in provider-backed /ask.
 
 Two distinct evidence modes:
-  --oracle-only: exact pinned SQLite + policy Markdown; no model requests.
+  --oracle-only: exact pinned SQLite/policy + compiled graph with FAKE router; NO LLM.
   --confirm-live: same oracle plus actual ChatOpenAI/compiled LangGraph /ask.
 
 No prompts, customer data, provider error details or credentials are reported.
@@ -10,7 +10,7 @@ Requires the published Fiction SQLite LFS object, not a mini test fixture.
 from __future__ import annotations
 
 import argparse
-from contextlib import closing
+from contextlib import closing, nullcontext
 from hashlib import sha256
 import json
 import os
@@ -18,6 +18,7 @@ from pathlib import Path
 import sqlite3
 import tempfile
 import time
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from retailiq.domain.fiction import verify_release
@@ -149,7 +150,7 @@ def check_live_result(result: dict, oracle: dict, tool_calls: list[dict],
            result.get("session_id") == session_id, "Request/session identity mismatch")
     _check(result.get("intent") == "backorder" and
            result.get("active_agent") == "backorder_agent" and
-           result.get("route_fallback") is False, "Actual model route failed/fell back")
+           result.get("route_fallback") is False, "Router decision failed/fell back")
     _check(result.get("disposition") == "NEEDS_REVIEW" and
            result.get("approval_status") == "NOT_REQUESTED",
            "Business disposition or approval was invented")
@@ -224,7 +225,7 @@ def check_live_result(result: dict, oracle: dict, tool_calls: list[dict],
     _check(any(e.get("event") == "agent.routed" and
                e.get("agent") == "backorder_agent" and
                e.get("route_fallback") is False for e in events),
-           "No verified real model route event")
+           "No verified route event")
     _check(any(e.get("event") == "tool.sql.completed" and
                e.get("tool") == "fiction.backorder.investigate" for e in events),
            "No actual verified SQL capability completion")
@@ -237,8 +238,9 @@ def check_live_result(result: dict, oracle: dict, tool_calls: list[dict],
             "session_id": session_id}
 
 
-def live_golden_case(db: Path, manifest: Path, knowledge: Path, oracle: dict) -> dict:
-    """Actual provider and SQL capability; spy wraps, never replaces facts."""
+def execute_golden_case(db: Path, manifest: Path, knowledge: Path, oracle: dict,
+                        *, offline_fake_router: bool = False) -> dict:
+    """Full source-backed API/SQL path. Provider is fake ONLY in offline mode."""
     from fastapi.testclient import TestClient
     from retailiq.api import app
     from retailiq.domain import backorder as domain
@@ -277,7 +279,16 @@ def live_golden_case(db: Path, manifest: Path, knowledge: Path, oracle: dict) ->
             "RETAILIQ_LOG_FILE": str(folder / "events.jsonl"),
             "LANGSMITH_TRACING": "false",
         }
-        with patch.dict(os.environ, env), patch.object(domain, "investigate_backorder", observe):
+        class OfflineCaseRouter:
+            def with_structured_output(self, schema):
+                return self
+
+            def invoke(self, messages):
+                return SimpleNamespace(intent="backorder")
+
+        router_context = (patch.object(graph, "chat_model", lambda: OfflineCaseRouter())
+                          if offline_fake_router else nullcontext())
+        with patch.dict(os.environ, env), patch.object(domain, "investigate_backorder", observe), router_context:
             graph.close_checkpoint_graph()
             graph._fiction_store_cached.cache_clear()
             try:
@@ -300,7 +311,9 @@ def live_golden_case(db: Path, manifest: Path, knowledge: Path, oracle: dict) ->
                            "Request ID missing from provider-backed turn")
                     events = list_events(limit=200, request_id=rid, session_id=session)
                     checks = check_live_result(result, oracle, calls, events, rid, session)
-                    checks.update({"elapsed_s": elapsed, "provider_calls": "actual_configured_model",
+                    checks.update({"elapsed_s": elapsed,
+                                   "provider_calls": ("FAKE_ROUTER_FOR_OFFLINE_GRAPH_ONLY"
+                                                      if offline_fake_router else "ACTUAL_CONFIGURED_LLM"),
                                    "observed_sql_capability_calls": len(calls)})
                     return checks
             finally:
@@ -323,7 +336,7 @@ def main() -> None:
     args = parser.parse_args()
     report: dict = {
         "mode": ("PROVIDER_BACKED_REAL_FICTION_RELEASE" if args.confirm_live
-                 else "INDEPENDENT_REAL_FICTION_SQL_POLICY_ORACLE_NO_LLM"),
+                 else "REAL_FICTION_SQL_POLICY_AND_FAKE_ROUTER_GRAPH_NO_LLM"),
         "status": "FAIL", "case_id": CASE,
         "commit_sha": os.getenv("GITHUB_SHA", "local"),
         "pr_head_sha": os.getenv("RETAILIQ_PR_HEAD_SHA") or None,
@@ -350,11 +363,13 @@ def main() -> None:
                                   "available": 5, "policy_document_id": DOCUMENT,
                                   "source_sha256": RELEASE_SHA}
         report["observed_sql_policy_oracle"] = oracle
-        if args.confirm_live:
-            stage = "actual_provider_langgraph_case"
-            report["observed_provider_graph"] = live_golden_case(
-                args.db, args.manifest, args.knowledge_root, oracle
-            )
+        stage = ("actual_provider_langgraph_case" if args.confirm_live
+                 else "offline_fake_router_compiled_graph")
+        executed = execute_golden_case(
+            args.db, args.manifest, args.knowledge_root, oracle,
+            offline_fake_router=not args.confirm_live
+        )
+        report["observed_provider_graph" if args.confirm_live else "observed_offline_graph"] = executed
         stage = "no_write_integrity"
         _check(_hash_file(args.db.resolve()) == RELEASE_SHA,
                "Read-only validation changed the published SQLite bytes")
