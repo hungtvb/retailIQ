@@ -17,6 +17,11 @@ jobs:
         run: python -m scripts.seed
       - name: Verify active documentation links
         run: python -m scripts.check_docs_links
+      # Independent Task 1 evidence while legacy endpoints are migrated to
+      # authenticated HTTP fixtures in T06 Task 2. Never bypass auth in tests.
+      - name: T06 authentication / CSRF focused tests
+        if: github.event_name == 'pull_request' && contains(github.event.pull_request.title, 'T06')
+        run: python -m pytest -q tests/test_t06_auth.py
       - name: Regression and compiled graph tests
         env:
           RETAILIQ_REQUIRE_LANGGRAPH: 'true'
