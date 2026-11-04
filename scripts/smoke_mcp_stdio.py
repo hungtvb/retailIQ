@@ -105,11 +105,31 @@ def main() -> None:
                     for x in order["data"]["shipments"]] == expected_shipments
             assert order["source"]["sha256"] == inventory["source"]["sha256"]
             assert "CUSTOMER_SECRET" not in json.dumps(order)
+            missing_product = read_fiction_inventory("FR-AAAAAAAAAAAAAAAA")
+            assert missing_product["data"] == []
+            assert missing_product["limitations"] == ["PRODUCT_NOT_FOUND"]
+            missing_warehouse = read_fiction_inventory(sku, "00000000-0000-4000-8000-000000000000")
+            assert missing_warehouse["data"] == []
+            assert missing_warehouse["limitations"] == ["WAREHOUSE_NOT_FOUND"]
+            unknown_order = read_fiction_order("00000000-0000-4000-8000-000000000000")
+            assert unknown_order["data"] is None
+            assert unknown_order["limitations"] == ["ORDER_NOT_FOUND"]
 
             with patch("retailiq.orchestration.week1_graph.chat_model",
                        return_value=_FakeRoutingModel()):
                 client = TestClient(app)
                 session = client.post("/api/sessions", json={}).json()["id"]
+                temporal = client.post("/ask", json={
+                    "session_id": session,
+                    "question": f"Stock for {sku} as of 2026-10-01",
+                })
+                assert temporal.status_code == 422
+                assert "UNSUPPORTED_TEMPORAL_SCOPE" in temporal.json()["detail"]
+                unbound = client.post("/ask", json={
+                    "session_id": session,
+                    "question": "Đơn hàng này gồm những sản phẩm nào?",
+                })
+                assert unbound.status_code == 422
                 stock = _frames(client.post("/ask/stream", json={
                     "session_id": session,
                     "question": f"Show stock for {sku} at warehouse {warehouse_id}",
