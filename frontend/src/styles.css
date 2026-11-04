@@ -295,3 +295,58 @@ button:focus-visible,a:focus-visible,textarea:focus-visible {
 .matrix-link-context .matrix-edge-shadow {opacity:.12;}
 .matrix-edge-caption-context {fill:#64748b;font-size:9px;}
 .matrix-legend .legend-context {background:repeating-linear-gradient(90deg,#9daab3 0 4px,transparent 4px 8px);width:18px;height:2px;border-radius:0;}
+
+
+/* T06: local authenticated review, with no operational mutation implied. */
+.auth-shell {display:grid;place-items:center;min-height:100dvh;padding:24px;background:#f8fafb;}
+.auth-card {display:flex;flex-direction:column;gap:10px;width:min(100%,390px);
+  padding:32px;border:1px solid var(--line);border-radius:16px;
+  box-shadow:0 8px 30px #1d293611;background:#fff;}
+.auth-card h1 {margin:4px 0 0;font-size:27px;letter-spacing:-.04em;color:#1d3340;}
+.auth-card p {line-height:1.6;margin:0 0 8px;font-size:12px;color:#71828e;}
+.auth-card label {font-weight:700;font-size:11px;color:#394d57;margin-top:6px;}
+.auth-card input {width:100%;padding:12px;border:1px solid #cbdad9;border-radius:8px;
+  background:#fff;color:#233946;outline-offset:2px;}
+.auth-card input:focus-visible {outline:2px solid #20ac99;}
+.auth-submit,.review-action,.review-buttons button:first-child {background:#0c9185;color:#fff;
+  border:1px solid #078476;border-radius:8px;padding:9px 13px;font-size:11px;font-weight:700;}
+.auth-submit {margin-top:12px;padding:12px;}
+.auth-submit:hover,.review-action:hover,.review-buttons button:first-child:hover {background:#08786f;}
+.auth-card .auth-error {color:#b54f45;padding:9px 10px;background:#fff5f3;
+  border:1px solid #f5d5cd;border-radius:7px;}
+.header-account {font-size:11px;font-weight:700;color:#566f78;max-width:140px;overflow:hidden;
+  white-space:nowrap;text-overflow:ellipsis;}
+.auth-logout {border:1px solid #d7e7e4;background:#fff;color:#147a71;border-radius:8px;
+  padding:7px 10px;font-size:11px;font-weight:700;}
+.auth-logout:hover {background:#ebf9f5;}
+.network-pane {overflow-y:auto;}
+.review-section {border-top:1px solid var(--line);background:#fff;padding:14px 18px 17px;
+  max-height:270px;overflow-y:auto;flex:none;}
+.review-heading {display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.review-heading h3 {font-size:13px;letter-spacing:-.02em;margin:0;color:#2a3e4b;}
+.review-refresh {color:#168779;border:1px solid #cde7de;border-radius:7px;background:#fff;
+  font-size:11px;padding:7px 11px;font-weight:700;}
+.review-boundary {margin:9px 0;color:#6d7b84;font-size:11px;line-height:1.5;}
+.review-muted {color:#8899a1;font-size:11px;margin:8px 0;}
+.review-list {display:flex;flex-direction:column;gap:7px;margin-top:8px;}
+.review-item {display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 10px;padding:10px;
+  border:1px solid #dce8e5;border-radius:9px;background:#fcfefe;font-size:11px;}
+.review-item strong {overflow-wrap:anywhere;}
+.review-item small {grid-column:1/-1;color:#728790;overflow-wrap:anywhere;font-size:10px;}
+.review-status {font-size:9px;letter-spacing:.04em;color:#0d8779;text-align:right;
+  font-weight:800;white-space:nowrap;}
+.review-eligible {display:flex;justify-content:space-between;align-items:center;gap:10px;
+  background:#f0faf6;border:1px solid #d1ecdf;border-radius:8px;padding:10px;margin-top:10px;}
+.review-eligible p {font-size:11px;margin:0;line-height:1.5;}
+.review-action {flex:none;}
+.review-buttons {grid-column:1/-1;display:flex;gap:8px;margin-top:3px;}
+.review-buttons button {padding:8px 11px;font-size:11px;border-radius:7px;font-weight:700;}
+.review-buttons button:last-child {border:1px solid #e5d1d0;background:#fff;color:#b15753;}
+.review-notice {color:#226e64;font-size:11px;line-height:1.5;overflow-wrap:anywhere;}
+@media(max-width:670px) {
+  .header-right {gap:7px;}
+  .header-account {max-width:78px;font-size:10px;}
+  .auth-logout {padding:6px;font-size:10px;}
+  .review-section {max-height:none;overflow:visible;padding:14px 12px;}
+  .review-eligible {align-items:flex-start;flex-direction:column;}
+}
