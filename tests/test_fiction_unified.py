@@ -975,3 +975,33 @@ def test_t04_corrupt_shipment_warehouse_rejected_from_shared_domain(fiction):
     store = reseal(path, manifest)
     with pytest.raises(FictionDataError, match="unknown warehouse"):
         store.order(O1)
+
+
+def test_t04_mcp_strict_field_allowlist_blocks_unexpected_pii(fiction):
+    import copy
+    from retailiq.mcp_adapter import _verify_envelope
+    _, _, store = fiction
+    evidence = store.order(O1)
+    expected = store.release["runtime_sha256"]
+    assert _verify_envelope(evidence, expected, "order_lookup",
+                            {"order_id": O1}) == evidence
+
+    injected = copy.deepcopy(evidence)
+    injected["data"]["order"]["customer_phone"] = "+1-555-0100"
+    with pytest.raises(ValueError, match="invalid identity/size"):
+        _verify_envelope(injected, expected, "order_lookup", {"order_id": O1})
+
+    injected = copy.deepcopy(evidence)
+    injected["scope"]["customer_email"] = "secret@example.invalid"
+    with pytest.raises(ValueError, match="scope contains unexpected fields"):
+        _verify_envelope(injected, expected, "order_lookup", {"order_id": O1})
+
+    injected = copy.deepcopy(evidence)
+    injected["source"]["credentials"] = "unexpected"
+    with pytest.raises(ValueError, match="source or evidence invalid"):
+        _verify_envelope(injected, expected, "order_lookup", {"order_id": O1})
+
+    injected = copy.deepcopy(evidence)
+    injected["data"]["lines"][0]["unit_price"] = -1
+    with pytest.raises(ValueError, match="financial amount"):
+        _verify_envelope(injected, expected, "order_lookup", {"order_id": O1})
