@@ -82,7 +82,8 @@ def test_expired_and_stale_version_refuse_decision(candidate):
             db.execute("UPDATE uc01_proposals SET expires_at=0 WHERE proposal_id=?",
                        (proposal["proposal_id"],))
         assert manager.post(url, json={"decision": "approve", "expected_version": 1}).status_code == 409
-        assert analyst.get("/api/uc01/my-proposals").json()["proposals"][0]["status"] != "APPROVED_LOCAL"
+        assert analyst.get("/api/uc01/my-proposals").json()["proposals"][0]["status"] == "EXPIRED"
+        assert manager.get("/api/uc01/proposals").json()["proposals"] == []
 
 
 def test_revoked_manager_and_cross_session_identity_not_accepted(candidate):
