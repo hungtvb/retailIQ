@@ -16,6 +16,9 @@ import queue
 import threading
 import os
 from retailiq.observability import bind_context, new_request_id, log_event, log_exception, observed, request_id, bind_event_sink
+from urllib.parse import urlsplit
+from retailiq.infrastructure import auth as local_auth
+from retailiq.api.auth import router as auth_router
 from retailiq.api.roi import router as roi_router
 from retailiq.api.sessions import router as sessions_router
 from retailiq.api.logs import router as logs_router
@@ -28,6 +31,7 @@ _STREAM_WORKER_SLOTS = threading.BoundedSemaphore(value=8)
 _STREAM_QUEUE_LIMIT = 128
 
 app = FastAPI(title='RetailIQ Copilot - Four-Week Local Demo')
+app.include_router(auth_router)
 app.include_router(roi_router)
 app.include_router(sessions_router)
 app.include_router(logs_router)
@@ -70,14 +74,54 @@ def _local_demo_request(request: Request) -> bool:
     return permitted_peer and permitted_host
 
 
+def _same_origin(request: Request) -> bool:
+    """Require a real same-origin Origin or Referer, never trust forwarded host."""
+    raw = request.headers.get("origin") or request.headers.get("referer")
+    if not raw:
+        return False
+    try:
+        provided, expected = urlsplit(raw), urlsplit(str(request.url))
+    except ValueError:
+        return False
+    return (provided.scheme in ("http", "https")
+            and provided.scheme == expected.scheme
+            and provided.netloc.lower() == expected.netloc.lower()
+            and not provided.username and not provided.password)
+
+
+def _auth_failure(code: int, detail: str) -> JSONResponse:
+    return JSONResponse(status_code=code, content={"detail": detail},
+                        headers={"Cache-Control": "no-store"})
+
+
 @app.middleware('http')
 async def record_http(request: Request, call_next):
     if not _local_demo_request(request):
         return JSONResponse(status_code=403, content={
             'detail': 'Remote access is unavailable. Connect through the configured trusted host.'
         })
-    rid = new_request_id()
     path = request.url.path
+    protected = path.startswith('/api/') or path in ('/ask', '/ask/stream')
+    mutating = request.method in ('POST', 'PUT', 'PATCH', 'DELETE')
+    # Check credentials and CSRF before dispatching any route, SQL, MCP or LLM.
+    if protected and mutating and not _same_origin(request):
+        return _auth_failure(403, 'Origin not allowed')
+    if protected and path != '/api/auth/login':
+        principal = local_auth.principal_from_token(
+            request.cookies.get(local_auth.COOKIE_NAME))
+        if principal is None:
+            return _auth_failure(401, 'Authentication required')
+        request.state.principal = principal
+        if mutating and not local_auth.verify_csrf(
+                principal, request.headers.get('x-csrf-token')):
+            return _auth_failure(403, 'CSRF validation failed')
+        # Task 2 must add ownership before these legacy unscoped routes open.
+        # Do NOT merge Task 1 as a partially protected application.
+        if (path.startswith('/api/sessions')
+                or path.startswith('/api/logs')
+                or path.startswith('/api/workflows')):
+            return _auth_failure(403, 'Owner-scoped access is not ready')
+    rid = new_request_id()
     safe_path = _safe_http_path(path)
     is_api = path.startswith('/api/') or path in ('/ask', '/ask/stream')
     # Avoid emitting a new log event for every read of the log viewer itself.
