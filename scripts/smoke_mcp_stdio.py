@@ -69,6 +69,7 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="retailiq-fiction-mcp-") as tmp:
         root = Path(tmp)
         db, manifest, order_id, product_id, warehouse_id, case_id = _scenario_fixture(root)
+        original_db_sha = sha256(db.read_bytes()).hexdigest()
         sku = "FR-" + sha256(product_id.encode()).hexdigest()[:16].upper()
         env = {
             "RETAILIQ_MODE": "full",
@@ -178,6 +179,7 @@ def main() -> None:
                 # No order/stock/source write has occurred.
                 with sqlite3.connect(db) as conn:
                     assert conn.execute("SELECT COUNT(*) FROM orders").fetchone()[0] == 1
+                assert sha256(db.read_bytes()).hexdigest() == original_db_sha
 
         print(json.dumps({
             "mode": "real_stdio_mcp_with_manifest_verified_fixture",
