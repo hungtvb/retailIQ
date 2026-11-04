@@ -27,7 +27,7 @@ AGENT_FOR_INTENT = {
     'stock': 'inventory_agent', 'revenue': 'sales_agent',
     'top': 'sales_agent', 'product': 'product_agent', 'decision': 'retail_supervisor',
     'general': 'retailiq', 'backorder': 'backorder_agent',
-    'latest': 'product_agent',
+    'latest': 'product_agent', 'fiction_stock': 'fiction_inventory_agent',
 }
 
 
@@ -59,6 +59,8 @@ class State(TypedDict, total=False):
     temporal: dict
     verified_case_context: dict | None
     uc01_followup_kind: str | None
+    fiction_product: str | None
+    fiction_warehouse: str | None
 
 
 def classify(question: str) -> str:
@@ -181,6 +183,36 @@ def resolve_followup(question: str, history: list[dict] | None = None,
     return question
 
 
+_FR_SKU_MATCH = re.compile(r"(?<![A-Za-z0-9-])FR-[0-9A-F]{16}(?![A-Za-z0-9-])")
+_UUID_IN_QUESTION = re.compile(r"(?<![A-Za-z0-9])(?:[0-9a-f]{8}-)(?:[0-9a-f]{4}-){3}[0-9a-f]{12}(?![A-Za-z0-9])", re.I)
+
+
+def _fiction_inventory_request(question: str) -> tuple[str, str | None] | None:
+    """Only explicit single-FR-SKU stock questions enter the new MCP path."""
+    lower = question.casefold()
+    stock_words = ('stock', 'inventory', 'tồn kho', 'còn hàng', 'available', 'còn bao nhiêu')
+    if not any(token in lower for token in stock_words) or 'fr-' not in lower:
+        return None
+    matches = _FR_SKU_MATCH.findall(question.upper())
+    if len(matches) != 1 or question.casefold().count('fr-') != 1:
+        raise InvalidCaseId('Exactly one complete FR-SKU is required for Fiction inventory')
+    # The undated stock table cannot answer historical/live source-time questions.
+    if any(token in lower for token in (
+            'hiện tại', 'ngay lúc này', 'hôm nay', 'hôm qua', 'tuần trước',
+            'tháng trước', 'at ', 'as of', 'today', 'yesterday', 'now',
+            'right now', 'current', 'live', 'realtime', 'real-time')):
+        raise InvalidCaseId('UNSUPPORTED_TEMPORAL_SCOPE: Fiction stock has no observation timestamp')
+    from retailiq.domain.fiction import _id
+    wants_warehouse = 'warehouse' in lower or 'kho ' in lower
+    ids = _UUID_IN_QUESTION.findall(question)
+    if wants_warehouse and len(ids) != 1:
+        raise InvalidCaseId('Specify exactly one warehouse UUID or omit warehouse filter')
+    if ids and not wants_warehouse:
+        raise InvalidCaseId('Unscoped UUID in Fiction inventory question')
+    warehouse = _id(ids[0]) if ids else None
+    return matches[0], warehouse
+
+
 def route(state: State):
     """A router chooses a specialist; no raw LLM response can execute SQL."""
     from pydantic import BaseModel
@@ -188,6 +220,14 @@ def route(state: State):
 
     class Route(BaseModel):
         intent: Literal['stock', 'revenue', 'top', 'product', 'decision', 'general', 'latest', 'backorder']
+
+    fiction_stock = _fiction_inventory_request(state['question'])
+    if fiction_stock is not None:
+        return Command(update={'effective_question': state['question'], 'intent': 'fiction_stock',
+                               'fiction_product': fiction_stock[0],
+                               'fiction_warehouse': fiction_stock[1],
+                               'route_fallback': False, 'skill': ''},
+                       goto='fiction_inventory_agent')
 
     uc01_kind = _uc01_followup_kind(state['question'])
     if uc01_kind == 'ambiguous_warehouse':
@@ -354,6 +394,9 @@ def _uc01_followup_kind(question: str) -> str | None:
     if any(term in q for term in ('refund', 'return', 'hoàn tiền', 'đổi trả',
                                   'bảo hành', 'pricing', 'chính sách giá')):
         return None  # A topic switch must not inherit a previous case.
+    if (('đơn hàng này' in q or 'đơn này' in q or 'this order' in q) and
+            any(token in q for token in ('gồm', 'sản phẩm', 'chi tiết', 'items', 'lines', 'details', 'contain'))):
+        return 'order_details'
     if (('chính sách' in q and any(x in q for x in ('áp dụng', 'nào', 'đó')))
             or ('policy' in q and any(x in q for x in ('appl', 'which', 'warehouse', 'transfer')))):
         return 'policy'
@@ -385,6 +428,41 @@ def _uc01_inputs():
     manifest = os.getenv("RETAILIQ_FICTION_MANIFEST") or str(root / "data/fiction/manifest.json")
     knowledge = os.getenv("RETAILIQ_FICTION_KNOWLEDGE_ROOT") or str(root / "data/fiction/knowledge")
     return db, manifest, knowledge
+
+
+def fiction_inventory_agent(state: State):
+    """One explicit FR-SKU read through actual verified stdio MCP."""
+    from langgraph.types import Command
+    from retailiq.mcp_adapter import read_fiction_inventory
+    from retailiq.language import is_vietnamese
+
+    product = state["fiction_product"]
+    warehouse = state.get("fiction_warehouse")
+    result = read_fiction_inventory(product, warehouse)
+    rows = result["data"]
+    limits = result["limitations"]
+    vi = is_vietnamese(state["question"])
+    if not rows:
+        reason = (limits[-1] if limits else "NO_INVENTORY_RECORDS")
+        answer = (f"Không có bằng chứng tồn kho xác thực cho {product}: {reason}. "
+                  "Không thể suy ra số lượng bằng 0."
+                  if vi else f"No verified inventory rows for {product}: {reason}. "
+                  "Missing evidence is not zero.")
+    else:
+        details = "; ".join(
+            f"{r['warehouse_id']}: {r['available_snapshot']}" for r in rows
+        )
+        answer = (f"Bản ghi tồn kho không có thời điểm quan sát cho {product}: {details}. "
+                  "Đây KHÔNG phải tồn kho hiện tại hoặc tại một thời điểm lịch sử."
+                  if vi else
+                  f"Undated recorded stock for {product}: {details}. "
+                  "This does NOT prove current or historical stock.")
+    return Command(update={
+        "intent": "fiction_stock", "answer": answer, "active_agent": "fiction_inventory_agent",
+        "records": rows, "contexts": [], "source": result["source"],
+        "evidence_refs": result["record_refs"], "limitations": limits,
+        "temporal": result["temporal"], "approval_status": None,
+    }, goto="retailiq_reply")
 
 
 def backorder_agent(state: State):
@@ -432,7 +510,26 @@ def backorder_agent(state: State):
          'available_at_observation': item['available_at_observation']}
         for item in candidates
     ]
-    if followup == 'policy' and data['policy'] and data['policy']['applicable_at_cutoff']:
+    if followup == 'order_details':
+        from retailiq.mcp_adapter import read_fiction_order
+        case = data['case']
+        order_detail = read_fiction_order(case['order_id'])
+        o = order_detail['data']
+        if (order_detail['source'] != investigation['source'] or
+                order_detail['scope'].get('order_id') != case['order_id'] or
+                not isinstance(o, dict) or
+                len([line for line in o['lines'] if
+                     line['order_item_id'] == case['order_item_id'] and
+                     line['product_id'] == case['product_id'] and
+                     line['quantity'] >= case['request_qty']]) != 1):
+            raise UnresolvedCaseReference('Order/case identity or source changed')
+        items = '; '.join(f"{line['product_id']}: {line['quantity']}" for line in o['lines'])
+        answer = (f"Đơn {case['order_id']} gồm: {items}. Đây là dữ liệu đơn hàng tại bản phát hành; "
+                  "trạng thái giao hàng KHÔNG phải trạng thái tại cutoff lịch sử."
+                  if vi else
+                  f"Order {case['order_id']} lines: {items}. Release-recorded shipment/order "
+                  "state is NOT a historical state at the backorder cutoff.")
+    elif followup == 'policy' and data['policy'] and data['policy']['applicable_at_cutoff']:
         policy = data['policy']
         answer = (f"Case {case_id} tại {cutoff}: chính sách {policy['policy_id']} có hiệu lực "
                   "và yêu cầu Manager phê duyệt đề xuất chuyển kho; chưa có chuyển kho nào được thực hiện."
@@ -480,6 +577,14 @@ def backorder_agent(state: State):
                            f"warehouse_eligibility/{case_id}/{r['warehouse_id']}"] + policy_ref}
         for r in records
     ]
+    if followup == 'order_details':
+        evidence_refs = list(dict.fromkeys(evidence_refs + order_detail["record_refs"]))[:100]
+        records = [dict(line) for line in order_detail["data"]["lines"]]
+        findings = [{
+            "text": ("Order lines recorded in the Fiction release; "
+                     "shipment/order state not verified at case cutoff"),
+            "evidence_refs": order_detail["record_refs"][:20],
+        }]
     if followup == 'policy' and policy_ref:
         findings = [{
             'text': f"Warehouse policy {data['policy']['policy_id']} applies at {cutoff}; "
@@ -500,7 +605,9 @@ def backorder_agent(state: State):
         'approval_status': investigation['approval_status'],
         'reason_codes': reasons, 'source': investigation['source'],
         'temporal': investigation['temporal'],
-        'capability_plan': {'kind': 'fixed_uc01', 'capabilities': [_BACKORDER_CAPABILITY],
+        'capability_plan': {'kind': 'fixed_uc01',
+                            'capabilities': ([_BACKORDER_CAPABILITY, 'mcp.order_lookup']
+                                             if followup == 'order_details' else [_BACKORDER_CAPABILITY]),
                             'case_id': case_id,
                             'source': ('committed_session_case' if followup
                                        else 'validated_explicit_case_id'),
@@ -532,6 +639,8 @@ def build_graph(*, checkpointer=None):
     graph.add_node('product_agent', product_agent, destinations=('retailiq_reply',))
     graph.add_node('retail_supervisor', retail_supervisor, destinations=('retailiq_reply',))
     graph.add_node('retailiq', retailiq, destinations=('retailiq_reply',))
+    graph.add_node('fiction_inventory_agent', fiction_inventory_agent,
+                   destinations=('retailiq_reply',))
     graph.add_node('backorder_agent', backorder_agent, retry_policy=read_retry,
                    destinations=('retailiq_reply',))
     graph.add_node('retailiq_reply', retailiq_reply)
@@ -652,8 +761,15 @@ def validate_graph_result(result: dict) -> dict:
         if (not isinstance(result.get('evidence_refs'), list) or
                 not isinstance(result.get('findings'), list) or
                 not isinstance(result.get('source'), dict) or
-                result.get('capability_plan', {}).get('capabilities') != [_BACKORDER_CAPABILITY]):
+                result.get('capability_plan', {}).get('capabilities') not in (
+                    [_BACKORDER_CAPABILITY], [_BACKORDER_CAPABILITY, 'mcp.order_lookup'])):
             raise GraphResultError('Backorder case response lacks verified evidence lineage')
+    if category == 'fiction_stock':
+        if (not isinstance(result.get('source'), dict) or
+                not isinstance(result.get('evidence_refs'), list) or
+                not isinstance(result.get('limitations'), list) or
+                not any('UNDATED_INVENTORY' in x for x in result['limitations'])):
+            raise GraphResultError('Fiction inventory lacks verified undated evidence')
     if category == 'revenue' and result.get('query_plan') is not None:
         from retailiq.domain.revenue_plan import RevenuePlan, verify_revenue_evidence
         plan_payload = result['query_plan']
@@ -699,6 +815,7 @@ def run(q: str, *, history: list[dict] | None = None, active_agent: str = '',
         'customer_memory': memory if memory and memory.get('consent') else {},
         'verified_case_context': verified_case_context,
         'uc01_followup_kind': None,
+        'fiction_product': None, 'fiction_warehouse': None,
         # Prevent the previous checkpoint's evidence from becoming this
         # request's answer if the subsequent execution fails or switches topic.
         'disposition': None, 'evidence_refs': [], 'findings': [],
@@ -731,8 +848,13 @@ def run(q: str, *, history: list[dict] | None = None, active_agent: str = '',
             'skill': result.get('skill', ''),
             'route_fallback': result.get('route_fallback', False),
             'query_plan': result.get('query_plan')}
-    if result['intent'] == 'backorder':
+    if result['intent'] in ('backorder', 'fiction_stock'):
         payload.update({key: result[key] for key in
                         ('disposition', 'evidence_refs', 'findings', 'limitations',
                          'approval_status', 'reason_codes', 'source', 'capability_plan', 'temporal')})
+    if result['intent'] == 'fiction_stock':
+        payload['mode'] = 'LangGraph + Fiction MCP stdio (undated stock)'
+        payload['as_of'] = result.get('temporal', {}).get('dataset_business_as_of')
+    if result['intent'] == 'backorder' and result.get('uc01_followup_kind') == 'order_details':
+        payload['mode'] = 'LangGraph + Fiction SQL + real Order MCP stdio'
     return payload
