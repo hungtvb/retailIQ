@@ -144,9 +144,9 @@ Read `AGENTS.md` and the [documentation index](README.md) first. Start at the **
 3. **One source of truth:** Product/Requirements own goals; this Design owns flow boundaries; `DATA_API.md` owns metrics/contracts; the capability ledger owns acceptance status.
 4. **Future change:** update the relevant flow and acceptance scenario with the code change, not an unrelated pile of documents. Record substantial architectural trade-offs as short wiki/decision notes when needed.
 
-## Refactor R1 — isolate Fiction orchestration (PROPOSED; issue #51)
+## Refactor R1 — isolate Fiction orchestration (issue #51)
 
-**Status:** design proposal based on `main@ae9fe6549357a7ab36152a51311b50fc2c528175`. **NOT approved for code** until this design PR is reviewed and merged. The only objective is maintainability/source isolation before T05; **no behavior, trust policy, source semantics, graph topology or HTTP contract change**.
+**Design gate:** based on `main@ae9fe6549357a7ab36152a51311b50fc2c528175`, reviewed in [PR #52](https://github.com/hungtvb/retailIQ/pull/52). **This design is approved only once PR #52 is merged to `main`;** code PRs must cite that exact merge SHA. Design approval does not imply implementation or acceptance. Objective: maintainability/source isolation before T05, with **no behavior, trust policy, source semantics, graph topology or HTTP contract change**.
 
 ### Why this slice, not a full rewrite
 
