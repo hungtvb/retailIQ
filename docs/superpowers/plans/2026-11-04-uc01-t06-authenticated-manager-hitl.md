@@ -16,7 +16,7 @@
 - `main@8f5ee78` is the design baseline; get current `AGENTS.md` and code/versions on the actual implementation branch **before work**. No commits to main. Branch isolation, TDD, PR and final review required.
 - Use existing `RETAILIQ_CHAT_DB` (default `data/chat_sessions.sqlite3`) for users, auth sessions, conversation owners and proposal decisions. **Fiction SQLite remains read-only; no transfer/order/stock mutation**.
 - Original verified UC-01 case/source/cutoff/policy and `NEEDS_REVIEW` are unchanged; approval state is independent: `PENDING/APPROVED_LOCAL/REJECTED_LOCAL/EXPIRED/INVALIDATED`.
-- Backend derives `SecurityContext(user_id, role, auth_session_id)`; no trust in request-supplied user/role, LLM, MCP, RAG or checkpoint. No unowned legacy conversation leakage or auth bypass flag.
+- Backend derives `SecurityContext(user_id, role, auth_session_id)`; no trust in request-supplied user/role, LLM, MCP, RAG or checkpoint. No unowned legacy conversation leakage or auth bypass flag. **Proposed local defaults (review before code):** auth session TTL 8 hours; 5 failed logins per username/IP window of 15 minutes → 15-minute lockout; proposal review expiry 24 hours after submission. Use UTC timestamps; duration choices are not historical cutoff/freshness rules.
 - Keep current `workflow_demo.review_run(role='manager')` explicitly **simulated**. No T06 claim of LangGraph `interrupt/resume`. Existing T01–T05 accepted behavior must regress cleanly.
 - Never attach generated reports, credential material, traces or screenshot artifacts to repository commits. Distinguish local/mocked, real pinned Fiction, and paid provider evidence.
 
@@ -30,7 +30,7 @@
 | Owned data endpoints | Modify `retailiq/api/sessions.py`, `retailiq/api/logs.py`, `retailiq/orchestration/week1_graph.py` only as needed | Owner checks *before* context/checkpoint use, deny cross-user diagnostics |
 | Verified proposal domain | Create `retailiq/domain/uc01_review.py` | Resolve exact pinned Fiction G1 candidate via existing `investigate_backorder` and trusted `_uc01_inputs` contract; no model policy authority |
 | Proposal state + API | Create `retailiq/infrastructure/uc01_proposals.py`, `retailiq/api/uc01_proposals.py` | Unique immutable proposal, idempotent creation, Manager-only decision and actor-specific reads |
-| Workspace | Modify `frontend/src/main.tsx`, `frontend/src/styles.css` | Login/logout, CSRF fetch, eligible Submit, Manager inbox, owned status and account switch |
+| Workspace | Modify `frontend/src/main.tsx`, `frontend/src/styles.css`; add `frontend/tests/t06-auth.spec.ts`, `frontend/playwright.config.ts` and a minimal dev-only Playwright runner in `frontend/package.json` | Login/logout, CSRF fetch, eligible Submit, Manager inbox, owned status and account switch; one browser E2E |
 
 ## Review focus (each covered by a task test)
 
@@ -92,14 +92,14 @@
 
 ### Task 5 — Workspace integration and end-to-end evidence
 
-**Files:** Modify `frontend/src/main.tsx`, `frontend/src/styles.css`; create `tests/test_t06_http_e2e.py`; add a **single** browser integration scenario under existing browser-test convention, or a minimal Playwright dev-only test if no runner is available.
+**Files:** Modify `frontend/src/main.tsx`, `frontend/src/styles.css`; create `tests/test_t06_http_e2e.py`, `frontend/tests/t06-auth.spec.ts`, `frontend/playwright.config.ts`; modify `frontend/package.json` for one dev-only Playwright E2E command. No general browser-test framework beyond this scenario.
 
 **Interfaces:** `/api/auth/me` bootstraps in-memory CSRF; no cookie/token in `localStorage`. React loads account-scoped conversation and `/api/uc01/my-proposals`, renders eligibility via server endpoint after reload, submits verified proposal, and shows Manager queue/decision without Analyst messages.
 
 - [ ] **Step 1: Test RED** — `test_api_login_analyst_submit_manager_decide_owner_readback`, `test_relogin_switch_account_cannot_restore_old_session`, `test_wrong_role_origin_csrf_or_stale_evidence_fails_closed` in `tests/test_t06_http_e2e.py`; browser scenario: login Analyst → investigate G1 → submit → logout → Manager review → Analyst reload → status, with no Fiction write.
-- [ ] **Step 2: Run RED** — `python -m pytest -q tests/test_t06_http_e2e.py`; browser flow additionally fails against pre-T06 frontend.
+- [ ] **Step 2: Run RED** — `python -m pytest -q tests/test_t06_http_e2e.py`; the browser scenario `npm --prefix frontend run test:e2e -- t06-auth.spec.ts` also fails against pre-T06 frontend after a minimal test server setup.
 - [ ] **Step 3: Implement GREEN** — Minimal login/logout and proposal controls; all protected `fetch` POST/PUT/DELETE requests send CSRF+same-origin; `401` clears account-specific app state and stale `retailiq-workspace-session`. Keep graph display truthful and label any legacy demo role selector as simulated.
-- [ ] **Step 4: Run GREEN** — `python -m pytest -q tests/test_t06_auth.py tests/test_t06_ownership_sse.py tests/test_t06_proposals.py tests/test_t06_manager_decision.py tests/test_t06_http_e2e.py`; `npm --prefix frontend run build`; run Chromium scenario and store screenshots/logs as external PR evidence, not committed fixture.
+- [ ] **Step 4: Run GREEN** — `python -m pytest -q tests/test_t06_auth.py tests/test_t06_ownership_sse.py tests/test_t06_proposals.py tests/test_t06_manager_decision.py tests/test_t06_http_e2e.py`; `npm --prefix frontend run build`; `npm --prefix frontend run test:e2e -- t06-auth.spec.ts` against local API + compiled Workspace; store screenshots/logs as external PR evidence, not committed fixture.
 - [ ] **Step 5: Review, broader targeted regressions, commit and PR** — Re-run relevant UC-01 T01–T05 tests and static/negative security audits; review API route map for bypass. PR lists original design SHA, exact test commands, source mode and remaining gaps. Never mark T06 accepted from code existence/green mock CI alone.
 
 ## Final acceptance / rollout
