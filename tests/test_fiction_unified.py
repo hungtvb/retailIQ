@@ -14,6 +14,7 @@ import subprocess
 import sys
 
 import pytest
+from tests.auth_client import signed_in_client
 
 from retailiq.domain.fiction import FictionStore, FictionDataError, _period, verify_release
 from retailiq.domain.backorder import investigate_backorder
@@ -388,7 +389,6 @@ def test_uc01_t02_explicit_case_langgraph_api_with_real_fixture(monkeypatch, fic
     """Compiled LangGraph + actual FastAPI /ask; fake *router provider*, real SQL fixture."""
     from types import SimpleNamespace
     from fastapi.testclient import TestClient
-from tests.auth_client import signed_in_client
     from retailiq.api import app
     from retailiq.orchestration import week1_graph as graph
 
