@@ -196,6 +196,26 @@ jobs:
             --retailiq-manifest data/fiction/manifest.json \
             --out data/quality_reports/uc01_t06_g1.json
 
+      - uses: actions/setup-node@v4
+        if: contains(github.event.pull_request.title, 'T06')
+        with:
+          node-version: '22'
+      - name: Build React Workspace for T06 G1 Chromium (NO LLM)
+        if: contains(github.event.pull_request.title, 'T06')
+        run: |
+          cd frontend
+          npm install --no-audit --no-fund
+          npm run build
+          python -m pip install 'playwright>=1.52,<2'
+      - name: T06 real Chromium login, Analyst submit, Manager review, owner reload
+        if: contains(github.event.pull_request.title, 'T06')
+        run: |
+          python -m scripts.smoke_t06_browser \
+            --db "$RUNNER_TEMP/fiction-retail/data/fiction_retail.sqlite" \
+            --manifest "$RUNNER_TEMP/fiction-retail/manifest.json" \
+            --knowledge-root "$RUNNER_TEMP/fiction-retail/knowledge" \
+            --retailiq-manifest data/fiction/manifest.json
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
