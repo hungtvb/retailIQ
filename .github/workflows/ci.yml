@@ -134,3 +134,43 @@ jobs:
             --db "$RUNNER_TEMP/fiction-retail/data/fiction_retail.sqlite" \
             --manifest "$RUNNER_TEMP/fiction-retail/manifest.json" \
             --retailiq-manifest data/fiction/manifest.json
+
+  # PR-scoped dataset gate, no model or environment secrets. The paid G1
+  # follows only after code is merged and manually dispatched on main.
+  fiction-t02-oracle:
+    if: github.event_name == 'pull_request' && contains(github.event.pull_request.title, 'T02')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install lightweight verified Fiction runtime
+        run: python -m pip install -r requirements-offline.txt
+      - name: Download published Fiction SQLite and source policy (no provider)
+        env:
+          GIT_LFS_SKIP_SMUDGE: '1'
+        run: |
+          git lfs version
+          git clone --depth 1 --filter=blob:none https://github.com/hungtvb/fiction-retail.git "$RUNNER_TEMP/fiction-retail"
+          git -C "$RUNNER_TEMP/fiction-retail" lfs pull --include="data/fiction_retail.sqlite" --exclude=""
+          test "$(stat -c%s "$RUNNER_TEMP/fiction-retail/data/fiction_retail.sqlite")" -eq 209063936
+          test -f "$RUNNER_TEMP/fiction-retail/knowledge/policies/FR-WH-2026-10-04.md"
+      - name: Verify independent pinned G1 SQL + policy oracle (NO LLM)
+        run: |
+          python -m scripts.verify_uc01_live_release --oracle-only \
+            --db "$RUNNER_TEMP/fiction-retail/data/fiction_retail.sqlite" \
+            --manifest "$RUNNER_TEMP/fiction-retail/manifest.json" \
+            --knowledge-root "$RUNNER_TEMP/fiction-retail/knowledge" \
+            --retailiq-manifest data/fiction/manifest.json \
+            --out data/quality_reports/uc01_t02_g1.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: retailiq-t02-real-release-oracle
+          path: data/quality_reports/uc01_t02_g1.json
+          if-no-files-found: ignore
+          retention-days: 7
