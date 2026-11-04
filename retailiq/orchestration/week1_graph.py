@@ -194,18 +194,25 @@ _WAREHOUSE_ID_IN_QUESTION = re.compile(
     re.I,
 )
 _STOCK_DATE = re.compile(
-    r"(?<!\d)(?:20\d{2}[-/]\d{1,2}(?:[-/]\d{1,2})?"
-    r"|\d{1,2}[-/]\d{1,2}(?:[-/]\d{2,4})?)(?!\d)"
+    r"(?<!\w)(?:20\d{2}(?:[-/]\d{1,2}(?:[-/]\d{1,2})?)?"
+    r"|\d{1,2}[-/]\d{1,2}(?:[-/]\d{2,4})?|\d{1,2}/20\d{2})(?!\w)"
 )
-_STOCK_TIME_WORDS = (
+_STOCK_VI_TIME_WORDS = (
     'hiện tại', 'hiện nay', 'hiện giờ', 'ngay lúc này', 'bây giờ',
-    'hôm nay', 'hôm qua', 'hôm kia', 'ngày', 'tháng', 'năm', 'tuần',
-    'tính đến', 'tại thời điểm', 'vào lúc', 'cuối kỳ', 'đầu kỳ',
-    'today', 'yesterday', 'tomorrow', 'now', 'currently', 'current',
-    'right now', 'at the moment', 'as of', 'as at', 'last week',
-    'last month', 'last year', 'next week', 'next month',
-    'since', 'before', 'after', 'historical', 'historic', 'realtime',
-    'real-time', 'real time', 'live', 'latest',
+    'hôm nay', 'hôm qua', 'hôm kia', 'hôm trước', 'ngày', 'tháng',
+    'năm', 'tuần', 'quý', 'tính đến', 'tại thời điểm',
+    'vào lúc', 'cuối kỳ', 'đầu kỳ',
+)
+_STOCK_EN_TIME = re.compile(
+    r'\b(?:today|yesterday|tomorrow|now|currently|current|'
+    r'right now|at the moment|as of|as at|this (?:week|month|year|quarter)|'
+    r'last (?:week|month|year|quarter)|next (?:week|month|year)|'
+    r'since|before|after|historical|historic|realtime|real-time|'
+    r'real time|live|latest)\b'
+)
+_STOCK_CALENDAR = re.compile(
+    r'\b(?:january|february|march|april|may|june|july|august|'
+    r'september|october|november|december)\b'
 )
 
 
@@ -222,10 +229,9 @@ def _fiction_inventory_request(question: str) -> tuple[str, str | None] | None:
     matches = _FR_SKU_MATCH.findall(question.upper())
     if len(matches) != 1 or lower.count('fr-') != 1:
         raise InvalidFictionScope('Exactly one complete FR-SKU is required for Fiction inventory')
-    if _STOCK_DATE.search(lower) or any(token in lower for token in _STOCK_TIME_WORDS) or re.search(
-        r'\b(?:at|on|in|during)\s+(?:20\d{2}|january|february|march|april|may|june|'
-        r'july|august|september|october|november|december)\b', lower
-    ):
+    if (_STOCK_DATE.search(lower) or
+            any(token in lower for token in _STOCK_VI_TIME_WORDS) or
+            _STOCK_EN_TIME.search(lower) or _STOCK_CALENDAR.search(lower)):
         raise InvalidFictionScope('UNSUPPORTED_TEMPORAL_SCOPE: Fiction stock has no observation timestamp')
     # A multi-intent query cannot be silently reduced to one SKU's stock.
     if (re.search(r'\b(?:revenue|profit|sales|orders?|refund|returns?|compare|backorder)\b', lower)
