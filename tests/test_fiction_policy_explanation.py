@@ -115,6 +115,21 @@ def test_modified_or_missing_policy_never_reaches_model(policy):
     assert model.calls == 0
 
 
+
+def test_new_policy_bytes_even_with_matching_new_registry_sha_need_review(policy):
+    """The verified registry hash alone cannot authorize old fixed claims."""
+    metadata, root, path = policy
+    path.write_bytes(path.read_bytes().replace(
+        b"Observations more than 24 hours old",
+        b"Observations more than 48 hours old",
+    ))
+    changed = {**metadata, "sha256": sha256(path.read_bytes()).hexdigest()}
+    model = QuoteModel()
+    with pytest.raises(PolicyExplanationUnavailable, match="binding"):
+        explain_policy("Which warehouse policy applies?", changed, root, model)
+    assert model.calls == 0
+
+
 def test_symlinked_policy_is_rejected(policy, tmp_path):
     metadata, root, path = policy
     outside = tmp_path / "outside.md"
