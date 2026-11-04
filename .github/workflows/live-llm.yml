@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       suite:
-        description: "Cost scope: smoke (chat + embedding), critical (six synthetic queries), or uc01 (real-release G1)"
+        description: "Opt-in: smoke, critical, uc01 (G1), uc01_policy (source-bound passage RAG)"
         type: choice
         required: true
         default: smoke
@@ -14,6 +14,7 @@ on:
           - smoke
           - critical
           - uc01
+          - uc01_policy
 
 permissions:
   contents: read
@@ -54,7 +55,7 @@ jobs:
           LIVE_SUITE: ${{ inputs.suite }}
         run: |
           case "$LIVE_SUITE" in
-            smoke|critical|uc01) ;;
+            smoke|critical|uc01|uc01_policy) ;;
             *) echo "::error::Unsupported live test suite"; exit 1 ;;
           esac
           if [[ -z "${OPENAI_BASE_URL:-}" || -z "${OPENAI_API_KEY:-}" ]]; then
@@ -84,14 +85,14 @@ jobs:
               "timestamp_utc": datetime.now(timezone.utc).isoformat(),
               "suite": os.environ["LIVE_SUITE"],
               "mode": "provider-backed",
-              "fixture_as_of": (os.environ["RETAILIQ_AS_OF"] if os.environ["LIVE_SUITE"] != "uc01" else None),
-              "case_evidence_cutoff": ("2026-10-21T11:00:00Z" if os.environ["LIVE_SUITE"] == "uc01" else None),
+              "fixture_as_of": (os.environ["RETAILIQ_AS_OF"] if os.environ["LIVE_SUITE"] not in ("uc01", "uc01_policy") else None),
+              "case_evidence_cutoff": ("2026-10-21T11:00:00Z" if os.environ["LIVE_SUITE"] in ("uc01", "uc01_policy") else None),
               "chat_model": os.getenv("CHAT_MODEL") or "default_from_config",
               "embedding_model": os.getenv("EMBEDDING_MODEL") or "default_from_config",
               "langsmith_remote_trace_verified": False,
               "notes": ("UC-01 G1 uses pinned real Fiction LFS + exact policy document; "
                         "other suites are synthetic; none prove RAG/HITL/browser/ROI"
-                        if os.environ["LIVE_SUITE"] == "uc01" else
+                        if os.environ["LIVE_SUITE"] in ("uc01", "uc01_policy") else
                         "Provider smoke or synthetic query audit; not security, ROI or production acceptance"),
           }
           path = Path("data/quality_reports/live_llm_ci_metadata.json")
@@ -100,7 +101,7 @@ jobs:
           PY
 
       - name: Verify real chat and embedding connectivity
-        if: ${{ inputs.suite != 'uc01' }}
+        if: ${{ inputs.suite != 'uc01' && inputs.suite != 'uc01_policy' }}
         run: python -m scripts.check_openai --live
 
       - name: Seed synthetic retail fixture
@@ -119,7 +120,7 @@ jobs:
             --confirm-live --strict --out data/query_audit_report.json
 
       - name: Download pinned Fiction release and exact source policy for UC-01
-        if: ${{ inputs.suite == 'uc01' }}
+        if: ${{ inputs.suite == 'uc01' || inputs.suite == 'uc01_policy' }}
         env:
           GIT_LFS_SKIP_SMUDGE: '1'
         run: |
@@ -141,6 +142,18 @@ jobs:
             --retailiq-manifest data/fiction/manifest.json \
             --out data/quality_reports/uc01_t02_g1.json
 
+      - name: T05 real-policy clause RAG with actual model and negative citation gate
+        if: ${{ inputs.suite == 'uc01_policy' }}
+        env:
+          RETAILIQ_UC01_LIVE: 'true'
+        run: |
+          python -m scripts.verify_uc01_policy_live --confirm-live \
+            --db "$RUNNER_TEMP/fiction-retail/data/fiction_retail.sqlite" \
+            --manifest "$RUNNER_TEMP/fiction-retail/manifest.json" \
+            --knowledge-root "$RUNNER_TEMP/fiction-retail/knowledge" \
+            --retailiq-manifest data/fiction/manifest.json \
+            --out data/quality_reports/uc01_t05_policy.json
+
       - name: Publish reproducible run evidence (no credentials)
         if: always()
         uses: actions/upload-artifact@v4
@@ -150,5 +163,6 @@ jobs:
             data/quality_reports/live_llm_ci_metadata.json
             data/query_audit_report.json
             data/quality_reports/uc01_t02_g1.json
+            data/quality_reports/uc01_t05_policy.json
           retention-days: 7
           if-no-files-found: ignore
