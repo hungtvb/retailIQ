@@ -116,8 +116,9 @@ async def record_http(request: Request, call_next):
         if mutating and not local_auth.verify_csrf(
                 principal, request.headers.get('x-csrf-token')):
             return _auth_failure(403, 'CSRF validation failed')
-        # Legacy global logs/workflow runs are not owner-scoped; keep denied.
-        if path.startswith('/api/logs') or path.startswith('/api/workflows'):
+        # Global diagnostic logs remain private; workflow runs now filter owner
+        # and stateless freshness/definitions carry no conversation data.
+        if path.startswith('/api/logs'):
             return _auth_failure(403, 'Unscoped endpoint is unavailable')
     rid = new_request_id()
     safe_path = _safe_http_path(path)
