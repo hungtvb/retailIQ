@@ -53,6 +53,7 @@ def fiction(tmp_path):
         CREATE TABLE order_items(order_item_id TEXT, order_id TEXT, product_id TEXT, quantity INT, unit_price REAL, discount_pct INT);
         CREATE TABLE shipments(shipment_id TEXT, order_id TEXT, warehouse_id TEXT, shipped_date TEXT, delivered_date TEXT, shipment_state TEXT);
         CREATE TABLE inventory(inventory_id TEXT, product_id TEXT, warehouse_id TEXT, quantity_on_hand INT, reserved_quantity INT, last_restocked_date TEXT);
+        CREATE TABLE warehouses(warehouse_id TEXT, name TEXT);
         CREATE TABLE returns(return_id TEXT, order_id TEXT, product_id TEXT, return_date TEXT, refund_amount REAL, return_reason_code TEXT);
         CREATE TABLE fulfillment_cases(case_id TEXT, order_id TEXT, order_item_id TEXT, product_id TEXT, request_qty INT, assigned_warehouse_id TEXT, case_date TEXT);
         CREATE TABLE operational_events(event_id TEXT, case_id TEXT, event_type TEXT, occurred_at TEXT, recorded_at TEXT);
@@ -69,7 +70,7 @@ def fiction(tmp_path):
             if table not in {"products", "orders", "order_items", "shipments", "inventory",
                              "returns", "fulfillment_cases", "operational_events",
                              "inventory_snapshots_v2", "warehouse_eligibility", "metadata",
-                              "fulfillment_policies", "knowledge_documents"}:
+                              "fulfillment_policies", "knowledge_documents", "warehouses"}:
                 c.execute(f'CREATE TABLE "{table}" (dummy TEXT)')
         sku = lambda pid: "FR-" + sha256(pid.encode()).hexdigest()[:16].upper()
         c.executemany('INSERT INTO products VALUES(?,?,?,?,?,?)',
@@ -77,6 +78,7 @@ def fiction(tmp_path):
                        (P2, sku(P2), "Other", "electronics", "Brand", 25.0)])
         c.execute("INSERT INTO orders VALUES (?,?,?,?,?)", (O1, "CUSTOMER_SECRET", "2026-10-15", "delivered", 20.0))
         c.execute("INSERT INTO order_items VALUES (?,?,?,?,?,?)", (I1, O1, P1, 2, 10.0, 0))
+        c.executemany("INSERT INTO warehouses VALUES (?,?)", [(W1, "Assigned"), (W2, "Alternative")])
         c.execute("INSERT INTO inventory VALUES (?,?,?,?,?,?)", (I1, P1, W1, 4, 1, "2026-10-01"))
         c.execute("INSERT INTO returns VALUES (?,?,?,?,?,?)", (R1, O1, P1, "2026-10-18", 30.0, "DAMAGED"))
         c.execute("INSERT INTO fulfillment_cases VALUES (?,?,?,?,?,?,?)", (C1, O1, I1, P1, 2, W1, "2026-10-16"))
