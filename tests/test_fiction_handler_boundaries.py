@@ -93,7 +93,10 @@ def test_inventory_record_is_not_mislabeled_current():
 def test_case_response_uses_only_verified_sql_without_ghost_mcp(kind):
     output = backorder_update(
         {"question": "Explain the verified backorder"}, _investigation(),
-        CASE_ID, followup=kind, committed=None,
+        CASE_ID, followup=kind,
+        # A follow-up enters the handler only after the wrapper verified
+        # a committed case source/cutoff; direct helper tests must keep it.
+        committed=({"source_request_id": "verified-turn"} if kind else None),
         read_order=_deny_order, capability=CAPABILITY,
     )
     assert output["capability_plan"]["capabilities"] == [CAPABILITY]
