@@ -127,3 +127,14 @@ def test_authenticated_owned_sessions_open_but_global_logs_remain_closed(api):
     assert owned.status_code == 200
     assert owned.json() == {"sessions": []}
     assert api.get("/api/logs").status_code == 403
+
+
+def test_openapi_schema_and_docs_require_authenticated_local_user(api):
+    for path in ("/openapi.json", "/docs", "/redoc"):
+        denied = api.get(path)
+        assert denied.status_code == 401, (path, denied.status_code)
+    _create_user()
+    assert _login(api).status_code == 200
+    for path in ("/openapi.json", "/docs", "/redoc"):
+        granted = api.get(path)
+        assert granted.status_code == 200, (path, granted.status_code)
