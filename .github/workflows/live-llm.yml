@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       suite:
-        description: "Cost scope: smoke (chat + embedding) or critical (six business scenarios)"
+        description: "Cost scope: smoke (chat + embedding), critical (six synthetic queries), or uc01 (real-release G1)"
         type: choice
         required: true
         default: smoke
@@ -61,7 +61,7 @@ jobs:
             echo "::error::Set OPENAI_BASE_URL and OPENAI_API_KEY as llm-evaluation environment secrets"
             exit 1
           fi
-          echo "Live suite: $LIVE_SUITE (provider-backed, synthetic test data)"
+          echo "Live suite: $LIVE_SUITE (provider-backed; uc01 uses pinned real Fiction release)"
           echo "Target commit: $GITHUB_SHA"
 
       - name: Install full-mode runtime dependencies
@@ -88,7 +88,10 @@ jobs:
               "chat_model": os.getenv("CHAT_MODEL") or "default_from_config",
               "embedding_model": os.getenv("EMBEDDING_MODEL") or "default_from_config",
               "langsmith_remote_trace_verified": False,
-              "notes": "Only provider smoke/selected synthetic business cases; not security, ROI or production acceptance",
+              "notes": ("UC-01 G1 uses pinned real Fiction LFS + exact policy document; "
+                        "other suites are synthetic; none prove RAG/HITL/browser/ROI"
+                        if os.environ["LIVE_SUITE"] == "uc01" else
+                        "Provider smoke or synthetic query audit; not security, ROI or production acceptance"),
           }
           path = Path("data/quality_reports/live_llm_ci_metadata.json")
           path.parent.mkdir(parents=True, exist_ok=True)
@@ -96,6 +99,7 @@ jobs:
           PY
 
       - name: Verify real chat and embedding connectivity
+        if: ${{ inputs.suite != 'uc01' }}
         run: python -m scripts.check_openai --live
 
       - name: Seed synthetic retail fixture
@@ -119,6 +123,29 @@ jobs:
           RETAILIQ_UC01_LIVE: 'true'
         run: python -m pytest -q -rs tests/test_fiction_unified.py -k test_uc01_t02_live_provider_route_with_verified_sql_fixture
 
+      - name: Download pinned Fiction release and exact source policy for UC-01
+        if: ${{ inputs.suite == 'uc01' }}
+        env:
+          GIT_LFS_SKIP_SMUDGE: '1'
+        run: |
+          git lfs version
+          git clone --depth 1 --filter=blob:none https://github.com/hungtvb/fiction-retail.git "$RUNNER_TEMP/fiction-retail"
+          git -C "$RUNNER_TEMP/fiction-retail" lfs pull --include="data/fiction_retail.sqlite" --exclude=""
+          test "$(stat -c%s "$RUNNER_TEMP/fiction-retail/data/fiction_retail.sqlite")" -eq 209063936
+          test -f "$RUNNER_TEMP/fiction-retail/knowledge/policies/FR-WH-2026-10-04.md"
+
+      - name: G1 provider-backed LangGraph on real Fiction release + independent SQL/policy oracle
+        if: ${{ inputs.suite == 'uc01' }}
+        env:
+          RETAILIQ_UC01_LIVE: 'true'
+        run: |
+          python -m scripts.verify_uc01_live_release --confirm-live \
+            --db "$RUNNER_TEMP/fiction-retail/data/fiction_retail.sqlite" \
+            --manifest "$RUNNER_TEMP/fiction-retail/manifest.json" \
+            --knowledge-root "$RUNNER_TEMP/fiction-retail/knowledge" \
+            --retailiq-manifest data/fiction/manifest.json \
+            --out data/quality_reports/uc01_t02_g1.json
+
       - name: Publish reproducible run evidence (no credentials)
         if: always()
         uses: actions/upload-artifact@v4
@@ -127,5 +154,6 @@ jobs:
           path: |
             data/quality_reports/live_llm_ci_metadata.json
             data/query_audit_report.json
+            data/quality_reports/uc01_t02_g1.json
           retention-days: 7
           if-no-files-found: ignore
