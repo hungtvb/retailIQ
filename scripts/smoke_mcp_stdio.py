@@ -51,6 +51,57 @@ def _frames(reply):
     return frames
 
 
+def _assert_failed_mcp_attempts(product: str, warehouse_id: str) -> None:
+    """Fault-injected discovery/timeout: failed spans, never false completed."""
+    import asyncio
+    from langchain_mcp_adapters import client as mcp_client
+    from retailiq import mcp_adapter
+    from retailiq.observability import bind_event_sink
+
+    class DiscoveryFailure:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def get_tools(self):
+            raise OSError("injected MCP subprocess discovery failure")
+
+    class SlowDiscovery:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def get_tools(self):
+            await asyncio.sleep(60)
+
+    def assert_failed(events):
+        names = [item.get("event") for item in events]
+        assert "mcp.tool.started" in names, names
+        assert "mcp.tool.failed" in names, names
+        assert "mcp.tool.completed" not in names, names
+
+    failed_events: list[dict] = []
+    with patch.object(mcp_client, "MultiServerMCPClient", DiscoveryFailure):
+        with bind_event_sink(failed_events.append):
+            try:
+                mcp_adapter.read_fiction_inventory(product, warehouse_id)
+            except OSError as exc:
+                assert "discovery" in str(exc)
+            else:
+                raise AssertionError("MCP discovery failure was misclassified as success")
+    assert_failed(failed_events)
+
+    timeout_events: list[dict] = []
+    with patch.object(mcp_client, "MultiServerMCPClient", SlowDiscovery):
+        with patch.object(mcp_adapter, "TIMEOUT_SECONDS", 0.02):
+            with bind_event_sink(timeout_events.append):
+                try:
+                    mcp_adapter.read_fiction_inventory(product, warehouse_id)
+                except TimeoutError:
+                    pass
+                else:
+                    raise AssertionError("MCP timeout was misclassified as success")
+    assert_failed(timeout_events)
+
+
 class _FakeRoutingModel:
     """Only the initial explicit CASE-ID router uses a fake provider here."""
 
@@ -115,6 +166,7 @@ def main() -> None:
             unknown_order = read_fiction_order("00000000-0000-4000-8000-000000000000")
             assert unknown_order["data"] is None
             assert unknown_order["limitations"] == ["ORDER_NOT_FOUND"]
+            _assert_failed_mcp_attempts(sku, warehouse_id)
 
             with patch("retailiq.orchestration.week1_graph.chat_model",
                        return_value=_FakeRoutingModel()):
