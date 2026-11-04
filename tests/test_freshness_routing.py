@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import sqlite3
 
 from fastapi.testclient import TestClient
+from tests.auth_client import signed_in_client
 import pytest
 
 from retailiq.domain.freshness_routing import route_freshness, plan_question_sources
@@ -121,6 +122,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv('RETAILIQ_WORKFLOW_DB', str(tmp_path / 'workflow.sqlite3'))
     monkeypatch.setenv('RETAILIQ_WORKFLOW_USE_MCP', '0')
     with TestClient(app) as c:
+        signed_in_client(app, client=c)
         yield c, path
 
 
