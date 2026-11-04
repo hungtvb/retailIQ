@@ -2,6 +2,7 @@
 import pytest
 import sqlite3
 from fastapi.testclient import TestClient
+from tests.auth_client import signed_in_client, active_principal
 from retailiq.api import app
 from retailiq.infrastructure import sessions
 from retailiq.orchestration.week1_graph import classify, resolve_followup
@@ -12,7 +13,7 @@ from retailiq.skills import load_skill
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv('RETAILIQ_CHAT_DB', str(tmp_path / 'conversations.sqlite3'))
     monkeypatch.setenv('RETAILIQ_MODE', 'offline')
-    return TestClient(app)
+    return signed_in_client(app)
 
 
 def test_create_list_get_delete_session(client):
@@ -33,12 +34,14 @@ def test_existing_message_database_is_migrated(tmp_path, monkeypatch):
             role TEXT NOT NULL, content TEXT NOT NULL, intent TEXT, agent TEXT,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)''')
     monkeypatch.setenv('RETAILIQ_CHAT_DB', str(path))
-    sid = sessions.create_session()['id']
+    actor = signed_in_client(app)
+    principal = active_principal(actor)
+    sid = sessions.create_session(owner_user_id=principal.user_id)['id']
     sessions.add_turn(sid, 'Top seller?', {
         'answer': 'A', 'intent': 'top', 'records': [{'name': 'A', 'units_sold': 12}],
         'contexts': [{'source': 'catalog/A.md', 'text': 'private document body'}],
-    })
-    evidence = sessions.get_session(sid)['messages'][-1]['evidence']
+    }, principal=principal)
+    evidence = sessions.get_session(sid, owner_user_id=principal.user_id)['messages'][-1]['evidence']
     assert evidence['records'] == [{'name': 'A', 'units_sold': 12}]
     assert evidence['contexts'] == [{'source': 'catalog/A.md'}]
 
