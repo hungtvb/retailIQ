@@ -399,6 +399,10 @@ def _uc01_followup_kind(question: str) -> str | None:
                                   'bảo hành', 'pricing', 'chính sách giá')):
         return None  # A topic switch must not inherit a previous case.
     if (('đơn hàng này' in q or 'đơn này' in q or 'this order' in q) and
+            any(x in q for x in ('trạng thái', 'shipment status', 'delivery status', 'giao chưa')) and
+            any(x in q for x in ('cutoff', 'lúc đó', 'tại thời điểm', 'khi đó'))):
+        return 'order_status_at_cutoff'
+    if (('đơn hàng này' in q or 'đơn này' in q or 'this order' in q) and
             any(token in q for token in ('gồm', 'sản phẩm', 'chi tiết', 'items', 'lines', 'details', 'contain'))):
         return 'order_details'
     if (('chính sách' in q and any(x in q for x in ('áp dụng', 'nào', 'đó')))
@@ -514,7 +518,15 @@ def backorder_agent(state: State):
          'available_at_observation': item['available_at_observation']}
         for item in candidates
     ]
-    if followup == 'order_details':
+    if followup == 'order_status_at_cutoff':
+        disposition = 'INSUFFICIENT_EVIDENCE'
+        reasons = sorted(set(reasons) | {'ORDER_STATUS_AT_CUTOFF_UNVERIFIED'})
+        answer = ('Không có lịch sử trạng thái đơn/giao hàng được xác minh tại cutoff '
+                  f'{cutoff}; trạng thái ghi trong bản phát hành không chứng minh trạng thái lúc đó.'
+                  if vi else
+                  f'Order/shipment status at case cutoff {cutoff} is unverified; '
+                  'release-recorded status cannot be treated as historical status.')
+    elif followup == 'order_details':
         from retailiq.mcp_adapter import read_fiction_order
         case = data['case']
         order_detail = read_fiction_order(case['order_id'])
@@ -581,6 +593,9 @@ def backorder_agent(state: State):
                            f"warehouse_eligibility/{case_id}/{r['warehouse_id']}"] + policy_ref}
         for r in records
     ]
+    if followup == 'order_status_at_cutoff':
+        findings = [{'text': 'Order/shipment status at case cutoff is not proven',
+                     'evidence_refs': [f"fulfillment_cases/{case_id}"]}]
     if followup == 'order_details':
         evidence_refs = list(dict.fromkeys(evidence_refs + order_detail["record_refs"]))[:100]
         records = [dict(line) for line in order_detail["data"]["lines"]]
@@ -605,7 +620,8 @@ def backorder_agent(state: State):
         'answer': answer, 'records': records, 'contexts': [],
         'active_agent': 'backorder_agent',
         'disposition': disposition, 'evidence_refs': evidence_refs,
-        'findings': findings, 'limitations': investigation['limitations'],
+        'findings': findings, 'limitations': investigation['limitations'] +
+                       (['ORDER_STATUS_AT_CUTOFF_UNVERIFIED'] if followup == 'order_status_at_cutoff' else []),
         'approval_status': investigation['approval_status'],
         'reason_codes': reasons, 'source': investigation['source'],
         'temporal': investigation['temporal'],
