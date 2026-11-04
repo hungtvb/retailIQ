@@ -54,7 +54,7 @@ def sign_in(page, base: str, username: str, password: str, role: str) -> None:
 def journey(page, base: str, analyst: tuple[str, str],
             manager: tuple[str, str], case_id: str) -> None:
     sign_in(page, base, *analyst, "analyst")
-    page.get_by_role("button", name="G1 verified historical review").click()
+    page.get_by_role("button", name="G1 verified historical review", exact=True).click()
     expect(page.locator(".message-assistant")).to_have_count(1)
     expect(page.locator(".review-eligible")).to_be_visible(timeout=30000)
     expect(page.locator(".review-eligible")).to_contain_text(SNAPSHOT)
