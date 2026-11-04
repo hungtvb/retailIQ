@@ -92,7 +92,8 @@ def _same_origin(request: Request) -> bool:
 
 def _auth_failure(code: int, detail: str) -> JSONResponse:
     return JSONResponse(status_code=code, content={"detail": detail},
-                        headers={"Cache-Control": "no-store"})
+                        headers={"Cache-Control": "no-store",
+                                 "X-Content-Type-Options": "nosniff"})
 
 
 @app.middleware('http')
