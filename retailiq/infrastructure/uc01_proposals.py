@@ -66,7 +66,10 @@ def _view(row, *, manager: bool = False) -> dict:
     item.pop("source_request_id", None)
     item.update({
         "proposal_id": row["proposal_id"],
-        "status": row["status"],
+        # Historical expiry is a derived effective state, even if no writer
+        # has yet materialized an EXPIRED transition in application SQLite.
+        "status": ("EXPIRED" if row["status"] == "PENDING" and
+                   row["expires_at"] <= int(time.time()) else row["status"]),
         "version": row["version"],
         "submitted_at": row["submitted_at"],
         "expires_at": row["expires_at"],
@@ -157,7 +160,9 @@ def manager_inbox(principal: SecurityContext) -> list[dict]:
     _schema()
     with _connect() as db:
         rows = db.execute("""SELECT * FROM uc01_proposals
-            WHERE status='PENDING' ORDER BY submitted_at DESC,proposal_id DESC LIMIT 100""").fetchall()
+            WHERE status='PENDING' AND expires_at>?
+            ORDER BY submitted_at DESC,proposal_id DESC LIMIT 100""",
+            (int(time.time()),)).fetchall()
     return [_view(row, manager=True) for row in rows]
 
 
