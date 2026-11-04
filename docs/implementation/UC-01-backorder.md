@@ -184,9 +184,9 @@ flowchart TD
 
 **Technical references:** [LangChain ChatOpenAI structured output](https://reference.langchain.com/python/langchain-openai/chat_models/base/ChatOpenAI/with_structured_output); [GitHub manual workflow dispatch](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow?tool=webui).
 
-## 9. T05 — Source-verified policy explanation RAG (PROPOSED)
+## 9. T05 — Source-verified policy explanation RAG (APPROVED DESIGN; IMPLEMENTATION UNDER REVIEW)
 
-**Gate:** design proposal, **not approved for code** until this PR is reviewed and merged. Owner [RAG #27](https://github.com/hungtvb/retailIQ/issues/27), parent [UC-01 #34](https://github.com/hungtvb/retailIQ/issues/34). Baseline main `1618fd8fe88665b9a3e2a65ad7f376ebf530c72f`; [R1 #51](https://github.com/hungtvb/retailIQ/issues/51) passed actual-provider G1 after refactor. A code PR must cite the **approved T05 design merge SHA**.
+**Gate:** design reviewed and merged in [PR #56](https://github.com/hungtvb/retailIQ/pull/56), **approved main `a7470fdecac01e5b7635430beab8bbf2086cefb0`**. Owner [RAG #27](https://github.com/hungtvb/retailIQ/issues/27), parent [UC-01 #34](https://github.com/hungtvb/retailIQ/issues/34). Scoped T05 implementation and provider-backed acceptance remain **PENDING** until tested; [R1 #51](https://github.com/hungtvb/retailIQ/issues/51) accepted earlier G1, not this feature. The model's role is restricted to **selecting verbatim policy evidence**, with answer claims rendered from approved section-level text to prevent unsupported free-form policy authority.
 
 **Business outcome:** staff asks “Vì sao cần Manager phê duyệt?” or “Chính sách yêu cầu gì khi snapshot quá 24 giờ?” after a **verified same-session case**. Answer with the applicable *warehouse transfer policy's specific clause*, exact source/cutoff and supporting passage, not just its policy ID. T05 must never let embeddings, document text, a model or chat history select policy applicability or approve a transfer.
 
