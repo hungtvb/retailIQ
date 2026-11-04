@@ -6,6 +6,7 @@ import sqlite3
 import sys
 import types
 from fastapi.testclient import TestClient
+from tests.auth_client import signed_in_client
 import pytest
 from retailiq.api import app
 from retailiq.infrastructure.sessions import session_mutation
@@ -17,7 +18,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv('RETAILIQ_CHAT_DB', str(tmp_path / 'chat.sqlite3'))
     monkeypatch.setenv('RETAILIQ_CHECKPOINT_DB', str(tmp_path / 'checkpoints.sqlite3'))
     monkeypatch.setenv('RETAILIQ_MODE', 'offline')
-    return TestClient(app)
+    return signed_in_client(app)
 
 
 def test_same_session_busy_rejected_without_new_turn(client):
