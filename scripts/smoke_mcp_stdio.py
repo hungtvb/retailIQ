@@ -186,7 +186,7 @@ def main() -> None:
             "sql_oracle_available": expected_stock,
             "order_lines": len(expected_lines),
             "shipments": len(expected_shipments),
-            "stdio_tool_calls": 4,
+            "stdio_tool_calls": 7,  # 5 direct calls + 2 actual API/graph tool calls
             "direct_tools_elapsed_s": direct_elapsed,
             "provider": "FAKE_ROUTER_FOR_CASE_ONLY",
             "scope": "fixture + FastAPI/SSE/compiled LangGraph; not real release or live LLM",
