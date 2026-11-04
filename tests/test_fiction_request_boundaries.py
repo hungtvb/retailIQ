@@ -65,6 +65,9 @@ def test_explicit_case_id_normalization_and_ambiguous_cases():
 @pytest.mark.parametrize("question,kind", [
     ("kho thứ hai?", "ambiguous_warehouse"),
     ("Chính sách nào áp dụng?", "policy"),
+    ("Vì sao cần Manager phê duyệt?", "policy"),
+    ("Chính sách yêu cầu gì khi snapshot quá 24 giờ?", "policy"),
+    ("What does the policy require for a snapshot older than 24 hours?", "policy"),
     ("Đơn này gồm sản phẩm nào?", "order_details"),
     ("What is this order delivery status at cutoff?", "order_status_at_cutoff"),
     ("Other warehouses?", "alternatives"),
