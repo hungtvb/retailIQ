@@ -210,16 +210,25 @@ async def _call(tool_name: str, args: dict) -> dict:
                      "transport": "stdio", "env": stdio_env}
     }, handle_tool_errors=False)
     expected_sha = _source_expected()
-    tools = await client.get_tools()
-    tool = next((x for x in tools if x.name == tool_name), None)
-    if tool is None or sum(x.name == tool_name for x in tools) != 1:
-        raise RuntimeError("Required Fiction MCP tool not discovered")
-    with observed("mcp.tool", agent="backorder_agent" if tool_name == "order_lookup" else "inventory_agent",
+    # Discovery is part of this invocation attempt: a missing/crashed MCP
+    # subprocess must emit mcp.tool.failed, not disappear from SSE/trace.
+    with observed("mcp.tool",
+                  agent="backorder_agent" if tool_name == "order_lookup" else "fiction_inventory_agent",
                   tool=tool_name, mcp_server="retailiq", execution_mode="full"):
-        raw = await tool.ainvoke(args)
-        if getattr(raw, "status", None) == "error":
-            raise ValueError("MCP tool execution failed")
-        return _verify_envelope(decode_tool_result(raw), expected_sha, tool_name, args)
+        try:
+            tools = await client.get_tools()
+            tool = next((x for x in tools if x.name == tool_name), None)
+            if tool is None or sum(x.name == tool_name for x in tools) != 1:
+                raise RuntimeError("Required Fiction MCP tool not discovered")
+            raw = await tool.ainvoke(args)
+            if getattr(raw, "status", None) == "error":
+                raise ValueError("MCP tool execution failed")
+            return _verify_envelope(decode_tool_result(raw), expected_sha, tool_name, args)
+        except asyncio.CancelledError as exc:
+            # asyncio.wait_for cancels the in-flight call on timeout.
+            # Cancellation is BaseException on Python 3.12, so normalize it
+            # into an exception that observed() records as mcp.tool.failed.
+            raise TimeoutError("Fiction MCP discovery/invocation was cancelled") from exc
 
 
 def _bounded_call(tool_name: str, args: dict) -> dict:
