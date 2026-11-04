@@ -66,7 +66,7 @@ def test_ownerless_legacy_migration_fails_closed(api):
     assert "PRIVATE_LEGACY_MESSAGE" not in detail.text
 
 
-def test_two_users_session_memory_trace_and_delete_are_isolated(api):
+def test_two_users_session_memory_trace_and_delete_are_isolated(api, monkeypatch):
     user_a, a_headers = _login(api, "owner_a")
     created = api.post("/api/sessions", headers=a_headers,
                        json={"title": "Owner A confidential case"})
@@ -87,6 +87,18 @@ def test_two_users_session_memory_trace_and_delete_are_isolated(api):
         assert "Owner A confidential" not in response.text
     assert api.delete(f"/api/sessions/{sid}", headers={**ORIGIN, "X-CSRF-Token":
                          api.get("/api/auth/me").json()["csrf_token"]}).status_code == 404
+    calls = []
+    monkeypatch.setattr(http, "ask", lambda *args, **kwargs: calls.append(args) or
+                        {"answer": "UNEXPECTED", "active_agent": "retailiq"})
+    b_headers = {**ORIGIN, "X-CSRF-Token": api.get("/api/auth/me").json()["csrf_token"]}
+    foreign_turn = api.post("/ask", headers=b_headers,
+                            json={"question": "Show confidential conversation", "session_id": sid})
+    assert foreign_turn.status_code == 404
+    assert calls == [], "Foreign-owner prompt must not reach model or tools"
+    foreign_stream = api.post("/ask/stream", headers=b_headers,
+                              json={"question": "Show confidential conversation", "session_id": sid})
+    assert foreign_stream.status_code == 404
+    assert calls == [], "Foreign-owner SSE must fail before starting worker"
     # Per-user metadata does not imply an unscoped diagnostics privilege.
     assert api.get("/api/logs").status_code == 403
 
