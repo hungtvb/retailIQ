@@ -324,7 +324,7 @@ function App(){
     setSessions([]);setActiveId('');setMessages([]);setQuestion('');
     setPhase('ready');setGraph(emptyGraph());setLoading(false);
     setSelectedRequestId('');setTraceTruncated(false);setError('');
-    setProposals([]);setEligibility(null);setReviewNotice('');
+    setProposals([]);setEligibility(null);setReviewNotice('');setReviewBusy(false);
     localStorage.removeItem('retailiq-workspace-session');
     localStorage.removeItem('retailiq-workspace-owner');
   }
@@ -361,19 +361,25 @@ function App(){
   }
   async function submitReview(){
     if(!account||account.role!=='analyst'||!activeId||reviewBusy)return;
+    const epoch=accountEpoch.current;
     setReviewBusy(true);setReviewNotice('');
     try{
       const value=await readJson<ReviewProposal>(await secureFetch('/api/uc01/proposals',{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({session_id:activeId})
       }));
+      if(epoch!==accountEpoch.current)return;
       setReviewNotice('Submitted '+value.case_id+' for local Manager review.');
       await refreshProposals();
-    }catch(e){setReviewNotice((e as Error).message)}
-    finally{setReviewBusy(false)}
+    }catch(e){
+      if(epoch===accountEpoch.current)setReviewNotice((e as Error).message);
+    }finally{
+      if(epoch===accountEpoch.current)setReviewBusy(false);
+    }
   }
   async function decideReview(p:ReviewProposal, decision:'approve'|'reject'){
     if(!account||account.role!=='manager'||reviewBusy)return;
+    const epoch=accountEpoch.current;
     setReviewBusy(true);setReviewNotice('');
     try{
       const result=await readJson<ReviewProposal>(await secureFetch(
@@ -381,10 +387,14 @@ function App(){
           method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({decision,expected_version:p.version})
         }));
+      if(epoch!==accountEpoch.current)return;
       setReviewNotice(result.status+' · local proposal only; no transfer executed.');
       await refreshProposals();
-    }catch(e){setReviewNotice((e as Error).message)}
-    finally{setReviewBusy(false)}
+    }catch(e){
+      if(epoch===accountEpoch.current)setReviewNotice((e as Error).message);
+    }finally{
+      if(epoch===accountEpoch.current)setReviewBusy(false);
+    }
   }
 
   async function refreshSessions(){
@@ -588,6 +598,10 @@ function App(){
   }
   const statusLabel=busy?'Processing':phase==='error'?'Execution failed':
     phase==='complete'?'Complete':'Ready';
+  const existingCycle=Boolean(eligibility?.candidate&&proposals.some(p=>
+    p.case_id===eligibility.candidate?.case_id &&
+    p.cutoff===eligibility.candidate?.cutoff &&
+    p.source_sha256===eligibility.candidate?.source_sha256));
   if(authLoading)return <div className="auth-shell"><p>Checking local sign-in…</p></div>;
   if(!account)return <div className="auth-shell">
     <form className="auth-card" onSubmit={e=>{e.preventDefault();void signIn()}}>
@@ -717,8 +731,10 @@ function App(){
               <div className="review-eligible">
                 <p>Verified candidate: <strong>{eligibility.candidate?.snapshot_id}</strong>
                   {' · '+eligibility.candidate?.available_units} historical units available</p>
-                <button className="review-action" disabled={reviewBusy||busy}
-                  onClick={()=>void submitReview()}>Submit for Manager review</button>
+                {existingCycle?
+                  <span className="review-muted">Already submitted. See review status below.</span>:
+                  <button className="review-action" disabled={reviewBusy||busy}
+                    onClick={()=>void submitReview()}>Submit for Manager review</button>}
               </div>}
             {account.role==='analyst'&&eligibility&&!eligibility.eligible&&activeId&&
               <p className="review-muted">No eligible verified proposal for this conversation.</p>}
