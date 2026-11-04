@@ -93,7 +93,7 @@ def verified_candidate(
         "available_units": selected["available_at_observation"],
         # Bounded verified references; never store chat, raw documents or customer data.
         "evidence_refs": list(dict.fromkeys(result["record_refs"]))[:100],
-        "source_request_id": case_binding.get("source_request_id"),
+        # Request IDs identify chat turns, not historical business candidates.
         "finding_disposition": "NEEDS_REVIEW",
         "finding_approval_status": "NOT_REQUESTED",
     }
