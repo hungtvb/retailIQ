@@ -120,8 +120,10 @@ def test_authenticated_ask_requires_valid_csrf(api, monkeypatch):
     assert calls == ["List top sellers"]
 
 
-def test_authenticated_unowned_sessions_and_logs_fail_closed(api):
+def test_authenticated_owned_sessions_open_but_global_logs_remain_closed(api):
     _create_user()
     assert _login(api).status_code == 200
-    assert api.get("/api/sessions").status_code == 403
+    owned = api.get("/api/sessions")
+    assert owned.status_code == 200
+    assert owned.json() == {"sessions": []}
     assert api.get("/api/logs").status_code == 403
