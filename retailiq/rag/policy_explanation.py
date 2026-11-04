@@ -154,9 +154,10 @@ def explain_policy(question: str, policy: dict, knowledge_root: str | Path, mode
     except Exception as exc:
         raise PolicyExplanationUnavailable("Explanation provider failed") from exc
     section, quote = getattr(choice, "section", None), getattr(choice, "quote", None)
-    if (section not in passages or not isinstance(quote, str)
+    if (not isinstance(section, str) or section not in passages
+            or not isinstance(quote, str)
             or not 35 <= len(quote) <= 320
-            or " ".join(quote.split()) not in " ".join(passages[section].split())
+            or quote not in passages[section]
             or not all(phrase in quote for phrase in REQUIRED_QUOTE_PHRASES[section])):
         raise PolicyExplanationUnavailable("Unsupported policy quote")
     ref = f"knowledge_documents/{policy['document_id']}#{section}"
