@@ -226,3 +226,66 @@ flowchart TD
 **Stop/rollback:** If the policy explanation cannot add useful accurate clause-level information beyond T03's verified deterministic sentence, or grounded generation cannot pass scenarios, keep the existing safe answer and report T05 pending; no needless agent, indexing of 5,003 documents, policy authority rewrite or fabricated RAG PASS. Once implemented, update #27/#34, relevant docs and Capability Ledger by *execution evidence*, not by PR status.
 
 **Technical references:** [LangChain retrieval and 2-step RAG](https://docs.langchain.com/oss/python/deepagents/retrieval); [Chroma query metadata filtering](https://docs.trychroma.com/docs/querying-collections/metadata-filtering) (future scoped vector comparison, not a T05 dependency).
+
+## 10. T06 — Authenticated Manager HITL (PROPOSED; REVIEW BEFORE CODE)
+
+**Gate and owner:** this is the **T06-specific implementation design**, not approval to code until this revision is reviewed and merged. It refines the already **approved architecture decision** in [Review 09 / #29](https://github.com/hungtvb/retailIQ/issues/29); parent [UC-01 #34](https://github.com/hungtvb/retailIQ/issues/34). Inspected baseline: \`main@ff981e193256d9bf6fd46e11cb6e02ed32b27c26\` (T05 accepted). The implementation Issue and PR must cite this section's **eventual approved merge SHA**, not this proposal branch.
+
+**Business outcome:** an authenticated Analyst submits an *evidence-backed historical backorder candidate* for Manager review; an authenticated Manager accepts or rejects that **local proposal only**. The decision is attributable, one-time, versioned and visible to the submitting user. **Neither decision causes stock transfer, inventory reservation, order update nor shipment.** Preserve T01–T05 case identity, source release, evidence cutoff, policy validity and original \`NEEDS_REVIEW\` finding. A historical observation is not current operational inventory.
+
+### Approach, boundaries and alternatives
+
+**Chosen for design review:** minimal same-origin, local SQLite authentication and session ownership; a narrowly scoped immutable UC-01 proposal snapshot; and a small checkpointed LangGraph human-review step. Reuse existing FastAPI, chat SQLite and LangGraph SQLite checkpoint infrastructure; no new Agent, web service, event bus or authorization framework.
+
+- **Rejected — reuse \`workflow_demo.review_run(role='manager')\` as authority:** request-body role is caller-controlled and the existing workflow is explicitly simulated. Keep that legacy demo labeled **simulation only** until separately retired; it must never approve a UC-01 proposal.
+- **Rejected — reuse Analyst's chat thread as Manager's approval checkpoint:** it would give a Manager access to another user's conversation and risks reviving unrelated chat graph state. Use a distinct \`uc01-review:<proposal_id>\` checkpoint thread with a bounded proposal payload.
+- **Rejected — external IAM / OAuth / dedicated approval service:** unjustified for local Fiction Retail with two roles. Revisit only if the business or deployment boundary changes.
+
+**Scope:** only \`analyst\` and \`manager\` accounts, local operator CLI provisioning, host-only cookie login/logout, authenticated ownership and local proposal decisions, plus minimal Workspace login and review controls. No public signup, JWT, SSO, admin UI, per-warehouse permissions, production security certification or real Fiction writes. **Security is an application boundary, not a new graph agent.**
+
+### Trust and data flow
+
+~~~mermaid
+flowchart TD
+  Login[Login: server verifies Argon2id password] --> Auth[Trusted principal + owned auth session]
+  Auth --> Chat[Analyst: owned chat and committed UC-01 G1 binding]
+  Chat --> Verify[Re-run deterministic case / cutoff / source / policy gate]
+  Verify -->|Not eligible or stale| Stop[Reject submission; verified answer unchanged]
+  Verify -->|NEEDS_REVIEW with eligible candidate| P[(SQLite: immutable pending proposal + version)]
+  P --> Interrupt[Separate LangGraph human-review interrupt + checkpoint]
+  Interrupt --> Inbox[Manager: bounded proposal inbox, not Analyst chat]
+  Inbox --> Gate[Authenticate Manager; CSRF; CAS version + recheck provenance]
+  Gate -->|Denied / replay / changed source| Stop
+  Gate -->|Approved / rejected| Decision[(SQLite: one-time local decision + reviewer)]
+  Decision --> Resume[Command resume: real observed review completion]
+  Resume --> Status[Owner sees decision status; no Fiction operational write]
+~~~
+
+**A. Authentication / authorization:** add a small backend security module and CLI (\`scripts.manage_users\`) backed by the existing application SQLite database, not Fiction. Operator prompts for password without echo; Argon2id via \`pwdlib[argon2]\` (pin/verify installed versions before code). Add \`users\` and \`auth_sessions\`: roles constrained to Analyst/Manager, disabled flag, random opaque token (store only SHA-256), expiry/revocation, and server-bound CSRF token. Use \`HttpOnly\`, host-only, \`SameSite=Strict\`, \`Path=/\`; set \`Secure\` for HTTPS and retain loopback-only restriction for local HTTP. Rotate session on login, expire and invalidate on disable/logout; generic credential errors and bounded per-identity/peer login attempts. **Never** log password, raw session token or CSRF token.
+
+Routes: \`POST /api/auth/login\`, \`GET /api/auth/me\`, \`POST /api/auth/logout\`. Require full same-origin \`Origin\`/\`Referer\` verification for login and every state-changing cookie request, plus a server-validated CSRF header for authenticated mutations; do not rely solely on SameSite or naive double-submit cookies. The UI obtains an authenticated CSRF value from \`/api/auth/me\`, stores it in memory only. Use no credentialed wildcard CORS, user-supplied \`role\`, security-bypass environment flag, or raw cookies in graph state. Allow public static login assets and \`/health\`; require verified principal **before any data/model/tool work** on \`/ask\`, \`/ask/stream\`, sessions, history/memory/traces, workflow, ROI, logs and other business/diagnostic API routes. Establish principal in the API boundary; carry only \`SecurityContext(user_id, role)\` across the SSE worker, not a request-supplied identity.
+
+**B. Conversation ownership:** add nullable \`sessions.owner_user_id\` with foreign-key linkage to \`users\`. All *new* conversations require authenticated ownership; scope list/get/history/add/delete/memory/trace/checkpoint by owner in SQL and verify before reading checkpoints or hydrating model context. Existing ownerless conversations remain **inaccessible** until explicit local disposal or separately reviewed migration; never silently assign them to whoever logs in first. Managers can inspect the **sanitized proposal record** but **not** another employee's messages, memory, raw trace or checkpoint. Existing \`/api/logs\` must not reveal cross-user session metadata; deny unscoped log access unless a reviewed role-specific disclosure policy exists.
+
+**C. Proposal contract (backend-generated; no LLM authority):** \`POST /api/uc01/proposals\` accepts an owned \`session_id\` only, not a model-selected case, warehouse, cutoff, decision or role. Require the latest *committed* \`last_committed_case_binding\`, \`disposition=NEEDS_REVIEW\` and \`approval_status=NOT_REQUESTED\`. Re-run \`domain/backorder.py::investigate_backorder\` on the pinned trusted Fiction release: matching case/order line/product, original historical cutoff, exact applicable policy, approved warehouse route, snapshot and positive available quantity; **reject** policy-conflict-only \`NEEDS_REVIEW\` without a real candidate. Persist a bounded immutable canonical proposal (case ID, source ID/version/SHA, cutoff, policy ID/document SHA, order item/product, candidate warehouse/snapshot/requested/available, evidence refs and a canonical fingerprint) in existing app SQLite. Record owner, \`proposal_id\`, version 1, creation/expiry time, \`PENDING\` decision and graph resume status separately. Expiry is a **local review-window limit**, not a substitute for case-cutoff validity or current stock freshness. Never store free-form LLM claims as authorization evidence.
+
+Manager-only \`GET /api/uc01/proposals\` and \`GET /api/uc01/proposals/{id}\` expose only review-needed, non-sensitive fields; a submitter can read only their own proposal status. \`POST /api/uc01/proposals/{id}/decision\` accepts \`decision=approve|reject\` and \`expected_version\`. Server validates actual Manager role, origin/CSRF, pending state, expiry, exact immutable fingerprint/version, pinned Fiction release and candidate/policy evidence again **at the original case cutoff**. Use one atomic compare-and-set SQLite update for the **single decision** and record reviewer ID/time. Wrong actor/version, stale source/case, missing proposal or replay -> deny/409 or 404 without disclosing another user's conversation. Do not interpret \`APPROVED\` as a real transfer authorization; the response explicitly says local proposal reviewed, **no operation executed**.
+
+**D. Real HITL, not fabricated events:** use a tiny \`StateGraph\` (no model) with \`interrupt()\` and a durable local checkpointer, keyed to a distinct proposal thread. Interrupt payload contains only proposal ID/version/fingerprint, no chat history or raw credentials. Only the backend, **after authorized durable decision**, may call \`Command(resume=...)\` using the matching checkpoint. Keep the SQLite decision as the authoritative record; track graph completion separately so a crash between compare-and-set and resume is **not** reported as completed execution. A retry/reconciliation path must resume the same stored decision idempotently without permitting a second approval; test this crash window. Follow LangGraph's documented resume behavior (the interrupt node re-executes before returning the supplied value); place no non-idempotent effect before \`interrupt()\`. Record real observed awaiting/resumed/failed events, not mock handoffs.
+
+**E. User experience:** Workspace checks \`/api/auth/me\`, supports login/logout and clears locally remembered conversation on logout/account switch. Analyst sees an explicit **Submit for Manager review** action only for a verified eligible UC-01 result; Manager sees a minimal review queue with bounded evidence, approve/reject and final status. Use existing response fields; the full structured evidence and truthful graph UI remain T07's owner. The old Workflow Demo role-picker remains clearly simulated, not the new approval path.
+
+### Acceptance and delivery gates
+
+| Gate | Scenario evidence (T06 / Review 09) |
+|---|---|
+| Auth and scope / S09-A01–A04, A07 | CLI-created users; bad password/lockout, expired/disabled/revoked cookie, cookie attributes and CSRF/origin; **401 before LLM/tool call** for unauthorized API and SSE; A cannot list/read/delete B's sessions, memory, traces or checkpoint; ownerless legacy rows fail closed. |
+| Verified proposal / S09-A05–A06 | Real pinned Fiction **G1** produces a versioned pending proposal; Manager sees bounded facts without Analyst chat; Analyst-supplied \`role=manager\`, changed cutoff/source/hash/warehouse, conflicting policy-only review, expired/wrong version and duplicate decisions denied. |
+| Durable HITL and failure / S09-A06, A09 | Actual LangGraph interrupt persisted and resumed via \`Command(resume=...)\` using isolated thread; two-manager race yields **exactly one** decision; resume failure does not falsify trace, and recovery uses stored decision without replay. |
+| Security and UX / S09-A08–A10 | Prompt injection cannot expand tool access; SSE checks user identity in worker thread and stops leaking events after auth/session invalidation; credential sentinels absent from UI/logs/traces; Chromium login → submit → manager decision → owner status. |
+| No-write and regressions | Before/after snapshots of Fiction operational tables unchanged; existing T01–T05 historical source/cutoff/disposition and old demo's **simulation** label preserved; targeted scenario + compiled graph + HTTP + SQLite + browser tests with explicit fake/offline vs provider modes. |
+
+**Recommended implementation slices after this design is approved (not separate new capability issues):** (1) authenticated identity, CSRF and owned session migration across *all* protected APIs; (2) immutable UC-01 proposal + Manager permission and SQLite compare-and-set; (3) checkpointed interrupt/resume and failure recovery; (4) minimal React login/review UI and integrated adversarial/browser acceptance. Work on a separate implementation branch/PR, use TDD and review each slice; do not merge a partially protected API surface. No blanket live-LLM or RAGAS rerun for auth-only changes. After demonstrated acceptance, update #29/#34 and only then the Capability Ledger.
+
+**Technical references:** [FastAPI password hashing / Argon2](https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/) (reuse hashing, not its JWT example); [OWASP CSRF Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html); [LangGraph Python interrupts and resumptions](https://docs.langchain.com/oss/python/langgraph/interrupts).
+
