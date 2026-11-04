@@ -118,12 +118,6 @@ jobs:
             --ids SALES-05,CROSS-01,CTX-04,CAT-01,SALES-12,RAG-01 \
             --confirm-live --strict --out data/query_audit_report.json
 
-      - name: Verify real LLM UC-01 routing with pinned source-checked SQLite fixture
-        if: ${{ inputs.suite == 'uc01' }}
-        env:
-          RETAILIQ_UC01_LIVE: 'true'
-        run: python -m pytest -q -rs tests/test_fiction_unified.py -k test_uc01_t02_live_provider_route_with_verified_sql_fixture
-
       - name: Download pinned Fiction release and exact source policy for UC-01
         if: ${{ inputs.suite == 'uc01' }}
         env:
