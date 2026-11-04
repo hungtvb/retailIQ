@@ -1,5 +1,7 @@
 """Local-only chat session REST endpoints."""
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Response, Request
+from retailiq.api.auth import _principal
+from retailiq.infrastructure import auth
 from pydantic import BaseModel, Field
 from retailiq.observability import log_event, bind_context
 from retailiq.infrastructure.sessions import create_session, get_session, list_sessions, delete_session, session_mutation, SessionBusyError, get_execution_trace, get_customer_memory, save_customer_memory
@@ -10,19 +12,21 @@ class NewSession(BaseModel):
     title: str = Field(default='New conversation', max_length=80)
 
 @router.post('', status_code=201)
-def new_session(body: NewSession = NewSession()):
-    session = create_session(body.title)
+def new_session(request: Request, body: NewSession = NewSession()):
+    principal = _principal(request)
+    auth.assert_active(principal)
+    session = create_session(body.title, owner_user_id=principal.user_id)
     with bind_context(session=session['id']):
         log_event('chat.session_created')
     return session
 
 @router.get('')
-def sessions():
-    return {'sessions': list_sessions()}
+def sessions(request: Request):
+    return {'sessions': list_sessions(owner_user_id=_principal(request).user_id)}
 
 @router.get('/{session_id}')
-def session(session_id: str):
-    result = get_session(session_id)
+def session(session_id: str, request: Request):
+    result = get_session(session_id, owner_user_id=_principal(request).user_id)
     if result is None:
         raise HTTPException(status_code=404, detail='Session not found')
     return result
@@ -34,19 +38,22 @@ class CustomerMemoryBody(BaseModel):
 
 
 @router.get('/{session_id}/memory')
-def customer_memory(session_id: str):
+def customer_memory(session_id: str, request: Request):
     try:
-        return get_customer_memory(session_id)
+        return get_customer_memory(session_id, owner_user_id=_principal(request).user_id)
     except KeyError:
         raise HTTPException(status_code=404, detail='Session not found') from None
 
 
 @router.put('/{session_id}/memory')
-def update_customer_memory(session_id: str, body: CustomerMemoryBody):
+def update_customer_memory(session_id: str, body: CustomerMemoryBody, request: Request):
+    principal = _principal(request)
+    auth.assert_active(principal)
     try:
         with session_mutation(session_id):
             return save_customer_memory(session_id, consent=body.consent,
-                                        preferences=body.preferences)
+                                        preferences=body.preferences,
+                                        owner_user_id=principal.user_id)
     except KeyError:
         raise HTTPException(status_code=404, detail='Session not found') from None
     except ValueError as error:
@@ -56,10 +63,13 @@ def update_customer_memory(session_id: str, body: CustomerMemoryBody):
 
 
 @router.delete('/{session_id}/memory', status_code=204)
-def clear_customer_memory(session_id: str):
+def clear_customer_memory(session_id: str, request: Request):
+    principal = _principal(request)
+    auth.assert_active(principal)
     try:
         with session_mutation(session_id):
-            save_customer_memory(session_id, consent=False, preferences={})
+            save_customer_memory(session_id, consent=False, preferences={},
+                                 owner_user_id=principal.user_id)
     except KeyError:
         raise HTTPException(status_code=404, detail='Session not found') from None
     except SessionBusyError:
@@ -68,20 +78,24 @@ def clear_customer_memory(session_id: str):
 
 
 @router.get('/{session_id}/traces/{request_id}')
-def execution_trace(session_id: str, request_id: str):
-    if get_session(session_id, include_messages=False) is None:
+def execution_trace(session_id: str, request_id: str, request: Request):
+    owner = _principal(request).user_id
+    if get_session(session_id, owner_user_id=owner, include_messages=False) is None:
         raise HTTPException(status_code=404, detail='Session not found')
-    result = get_execution_trace(session_id, request_id)
+    result = get_execution_trace(session_id, request_id, owner_user_id=owner)
     if result is None:
         raise HTTPException(status_code=404, detail='Execution trace not recorded')
     return result
 
 
 @router.delete('/{session_id}', status_code=204)
-def remove_session(session_id: str):
+def remove_session(session_id: str, request: Request):
+    principal = _principal(request)
+    auth.assert_active(principal)
     try:
         with session_mutation(session_id):
-            if get_session(session_id, include_messages=False) is None:
+            if get_session(session_id, owner_user_id=principal.user_id,
+                           include_messages=False) is None:
                 raise HTTPException(status_code=404, detail='Session not found')
             # Remove graph state first; if it fails, retain the session for retry.
             from retailiq.orchestration.week1_graph import delete_session_checkpoints
@@ -91,7 +105,7 @@ def remove_session(session_id: str):
                 log_event('chat.checkpoint_delete_failed', level='ERROR',
                           error_type=type(error).__name__)
                 raise HTTPException(status_code=503, detail='Checkpoint cleanup failed') from None
-            delete_session(session_id)
+            delete_session(session_id, owner_user_id=principal.user_id)
     except SessionBusyError:
         raise HTTPException(status_code=409, detail='Session is processing another request') from None
     with bind_context(session=session_id):
