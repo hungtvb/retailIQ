@@ -24,6 +24,7 @@ from retailiq.api.roi import router as roi_router
 from retailiq.api.sessions import router as sessions_router
 from retailiq.api.logs import router as logs_router
 from retailiq.api.workflows import router as workflows_router
+from retailiq.api.uc01_proposals import router as uc01_router
 from fastapi import Request
 
 # Bound streaming capacity: prevent slow providers or disconnected clients
@@ -37,6 +38,7 @@ app.include_router(roi_router)
 app.include_router(sessions_router)
 app.include_router(logs_router)
 app.include_router(workflows_router)
+app.include_router(uc01_router)
 app.mount('/assets', StaticFiles(directory=Path(__file__).resolve().parents[2] / 'web' / 'assets'), name='assets')
 
 # New product UI is independently built and served alongside the existing
