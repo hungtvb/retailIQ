@@ -171,6 +171,8 @@ def main() -> None:
             with patch("retailiq.orchestration.week1_graph.chat_model",
                        return_value=_FakeRoutingModel()):
                 client = TestClient(app)
+                from scripts.isolated_auth import login_fixture_client
+                login_fixture_client(client)
                 session = client.post("/api/sessions", json={}).json()["id"]
                 temporal = client.post("/ask", json={
                     "session_id": session,
