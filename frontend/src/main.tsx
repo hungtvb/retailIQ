@@ -33,6 +33,16 @@ type StoredTrace = {
   truncated: boolean;
   events: ExecutionEvent[];
 };
+type Account = {user_id:string;username:string;role:'analyst'|'manager';csrf_token:string};
+type ReviewProposal = {
+  proposal_id:string;case_id:string;cutoff:string;snapshot_id:string;
+  warehouse_id:string;requested_units:number;available_units:number;
+  status:string;version:number;source_sha256:string;policy_id:string;
+  reviewed_by:string|null;operational_write_executed:boolean;
+};
+type ReviewEligibility = {
+  eligible:boolean;reason_codes:string[];candidate?:ReviewProposal;
+};
 
 const IDEAS = [
   {label:'Top sellers',question:'Which products are top sellers?'},
@@ -281,6 +291,16 @@ function App(){
   const [error,setError]=useState('');
   const [sidebarOpen,setSidebarOpen]=useState(false);
   const [loading,setLoading]=useState(true);
+  const [account,setAccount]=useState<Account|null>(null);
+  const [authLoading,setAuthLoading]=useState(true);
+  const [username,setUsername]=useState('');
+  const [password,setPassword]=useState('');
+  const [authError,setAuthError]=useState('');
+  const [proposals,setProposals]=useState<ReviewProposal[]>([]);
+  const [eligibility,setEligibility]=useState<ReviewEligibility|null>(null);
+  const [reviewBusy,setReviewBusy]=useState(false);
+  const [reviewNotice,setReviewNotice]=useState('');
+  const accountEpoch=useRef(0);
   const messageEnd=useRef<HTMLDivElement>(null);
   const activeIdRef=useRef('');
   const inFlight=useRef(false);
@@ -288,8 +308,87 @@ function App(){
 
   const busy=phase==='running';
 
+  function secureFetch(url:string, init:RequestInit={}){
+    const headers=new Headers(init.headers);
+    if(init.method && !['GET','HEAD'].includes(init.method.toUpperCase())){
+      if(!account?.csrf_token)throw new Error('Sign in again to continue.');
+      headers.set('X-CSRF-Token',account.csrf_token);
+    }
+    return fetch(url,{...init,headers,credentials:'same-origin'});
+  }
+  function clearWorkspace(){
+    ++requestSerial.current;
+    ++accountEpoch.current;
+    activeIdRef.current='';
+    inFlight.current=false;
+    setSessions([]);setActiveId('');setMessages([]);setQuestion('');
+    setPhase('ready');setGraph(emptyGraph());setLoading(false);
+    setSelectedRequestId('');setTraceTruncated(false);setError('');
+    setProposals([]);setEligibility(null);setReviewNotice('');
+    localStorage.removeItem('retailiq-workspace-session');
+    localStorage.removeItem('retailiq-workspace-owner');
+  }
+  async function signIn(){
+    setAuthError('');
+    try{
+      const res=await fetch('/api/auth/login',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        credentials:'same-origin',
+        body:JSON.stringify({username:username.trim(),password})
+      });
+      if(!res.ok)throw new Error('Invalid credentials or login temporarily unavailable.');
+      const me=await readJson<Account>(await fetch('/api/auth/me',{cache:'no-store'}));
+      // Never restore a conversation remembered for an earlier account.
+      if(localStorage.getItem('retailiq-workspace-owner')!==me.user_id){
+        localStorage.removeItem('retailiq-workspace-session');
+      }
+      setPassword('');setAccount(me);setLoading(true);
+    }catch(e){setAuthError((e as Error).message)}
+  }
+  async function signOut(){
+    try{
+      await readJson<unknown>(await secureFetch('/api/auth/logout',{method:'POST'}));
+      clearWorkspace();
+      setAccount(null);setAuthError('');setPassword('');
+    }catch(e){setError((e as Error).message)}
+  }
+  async function refreshProposals(){
+    if(!account)return;
+    const epoch=accountEpoch.current;
+    const url=account.role==='manager'?'/api/uc01/proposals':'/api/uc01/my-proposals';
+    const result=await readJson<{proposals:ReviewProposal[]}>(await secureFetch(url));
+    if(epoch===accountEpoch.current)setProposals(result.proposals??[]);
+  }
+  async function submitReview(){
+    if(!account||account.role!=='analyst'||!activeId||reviewBusy)return;
+    setReviewBusy(true);setReviewNotice('');
+    try{
+      const value=await readJson<ReviewProposal>(await secureFetch('/api/uc01/proposals',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({session_id:activeId})
+      }));
+      setReviewNotice('Submitted '+value.case_id+' for local Manager review.');
+      await refreshProposals();
+    }catch(e){setReviewNotice((e as Error).message)}
+    finally{setReviewBusy(false)}
+  }
+  async function decideReview(p:ReviewProposal, decision:'approve'|'reject'){
+    if(!account||account.role!=='manager'||reviewBusy)return;
+    setReviewBusy(true);setReviewNotice('');
+    try{
+      const result=await readJson<ReviewProposal>(await secureFetch(
+        '/api/uc01/proposals/'+encodeURIComponent(p.proposal_id)+'/decision',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({decision,expected_version:p.version})
+        }));
+      setReviewNotice(result.status+' · local proposal only; no transfer executed.');
+      await refreshProposals();
+    }catch(e){setReviewNotice((e as Error).message)}
+    finally{setReviewBusy(false)}
+  }
+
   async function refreshSessions(){
-    const list=await readJson<{sessions:SessionItem[]}>(await fetch('/api/sessions'));
+    const list=await readJson<{sessions:SessionItem[]}>(await secureFetch('/api/sessions'));
     setSessions(list.sessions ?? []);
     return list.sessions ?? [];
   }
@@ -302,7 +401,7 @@ function App(){
       return;
     }
     try {
-      const saved=await readJson<StoredTrace>(await fetch('/api/sessions/'+
+      const saved=await readJson<StoredTrace>(await secureFetch('/api/sessions/'+
         encodeURIComponent(sid)+'/traces/'+encodeURIComponent(requestId)));
       if(serial!==requestSerial.current)return;
       let next=startGraph(saved.request_id);
@@ -322,7 +421,7 @@ function App(){
     const serial=++requestSerial.current;
     setError('');setLoading(true);setGraph(emptyGraph());
     try{
-      const session=await readJson<Session>(await fetch('/api/sessions/'+encodeURIComponent(id)));
+      const session=await readJson<Session>(await secureFetch('/api/sessions/'+encodeURIComponent(id)));
       if(serial!==requestSerial.current) return;
       activeIdRef.current=id;setActiveId(id);
       setMessages(session.messages??[]);
@@ -349,7 +448,7 @@ function App(){
     const confirmed=window.confirm('Delete this conversation and its saved messages?');
     if(!confirmed) return;
     try{
-      await readJson<unknown>(await fetch('/api/sessions/'+encodeURIComponent(id),{method:'DELETE'}));
+      await readJson<unknown>(await secureFetch('/api/sessions/'+encodeURIComponent(id),{method:'DELETE'}));
     }catch(e){
       // 204 has no JSON body; errors are handled below for non-2xx.
       setError((e as Error).message);return;
@@ -357,29 +456,65 @@ function App(){
     if(activeIdRef.current===id)newChat();
     await refreshSessions().catch(e=>setError((e as Error).message));
   }
-  // Initialize sessions once; never create an empty persisted conversation.
+  // Auth must bootstrap before a protected chat, source, or review fetch.
   useEffect(()=>{
     let mounted=true;
     (async()=>{
       try{
-        const list=await readJson<{sessions:SessionItem[]}>(await fetch('/api/sessions'));
-        if(!mounted)return;
+        const response=await fetch('/api/auth/me',{cache:'no-store'});
+        if(response.ok && mounted){
+          const me=await readJson<Account>(response);
+          if(localStorage.getItem('retailiq-workspace-owner')!==me.user_id)
+            localStorage.removeItem('retailiq-workspace-session');
+          setAccount(me);
+        }
+      }catch{/* No current identity; show the login page. */}
+      finally{if(mounted)setAuthLoading(false)}
+    })();
+    return()=>{mounted=false};
+  },[]);
+  // Rehydrate only conversations owned by the active account.
+  useEffect(()=>{
+    if(!account){setLoading(false);return}
+    const epoch=accountEpoch.current;
+    localStorage.setItem('retailiq-workspace-owner',account.user_id);
+    let mounted=true;
+    setLoading(true);
+    (async()=>{
+      try{
+        const list=await readJson<{sessions:SessionItem[]}>(await secureFetch('/api/sessions'));
+        if(!mounted||epoch!==accountEpoch.current)return;
         setSessions(list.sessions??[]);
         const remembered=localStorage.getItem('retailiq-workspace-session');
         if(remembered && list.sessions?.some(s=>s.id===remembered)){
-          const session=await readJson<Session>(await fetch('/api/sessions/'+encodeURIComponent(remembered)));
-          if(!mounted)return;
+          const session=await readJson<Session>(await secureFetch('/api/sessions/'+encodeURIComponent(remembered)));
+          if(!mounted||epoch!==accountEpoch.current)return;
           activeIdRef.current=remembered;setActiveId(remembered);
           setMessages(session.messages??[]);
           setGraph(unavailableGraph());
           const latest=[...(session.messages??[])].reverse().find(m=>m.role==='assistant');
           void restoreTrace(remembered,latest?.request_id,requestSerial.current);
         }
-      }catch(e){if(mounted)setError((e as Error).message)}
-      finally{if(mounted)setLoading(false)}
+      }catch(e){if(mounted&&epoch===accountEpoch.current)setError((e as Error).message)}
+      finally{if(mounted&&epoch===accountEpoch.current)setLoading(false)}
     })();
     return()=>{mounted=false};
-  },[]);
+  },[account?.user_id]);
+  useEffect(()=>{
+    if(!account)return;
+    void refreshProposals().catch(e=>setReviewNotice((e as Error).message));
+  },[account?.user_id]);
+  useEffect(()=>{
+    if(account?.role!=='analyst'||!activeId){
+      setEligibility(null);return;
+    }
+    let mounted=true;
+    secureFetch('/api/uc01/eligibility?session_id='+encodeURIComponent(activeId))
+      .then(r=>readJson<ReviewEligibility>(r))
+      .then(value=>{if(mounted)setEligibility(value)})
+      .catch(()=>{if(mounted)setEligibility({eligible:false,reason_codes:['SOURCE_UNAVAILABLE']})});
+    return()=>{mounted=false};
+  },[account?.user_id,activeId,messages.length,phase]);
   useEffect(()=>{messageEnd.current?.scrollIntoView({block:'end',behavior:'auto'})},
     [messages,phase]);
 
@@ -395,7 +530,7 @@ function App(){
     let sessionId=activeIdRef.current;
     try{
       if(!sessionId){
-        const created=await readJson<SessionItem>(await fetch('/api/sessions',{
+        const created=await readJson<SessionItem>(await secureFetch('/api/sessions',{
           method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({title:content.slice(0,78)})
         }));
@@ -403,7 +538,7 @@ function App(){
         localStorage.setItem('retailiq-workspace-session',sessionId);
         await refreshSessions();
       }
-      const response=await fetch('/ask/stream',{
+      const response=await secureFetch('/ask/stream',{
         method:'POST',headers:{'Content-Type':'application/json','Accept':'text/event-stream'},
         body:JSON.stringify({question:content,session_id:sessionId})
       });
@@ -426,7 +561,7 @@ function App(){
       if(!hasDone||!result)throw new Error('Stream ended before the answer was received.');
       setGraph(prev=>finishGraph(prev,true));
       setSelectedRequestId((result as AskResult).request_id||'');
-      const session=await readJson<Session>(await fetch('/api/sessions/'+encodeURIComponent(sessionId)));
+      const session=await readJson<Session>(await secureFetch('/api/sessions/'+encodeURIComponent(sessionId)));
       if(serial===requestSerial.current){
         setMessages(session.messages??[]);
         setPhase('complete');
@@ -438,7 +573,7 @@ function App(){
       setPhase('error');
       if(sessionId) {
         try{
-          const saved=await readJson<Session>(await fetch('/api/sessions/'+encodeURIComponent(sessionId)));
+          const saved=await readJson<Session>(await secureFetch('/api/sessions/'+encodeURIComponent(sessionId)));
           if(serial===requestSerial.current)setMessages(saved.messages??[]);
         }catch{/* Preserve the user question if the network is down. */}
       }
@@ -446,6 +581,22 @@ function App(){
   }
   const statusLabel=busy?'Processing':phase==='error'?'Execution failed':
     phase==='complete'?'Complete':'Ready';
+  if(authLoading)return <div className="auth-shell"><p>Checking local sign-in…</p></div>;
+  if(!account)return <div className="auth-shell">
+    <form className="auth-card" onSubmit={e=>{e.preventDefault();void signIn()}}>
+      <span className="pane-eyebrow">RETAILIQ · PRIVATE WORKSPACE</span>
+      <h1>Sign in</h1>
+      <p>Use your local Analyst or Manager account. No default credentials are provided.</p>
+      <label htmlFor="auth-username">Username</label>
+      <input id="auth-username" autoComplete="username" required maxLength={64}
+        value={username} onChange={e=>setUsername(e.target.value)}/>
+      <label htmlFor="auth-password">Password</label>
+      <input id="auth-password" type="password" autoComplete="current-password" required
+        value={password} onChange={e=>setPassword(e.target.value)}/>
+      {authError&&<p className="auth-error" role="alert">{authError}</p>}
+      <button type="submit" className="auth-submit">Sign in</button>
+    </form>
+  </div>;
   return <div className="app-shell">
     <header className="app-header">
       <button className="mobile-menu" aria-label="Toggle conversations" onClick={()=>setSidebarOpen(v=>!v)}>
@@ -456,8 +607,10 @@ function App(){
       </a>
       <span className="header-divider"/>
       <span className="product-label">Agentic Analytics</span>
-      <div className="header-right"><span className="header-version">WORKSPACE</span>
-        <span className="header-status"><span/> Data-backed answers</span></div>
+      <div className="header-right">
+        <span className="header-account">{account.username} · {account.role}</span>
+        <button className="auth-logout" onClick={()=>void signOut()}>Sign out</button>
+      </div>
     </header>
     <div className="app-body">
       <aside className={'sidebar'+(sidebarOpen?' sidebar-open':'')} aria-label="Conversations">
@@ -545,6 +698,38 @@ function App(){
               graph.phase==='unavailable'?'Not recorded':'Standby'}</span>
           </div>
           <GraphCanvas graph={graph}/>
+          <section className="review-section" aria-label="UC-01 local Manager review">
+            <div className="review-heading">
+              <div><span className="pane-eyebrow">UC-01 · HISTORICAL CASE</span>
+                <h3>{account.role==='manager'?'Manager inbox':'Review proposals'}</h3></div>
+              <button className="review-refresh" disabled={reviewBusy}
+                onClick={()=>void refreshProposals()}>Refresh</button>
+            </div>
+            <p className="review-boundary">Decisions are local records only. No warehouse transfer, reservation or order update is executed.</p>
+            {account.role==='analyst'&&eligibility?.eligible&&
+              <div className="review-eligible">
+                <p>Verified candidate: <strong>{eligibility.candidate?.snapshot_id}</strong>
+                  {' · '+eligibility.candidate?.available_units} historical units available</p>
+                <button className="review-action" disabled={reviewBusy||busy}
+                  onClick={()=>void submitReview()}>Submit for Manager review</button>
+              </div>}
+            {account.role==='analyst'&&eligibility&&!eligibility.eligible&&activeId&&
+              <p className="review-muted">No eligible verified proposal for this conversation.</p>}
+            {reviewNotice&&<p className="review-notice" role="status">{reviewNotice}</p>}
+            <div className="review-list">
+              {proposals.length===0&&<p className="review-muted">No local review items.</p>}
+              {proposals.map(p=><article key={p.proposal_id} className="review-item">
+                <strong>{p.case_id}</strong>
+                <span className="review-status">{p.status.replaceAll('_',' ')}</span>
+                <small>Snapshot {p.snapshot_id} · {p.available_units} available / {p.requested_units} requested</small>
+                <small>Cutoff {p.cutoff} · source {p.source_sha256.slice(0,12)}</small>
+                {account.role==='manager'&&p.status==='PENDING'&&<div className="review-buttons">
+                  <button disabled={reviewBusy} onClick={()=>void decideReview(p,'approve')}>Approve locally</button>
+                  <button disabled={reviewBusy} onClick={()=>void decideReview(p,'reject')}>Reject locally</button>
+                </div>}
+              </article>)}
+            </div>
+          </section>
           {traceTruncated&&<div className="trace-warning" role="status">
             Partial trace: the event capture limit was reached.
           </div>}
