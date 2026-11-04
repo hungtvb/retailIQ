@@ -199,7 +199,7 @@ def _fiction_inventory_request(question: str) -> tuple[str, str | None] | None:
     # The undated stock table cannot answer historical/live source-time questions.
     if any(token in lower for token in (
             'hiện tại', 'ngay lúc này', 'hôm nay', 'hôm qua', 'tuần trước',
-            'tháng trước', 'at ', 'as of', 'today', 'yesterday', 'now',
+            'tháng trước', ' at ', 'as of', 'today', 'yesterday', 'now',
             'right now', 'current', 'live', 'realtime', 'real-time')):
         raise InvalidCaseId('UNSUPPORTED_TEMPORAL_SCOPE: Fiction stock has no observation timestamp')
     from retailiq.domain.fiction import _id
@@ -848,10 +848,13 @@ def run(q: str, *, history: list[dict] | None = None, active_agent: str = '',
             'skill': result.get('skill', ''),
             'route_fallback': result.get('route_fallback', False),
             'query_plan': result.get('query_plan')}
-    if result['intent'] in ('backorder', 'fiction_stock'):
+    if result['intent'] == 'backorder':
         payload.update({key: result[key] for key in
                         ('disposition', 'evidence_refs', 'findings', 'limitations',
                          'approval_status', 'reason_codes', 'source', 'capability_plan', 'temporal')})
+    elif result['intent'] == 'fiction_stock':
+        payload.update({key: result[key] for key in
+                        ('evidence_refs', 'limitations', 'source', 'temporal')})
     if result['intent'] == 'fiction_stock':
         payload['mode'] = 'LangGraph + Fiction MCP stdio (undated stock)'
         payload['as_of'] = result.get('temporal', {}).get('dataset_business_as_of')
