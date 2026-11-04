@@ -4,6 +4,7 @@ import sqlite3
 
 import pytest
 from fastapi.testclient import TestClient
+from tests.auth_client import signed_in_client
 
 from retailiq.api import app
 from scripts.seed import seed
@@ -16,7 +17,8 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("RETAILIQ_DATA_DB", str(data))
     monkeypatch.setenv("RETAILIQ_WORKFLOW_DB", str(tmp_path / "workflow.sqlite3"))
     monkeypatch.setenv("RETAILIQ_MODE", "offline")
-    return TestClient(app), data
+    monkeypatch.setenv("RETAILIQ_CHAT_DB", str(tmp_path / "chat.sqlite3"))
+    return signed_in_client(app), data
 
 
 def submit(client, scenario, **kwargs):
