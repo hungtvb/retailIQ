@@ -141,6 +141,8 @@ jobs:
     if: github.event_name == 'pull_request' && contains(github.event.pull_request.title, 'T02')
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      RETAILIQ_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
     permissions:
       contents: read
     steps:
