@@ -139,7 +139,7 @@ jobs:
   # Refactor R1-A/R1-B can alter G1 routing; use the same oracle gate, no new workflow.
   # The paid G1 follows only after code merge and manual main dispatch.
   fiction-t02-oracle:
-    if: github.event_name == 'pull_request' && (contains(github.event.pull_request.title, 'T02') || contains(github.event.pull_request.title, 'R1-A') || contains(github.event.pull_request.title, 'R1-B'))
+    if: github.event_name == 'pull_request' && (contains(github.event.pull_request.title, 'T02') || contains(github.event.pull_request.title, 'R1-A') || contains(github.event.pull_request.title, 'R1-B') || contains(github.event.pull_request.title, 'T05'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -171,10 +171,22 @@ jobs:
             --knowledge-root "$RUNNER_TEMP/fiction-retail/knowledge" \
             --retailiq-manifest data/fiction/manifest.json \
             --out data/quality_reports/uc01_t02_g1.json
+      - name: T05 exact-policy G1 source, graph and citation (FAKE model, NO LLM)
+        if: contains(github.event.pull_request.title, 'T05')
+        run: |
+          python -m scripts.verify_uc01_policy_live --oracle-only \
+            --db "$RUNNER_TEMP/fiction-retail/data/fiction_retail.sqlite" \
+            --manifest "$RUNNER_TEMP/fiction-retail/manifest.json" \
+            --knowledge-root "$RUNNER_TEMP/fiction-retail/knowledge" \
+            --retailiq-manifest data/fiction/manifest.json \
+            --out data/quality_reports/uc01_t05_policy.json
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: retailiq-t02-real-release-oracle
-          path: data/quality_reports/uc01_t02_g1.json
+          path: |
+            data/quality_reports/uc01_t02_g1.json
+            data/quality_reports/uc01_t05_policy.json
           if-no-files-found: ignore
           retention-days: 7
