@@ -9,7 +9,7 @@
 - `retailiq/domain/fiction.py::FictionStore.open(db_path, manifest_path)` uses an **explicit path** to the verified `data/fiction/fiction_retail.sqlite` release; `data/fiction/manifest.json` is pinned in Git, while the SQLite binary stays local. It exposes read-only `product`, `order`, `inventory`, `top_sellers`, `refund` and `fulfillment_case` facts with release hash, scope, evidence refs, time and limitations.
 - **Fiction source semantics:** `products.product_id` canonical, one generated `FR-` SKU, USD, `delivered` status, dated **case** observations (not the undated base inventory), and policies effective at the **case cutoff**. A candidate warehouse observation is not approval. For full field/temporal rules see [Fiction Runtime](FICTION_RUNTIME.md) and [UC-01 target Implementation Detail](implementation/UC-01-backorder.md).
 - **UC-01 first wired path:** `/ask` with exactly one canonical `CASE-UUID` and `RETAILIQ_MODE=full` routes via existing LangGraph to trusted `fiction.backorder.investigate` (#40). It reads `RETAILIQ_FICTION_DB` (default `data/fiction/fiction_retail.sqlite`), pinned `RETAILIQ_FICTION_MANIFEST` and `RETAILIQ_FICTION_KNOWLEDGE_ROOT` (default `data/fiction/knowledge`). The answer includes `disposition`, verified `findings/evidence_refs`, `limitations`, `source`, exact `as_of` cutoff and `approval_status=NOT_REQUESTED`; source records reflect historical observations, never live inventory or transfer approval. Malformed/multiple `CASE-ID` inputs fail before model or SQL with HTTP `422` (`invalid_case_id` SSE error); a missing Fiction case or corrupt source is not silently converted to a verified business finding. T03 persists bounded `case_binding` in the committed assistant message's existing `evidence_json` and re-verifies release hash/case cutoff for follow-ups about warehouse policy or alternatives. Missing/corrupt session evidence or unverified warehouse order requires clarification (`422`); explicit CASE-ID overrides inherited reference. Fixture compiled-graph tests exist; real-provider acceptance is pending.
-- **All other chat/MCP/RAG paths** in the following table still use historical/current legacy semantics; this first UC-01 route does **not** establish a general Fiction cutover.
+- **Except the explicitly bounded T04 Fiction MCP paths (§6)**, other chat/RAG paths retain their legacy semantics; there is **no general Fiction cutover**.
 
 ## 1. Data authority and storage — existing legacy chat
 
@@ -157,17 +157,18 @@ Scenario names retain historical course IDs for compatibility; they are not a re
 
 Non-loopback peer/Host requests to the app are rejected with `403`, including health, logs and workflows. Do not expose these unauthenticated local interfaces on a public network.
 
-## 6. Local MCP contract (not HTTP routes)
+## 6. Local Fiction MCP contract (not HTTP routes)
 
-`python -m retailiq.mcp_server` starts an optional **stdio** FastMCP server backed by synthetic read-only SQLite. Tool contracts in `retailiq/mcp_server.py`:
+**T04 implementation under review; do not infer acceptance from code.** The existing `python -m retailiq.mcp_server` remains a local stdio FastMCP server, now reading the **pinned Fiction unified SQLite release** through `FictionStore.open()`. No network/production integration, operational writes, independent data source or automatic freshness guarantee.
 
-| MCP primitive | Input | Return / limitation |
+| MCP tool | Input | Returned evidence |
 |---|---|---|
-| Tool `inventory_lookup` | `sku` | Per-location stock `records`, aggregate `available`, local snapshot source and freshness notice |
-| Tool `order_lookup` | `order_id` formatted `ORD-0001` | Synthetic order and lines; unknown order returns null order/empty lines; never modifies status |
-| Resource `retailiq://semantics` | — | Plain-text canonical semantic summary, plus reminder that observed timestamps are needed |
+| `inventory_lookup` | `product`: one full FR-SKU or canonical product UUID; optional `warehouse_id` UUID | Bounded base inventory rows, `available_snapshot=on_hand-reserved`, source/version/hash, `scope`, refs and explicit `UNDATED_INVENTORY` limitation. No `as_of` parameter; historical/live stock is unsupported. Unknown product/warehouse and missing rows are distinct. |
+| `order_lookup` | Canonical Fiction order UUID | Validated order/line/shipment fields, source hash, refs and release-recorded temporal warning, without customer PII. Unknown order returns `data=null` with `ORDER_NOT_FOUND`. |
 
-The LangChain MCP adapter is `retailiq/mcp_adapter.py`; it validates decoded tool results against inventory/SQL invariants. These are **local** MCP transport capabilities, not enterprise APIs, remote tools or proof of actual data freshness.
+`retailiq/mcp_adapter.py` uses real stdio discovery and tool invocation, rejects tool errors before decoding, and validates source, requested IDs, scoped rows and evidence refs. In full LangGraph mode, an explicit FR-SKU inventory question invokes MCP; a verified same-session UC-01 case order-detail follow-up re-verifies case/cutoff/source before calling Order MCP. Generic legacy SQL and standard UC-01 case investigation stay direct; no redundant MCP "corroboration".
+
+The former legacy `RETAILIQ_INVENTORY_USE_MCP` opt-in and workflow MCP opt-in do **not** migrate `EL-###` stock to Fiction. Those legacy MCP paths now reject unsupported access, rather than presenting mixed-dataset answers. Source release business-as-of is **not** inventory observation time. A release-recorded shipment/order status must never be attributed to the historical case cutoff. Tests in `scripts.smoke_mcp_stdio` are a real stdio transport with **mini Fiction fixture and fake CASE router**, not an actual 199MiB-release or live-model acceptance.
 
 ## 7. Contract change and verification rules
 
