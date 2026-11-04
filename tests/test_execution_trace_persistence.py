@@ -1,6 +1,7 @@
 """Execution trace evidence: durable, request-scoped, redacted and deleted with its session."""
 import json
 from fastapi.testclient import TestClient
+from tests.auth_client import signed_in_client, active_principal
 from retailiq.api import app
 from retailiq.infrastructure.sessions import save_execution_trace, get_execution_trace
 
@@ -9,7 +10,7 @@ def test_trace_persisted_and_request_scoped(tmp_path, monkeypatch):
     monkeypatch.setenv('RETAILIQ_MODE', 'offline')
     monkeypatch.setenv('RETAILIQ_CHAT_DB', str(tmp_path / 'sessions.sqlite3'))
     monkeypatch.setenv('RETAILIQ_LOG_FILE', str(tmp_path / 'events.jsonl'))
-    client = TestClient(app)
+    client = signed_in_client(app)
     first = client.post('/api/sessions', json={}).json()['id']
     second = client.post('/api/sessions', json={}).json()['id']
 
@@ -40,11 +41,12 @@ def test_trace_persisted_and_request_scoped(tmp_path, monkeypatch):
 
 def test_trace_rejects_unsaved_turn_and_redacts_fields(tmp_path, monkeypatch):
     monkeypatch.setenv('RETAILIQ_CHAT_DB', str(tmp_path / 'sessions.sqlite3'))
-    client = TestClient(app)
+    client = signed_in_client(app)
     first = client.post('/api/sessions', json={}).json()['id']
+    actor = active_principal(client)
     assert not save_execution_trace(first, 'not-a-turn', [
-        {'event':'agent.routed','request_id':'not-a-turn','session_id':first}])
-    assert get_execution_trace(first, 'not-a-turn') is None
+        {'event':'agent.routed','request_id':'not-a-turn','session_id':first}], principal=actor)
+    assert get_execution_trace(first, 'not-a-turn', owner_user_id=actor.user_id) is None
 
     result = client.post('/ask/stream', json={
         'question':'Which products are top sellers?', 'session_id':first})
@@ -55,7 +57,7 @@ def test_trace_rejects_unsaved_turn_and_redacts_fields(tmp_path, monkeypatch):
             'stack_trace':[{'file':'secret.py'}]}
     bad = {'event':'agent.routed','request_id':'another-request',
            'session_id':first, 'agent':'inventory_agent'}
-    assert save_execution_trace(first, rid, [good, bad])
+    assert save_execution_trace(first, rid, [good, bad], principal=actor)
     events = client.get(f'/api/sessions/{first}/traces/{rid}').json()['events']
     assert len(events) == 1 and events[0]['agent'] == 'sales_agent'
     assert 'prompt' not in events[0] and 'answer' not in events[0]
@@ -66,7 +68,7 @@ def test_repeated_questions_have_separate_trace_ids(tmp_path, monkeypatch):
     monkeypatch.setenv('RETAILIQ_MODE', 'offline')
     monkeypatch.setenv('RETAILIQ_CHAT_DB', str(tmp_path / 'sessions.sqlite3'))
     monkeypatch.setenv('RETAILIQ_LOG_FILE', str(tmp_path / 'events.jsonl'))
-    client=TestClient(app)
+    client=signed_in_client(app)
     sid=client.post('/api/sessions',json={}).json()['id']
     for question in ('Which products are top sellers?', 'What is the revenue this month?'):
         response=client.post('/ask/stream',json={'question':question,'session_id':sid})
