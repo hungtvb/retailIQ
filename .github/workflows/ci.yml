@@ -104,3 +104,33 @@ jobs:
       # The retired EL-SKU browser MCP opt-in is incompatible with the single
       # Fiction source contract. Actual Fiction MCP stdio + compiled graph + SSE
       # are exercised above; browser-specific Fiction MCP acceptance stays #30.
+
+  # This gate is intentionally PR-scoped: ordinary changes must not fetch
+  # the 209MB Fiction LFS release. It verifies actual data, not a test fixture.
+  fiction-t04-release:
+    if: github.event_name == 'pull_request' && contains(github.event.pull_request.title, 'T04')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install supported-by-current-slice MCP dependencies
+        run: python -m pip install 'mcp>=1.28,<2' 'langchain-mcp-adapters>=0.1,<1'
+      - name: Fetch published Fiction LFS release (not source fixture)
+        env:
+          GIT_LFS_SKIP_SMUDGE: '1'
+        run: |
+          git lfs version
+          git clone --depth 1 --filter=blob:none https://github.com/hungtvb/fiction-retail.git "$RUNNER_TEMP/fiction-retail"
+          git -C "$RUNNER_TEMP/fiction-retail" lfs pull --include="data/fiction_retail.sqlite" --exclude=""
+          test "$(stat -c%s "$RUNNER_TEMP/fiction-retail/data/fiction_retail.sqlite")" -eq 209063936
+      - name: Pinned real Fiction release / independent SQL / MCP stdio
+        run: |
+          python -m scripts.verify_t04_real_release \
+            --db "$RUNNER_TEMP/fiction-retail/data/fiction_retail.sqlite" \
+            --manifest "$RUNNER_TEMP/fiction-retail/manifest.json" \
+            --retailiq-manifest data/fiction/manifest.json
