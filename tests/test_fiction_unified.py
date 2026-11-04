@@ -912,3 +912,66 @@ def test_t04_adapter_rejects_error_before_decoding_and_wrong_source(fiction):
         _verify_envelope(result, "0" * 64, "inventory_lookup", {"product": P1, "warehouse_id": None})
     assert _verify_envelope(result, store.release["runtime_sha256"],
                             "inventory_lookup", {"product": P1, "warehouse_id": None}) == result
+
+
+@pytest.mark.parametrize("question,has_warehouse", [
+    ("Tồn kho của {sku} là bao nhiêu?", False),
+    ("Tồn kho {sku} tại kho {warehouse}", True),
+    ("Show stock for {sku} across all warehouses", False),
+    ("Stock of {sku} at warehouse {warehouse}", True),
+    ("tồn kho của {sku} ở các kho?", False),
+])
+def test_t04_bounded_stock_route_vietnamese_and_english(question, has_warehouse):
+    from retailiq.orchestration.week1_graph import _fiction_inventory_request
+    sku = "FR-" + sha256(P1.encode()).hexdigest()[:16].upper()
+    parsed = _fiction_inventory_request(question.format(sku=sku, warehouse=W1))
+    assert parsed == (sku, W1 if has_warehouse else None)
+
+
+@pytest.mark.parametrize("question", [
+    "Tồn kho {sku} ngày 20/10/2026?",
+    "Tồn kho {sku} tháng 10?",
+    "Tồn kho {sku} trong tuần trước?",
+    "Stock for {sku} as of 2026-10-20",
+    "Stock for {sku} in October 2026",
+    "Stock for {sku} today?",
+    "Show current stock for {sku}",
+    "Show stock for {sku} in 10/2026",
+])
+def test_t04_stock_time_scope_never_silently_dropped(question):
+    from retailiq.orchestration.week1_graph import _fiction_inventory_request, InvalidFictionScope
+    sku = "FR-" + sha256(P1.encode()).hexdigest()[:16].upper()
+    with pytest.raises(InvalidFictionScope, match="UNSUPPORTED_TEMPORAL_SCOPE"):
+        _fiction_inventory_request(question.format(sku=sku))
+
+
+@pytest.mark.parametrize("question", [
+    "Tồn kho và doanh thu của {sku}?",
+    "Stock and revenue for {sku}",
+    "So sánh tồn kho {sku} và đơn hàng",
+    "Stock for {sku} and order status",
+])
+def test_t04_stock_mixed_intent_is_not_dropped(question):
+    from retailiq.orchestration.week1_graph import _fiction_inventory_request, InvalidFictionScope
+    sku = "FR-" + sha256(P1.encode()).hexdigest()[:16].upper()
+    with pytest.raises(InvalidFictionScope, match="MULTI_INTENT_UNSUPPORTED"):
+        _fiction_inventory_request(question.format(sku=sku))
+
+
+def test_t04_stock_unbound_warehouse_id_is_rejected():
+    from retailiq.orchestration.week1_graph import _fiction_inventory_request, InvalidFictionScope
+    sku = "FR-" + sha256(P1.encode()).hexdigest()[:16].upper()
+    with pytest.raises(InvalidFictionScope, match="warehouse UUID"):
+        _fiction_inventory_request(f"Stock {sku} at {W1}")
+
+
+def test_t04_corrupt_shipment_warehouse_rejected_from_shared_domain(fiction):
+    path, manifest, _ = fiction
+    shipment_id = "88888888-8888-4888-8888-888888888888"
+    unknown = "99999999-9999-4999-8999-999999999999"
+    with sqlite3.connect(path) as conn:
+        conn.execute("INSERT INTO shipments VALUES (?,?,?,?,?,?)",
+                     (shipment_id, O1, unknown, "2026-10-17", None, "shipped"))
+    store = reseal(path, manifest)
+    with pytest.raises(FictionDataError, match="unknown warehouse"):
+        store.order(O1)
