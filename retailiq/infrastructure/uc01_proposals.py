@@ -169,3 +169,71 @@ def manager_proposal(principal: SecurityContext, proposal_id: str) -> dict | Non
         row = db.execute("SELECT * FROM uc01_proposals WHERE proposal_id=?",
                          (proposal_id,)).fetchone()
     return _view(row, manager=True) if row else None
+
+
+def snapshot_for_manager(principal: SecurityContext, proposal_id: str) -> dict | None:
+    """Private reread for verifying the immutable source; no chat access."""
+    if principal.role != "manager":
+        raise PermissionError("Manager access required")
+    _schema()
+    with _connect() as db:
+        row = db.execute(
+            "SELECT owner_user_id,snapshot_json FROM uc01_proposals WHERE proposal_id=?",
+            (proposal_id,)).fetchone()
+    if row is None:
+        return None
+    if row["owner_user_id"] == principal.user_id:
+        raise PermissionError("Submitter cannot review their own proposal")
+    return json.loads(row["snapshot_json"])
+
+
+def decide_proposal(proposal_id: str, decision: str, expected_version: int,
+                    reviewer: SecurityContext, *, verified_snapshot: dict) -> dict:
+    """Single-writer local decision with auth, ownership, source fingerprint and CAS.
+
+    Caller supplies server-recomputed verified facts, never a browser snapshot.
+    The app SQLite transaction serializes revocation, both Manager reviewers
+    and the decision row; Fiction database remains read-only.
+    """
+    if reviewer.role != "manager":
+        raise PermissionError("Manager access required")
+    if decision not in ("approve", "reject"):
+        raise ValueError("Invalid decision")
+    if type(expected_version) is not int or expected_version < 1:
+        raise ValueError("Positive expected_version required")
+    _, fingerprint = _fingerprint(verified_snapshot)
+    target = "APPROVED_LOCAL" if decision == "approve" else "REJECTED_LOCAL"
+    _schema()
+    now = int(time.time())
+    with _connect() as db:
+        db.execute("BEGIN IMMEDIATE")
+        active = db.execute("""SELECT 1 FROM auth_sessions a
+            JOIN users u ON u.id=a.user_id
+            WHERE a.id=? AND a.user_id=? AND u.role='manager'
+              AND u.disabled=0 AND a.revoked_at IS NULL AND a.expires_at>?""",
+            (reviewer.auth_session_id, reviewer.user_id, now)).fetchone()
+        if active is None:
+            raise PermissionError("Manager authentication revoked")
+        row = db.execute(
+            "SELECT * FROM uc01_proposals WHERE proposal_id=?", (proposal_id,)
+        ).fetchone()
+        if row is None:
+            raise KeyError("Proposal not found")
+        if row["owner_user_id"] == reviewer.user_id:
+            raise PermissionError("Self review is forbidden")
+        if (row["status"] != "PENDING"
+                or row["expires_at"] <= now
+                or row["version"] != expected_version
+                or row["snapshot_fingerprint"] != fingerprint):
+            raise ProposalConflict("Stale, expired or changed historical proposal")
+        changed = db.execute("""UPDATE uc01_proposals
+            SET status=?,version=version+1,reviewed_by=?,reviewed_at=?
+            WHERE proposal_id=? AND status='PENDING'
+              AND version=? AND expires_at>?""",
+            (target, reviewer.user_id, now, proposal_id, expected_version, now))
+        if changed.rowcount != 1:
+            raise ProposalConflict("Concurrent Manager decision conflict")
+        committed = db.execute(
+            "SELECT * FROM uc01_proposals WHERE proposal_id=?", (proposal_id,)
+        ).fetchone()
+        return _view(committed, manager=True)
