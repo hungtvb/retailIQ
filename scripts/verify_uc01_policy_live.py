@@ -21,13 +21,33 @@ from scripts.verify_uc01_live_release import (
 )
 
 
-def execute_policy_turns(db: Path, manifest: Path, knowledge: Path, oracle: dict) -> dict:
+def execute_policy_turns(db: Path, manifest: Path, knowledge: Path, oracle: dict, *,
+                         offline_fake_model: bool = False) -> dict:
     from fastapi.testclient import TestClient
     from retailiq.api import app
     from retailiq.observability import list_events
     from retailiq.orchestration import week1_graph as graph
     from retailiq.rag.policy_explanation import PolicyQuote
     original_factory = graph.chat_model
+    if offline_fake_model:
+        class FixtureModel:
+            def with_structured_output(self, schema):
+                self.kind = schema.__name__
+                return self
+
+            def invoke(self, messages):
+                if self.kind == "Route":
+                    return SimpleNamespace(intent="backorder")
+                _check(self.kind == "PolicyQuote", "Unknown offline model schema")
+                query = json.loads(messages[-1][1])["question"]
+                if "24 hours" in query:
+                    return PolicyQuote(
+                        section="inventory-information",
+                        quote="Observations more than 24 hours old are not sufficient to authorize a transfer.")
+                return PolicyQuote(
+                    section="review-and-approval",
+                    quote="An authorized Operations Manager must approve the request before any transfer, reservation or order change is executed.")
+        original_factory = lambda: FixtureModel()
     calls = {"route": 0, "policy_quote": 0}
 
     class ObservedModel:
@@ -166,7 +186,8 @@ def execute_policy_turns(db: Path, manifest: Path, knowledge: Path, oracle: dict
                            invalid.get("approval_status") == "NOT_REQUESTED"
                            and invalid.get("disposition") == "NEEDS_REVIEW",
                            "Invalid model quote entered authoritative business result")
-                    return {"provider_calls": "ACTUAL_CONFIGURED_LLM",
+                    return {"provider_calls": ("FAKE_ROUTER_AND_QUOTE_NO_LLM" if offline_fake_model
+                                       else "ACTUAL_CONFIGURED_LLM"),
                             "observed_structured_calls": calls,
                             "case_id": CASE, "cutoff": CUTOFF,
                             "policy_id": POLICY, "policy_sha256": POLICY_SHA,
@@ -180,7 +201,9 @@ def execute_policy_turns(db: Path, manifest: Path, knowledge: Path, oracle: dict
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--confirm-live", action="store_true", required=True)
+    modes = parser.add_mutually_exclusive_group(required=True)
+    modes.add_argument("--confirm-live", action="store_true")
+    modes.add_argument("--oracle-only", action="store_true")
     parser.add_argument("--db", type=Path, required=True)
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--knowledge-root", type=Path, required=True)
@@ -189,23 +212,28 @@ def main() -> None:
                         default=Path("data/quality_reports/uc01_t05_policy.json"))
     args = parser.parse_args()
     started = time.perf_counter()
-    report = {"status": "FAIL", "mode": "PROVIDER_BACKED_POLICY_RAG_REAL_FICTION",
+    report = {"status": "FAIL",
+              "mode": ("PROVIDER_BACKED_POLICY_RAG_REAL_FICTION" if args.confirm_live
+                       else "REAL_FICTION_POLICY_RAG_FAKE_ROUTER_AND_QUOTE_NO_LLM"),
               "case_id": CASE, "commit_sha": os.getenv("GITHUB_SHA", "local"),
               "workflow_run_id": os.getenv("GITHUB_RUN_ID") or None}
     stage = "configuration"
     try:
-        _check(args.confirm_live and os.getenv("RETAILIQ_UC01_LIVE") == "true",
-               "Live model acceptance is opt-in only")
-        from retailiq.core.config import safe_status
-        status = safe_status()
-        _check(status.get("provider_ready") is True, "Provider is not configured")
-        report["model"] = status["chat_model"]
+        if args.confirm_live:
+            _check(os.getenv("RETAILIQ_UC01_LIVE") == "true",
+                   "Live model acceptance is opt-in only")
+            from retailiq.core.config import safe_status
+            status = safe_status()
+            _check(status.get("provider_ready") is True, "Provider is not configured")
+            report["model"] = status["chat_model"]
         stage = "published_fiction_source"
         oracle = independent_oracle(args.db, args.manifest, args.knowledge_root,
                                     args.retailiq_manifest)
         stage = "provider_backed_two_turn_policy"
-        report["observed"] = execute_policy_turns(args.db, args.manifest,
-                                                   args.knowledge_root, oracle)
+        report["observed"] = execute_policy_turns(
+            args.db, args.manifest, args.knowledge_root, oracle,
+            offline_fake_model=args.oracle_only,
+        )
         stage = "source_no_write"
         _check(_hash_file(args.db.resolve()) == RELEASE_SHA,
                "Source SQLite was mutated")
