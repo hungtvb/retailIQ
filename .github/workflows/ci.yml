@@ -101,18 +101,6 @@ jobs:
         run: |
           python -m pip install 'mcp>=1.28,<2' 'langchain-mcp-adapters>=0.1,<1'
           python -m scripts.smoke_mcp_stdio
-      - name: MCP live agent network E2E (real Chromium)
-        env:
-          RETAILIQ_INVENTORY_USE_MCP: '1'
-          RETAILIQ_TEST_MCP: '1'
-        run: python -m scripts.smoke_product_workspace
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: retailiq-real-mcp-browser-evidence
-          path: |
-            data/retailiq_product_workspace_mcp.png
-            data/retailiq_product_workspace_mcp_mobile.png
-          if-no-files-found: ignore
-          retention-days: 7
-
+      # The retired EL-SKU browser MCP opt-in is incompatible with the single
+      # Fiction source contract. Actual Fiction MCP stdio + compiled graph + SSE
+      # are exercised above; browser-specific Fiction MCP acceptance stays #30.
