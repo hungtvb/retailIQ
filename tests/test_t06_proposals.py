@@ -42,7 +42,7 @@ def binding(store, *, cutoff="2026-10-16T12:00:00Z", source_sha=None,
             "disposition": disposition, "source_request_id": "fixture-request"}
 
 
-def committed_case(api, store):
+def committed_case(api, store, *, request_id='fixture-request'):
     principal = active_principal(api)
     result = api.post("/api/sessions", json={})
     assert result.status_code == 201, result.text
@@ -56,7 +56,7 @@ def committed_case(api, store):
         "source": {"id": "fiction-retail/sqlite", "version": store.release["pack_version"],
                    "sha256": store.release["runtime_sha256"]},
         "evidence_refs": [f"fulfillment_cases/{C1}"],
-        "request_id": "fixture-request",
+        "request_id": request_id,
     }, principal=principal)
     assert sessions.last_committed_case_binding(sid, owner_user_id=principal.user_id)
     return sid
@@ -178,3 +178,17 @@ def test_review_domain_cannot_import_orchestration():
     tree = ast.parse(p.read_text(encoding="utf-8"))
     names = [node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)]
     assert not any(name and "orchestration" in name for name in names)
+
+
+def test_same_analyst_new_chat_and_request_id_reuses_one_review_cycle(candidate):
+    """LLM request correlation cannot change a business fingerprint."""
+    _, _, store = candidate
+    with TestClient(app) as api:
+        signed_in_client(app, client=api)
+        first_sid = committed_case(api, store, request_id="first-turn")
+        created = api.post("/api/uc01/proposals", json={"session_id": first_sid})
+        assert created.status_code == 201, created.text
+        second_sid = committed_case(api, store, request_id="second-turn")
+        repeated = api.post("/api/uc01/proposals", json={"session_id": second_sid})
+        assert repeated.status_code == 200, repeated.text
+        assert repeated.json()["proposal_id"] == created.json()["proposal_id"]
