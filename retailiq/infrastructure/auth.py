@@ -22,7 +22,7 @@ MAX_FAILED_ATTEMPTS = 5
 _PASSWORD_HASH = PasswordHash.recommended()
 # Public, non-secret Argon2id dummy hash from FastAPI's password tutorial.
 _DUMMY_HASH = "$argon2id$v=19$m=65536,t=3,p=4$wagCPXjifgvUFBzq4hqe3w$CYaIb8sB+wtD+Vu/P4uod1+Qof8h+1g7bbDlBID48Rc"
-_USERNAME = re.compile(r"[a-zA-Z0-9._-]{3,64}\\Z")
+_USERNAME = re.compile(r"[a-zA-Z0-9._-]{3,64}\Z")
 
 
 def _digest(value: str) -> str:
