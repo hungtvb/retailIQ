@@ -9,6 +9,7 @@ import sqlite3
 
 import pytest
 from fastapi.testclient import TestClient
+from tests.auth_client import signed_in_client
 
 from retailiq.api import app
 from retailiq import assistant
@@ -98,7 +99,7 @@ def decision(client):
 
 
 def test_g01_low_available_requires_human_review(golden_db):
-    value = decision(TestClient(app))
+    value = decision(signed_in_client(app))
     assert value["subagents"] == ["sales_agent", "inventory_agent"]
     assert value["records"][0]["sku"] == "SKU-A"
     assert value["records"][0]["units_sold"] == 20
@@ -123,14 +124,14 @@ def test_g02_g03_threshold_is_strictly_below_monthly_sales(
     change(golden_db, """
         UPDATE inventory SET on_hand=? WHERE sku='SKU-A' AND location_id='WH'
     """, (availability,))
-    answer = decision(TestClient(app))["answer"]
+    answer = decision(signed_in_client(app))["answer"]
     assert ("REVIEW replenishment priority" in answer) is review_required
     assert f"{availability} available" in answer
 
 
 def test_g04_missing_inventory_abstains_instead_of_inventing_zero(golden_db):
     change(golden_db, "DELETE FROM inventory WHERE sku='SKU-A'")
-    result = decision(TestClient(app))
+    result = decision(signed_in_client(app))
     assert len(result["records"]) == 1
     assert result["records"][0]["sku"] == "SKU-A"
     assert "inventory evidence is missing" in result["answer"]
@@ -142,7 +143,7 @@ def test_g05_corrupt_inventory_yields_failure_not_a_confident_decision(golden_db
     change(golden_db, """
         UPDATE inventory SET reserved=200 WHERE sku='SKU-A' AND location_id='WH'
     """)
-    response = TestClient(app).post("/ask", json={"question": QUESTION})
+    response = signed_in_client(app).post("/ask", json={"question": QUESTION})
     assert response.status_code == 503
     assert "REVIEW replenishment priority" not in response.text
     assert "reserved=200" not in response.text
@@ -150,7 +151,7 @@ def test_g05_corrupt_inventory_yields_failure_not_a_confident_decision(golden_db
 
 def test_g06_zero_completed_sales_does_not_invent_a_top_seller(golden_db):
     change(golden_db, "UPDATE orders SET status='cancelled'")
-    result = decision(TestClient(app))
+    result = decision(signed_in_client(app))
     assert result["records"] == []
     assert "No completed-order data" in result["answer"]
     assert "REVIEW replenishment priority" not in result["answer"]
@@ -164,7 +165,7 @@ def test_g07_cancelled_other_months_discounts_and_channels_are_excluded(golden_d
     assert [(row["sku"], row["units_sold"]) for row in analytics.top()] == [
         ("SKU-A", 20), ("SKU-B", 8), ("SKU-C", 4)
     ]
-    data = TestClient(app).post("/ask", json={
+    data = signed_in_client(app).post("/ask", json={
         "question": "What is revenue this month?"
     }).json()
     assert data["intent"] == "revenue"
@@ -179,11 +180,11 @@ def test_g08_equal_units_top_seller_resolves_deterministically_by_sku(golden_db)
     assert [(row["sku"], row["units_sold"]) for row in leaders[:2]] == [
         ("SKU-A", 20), ("SKU-B", 20)
     ]
-    assert decision(TestClient(app))["records"][0]["sku"] == "SKU-A"
+    assert decision(signed_in_client(app))["records"][0]["sku"] == "SKU-A"
 
 
 def test_g09_unknown_or_ambiguous_product_requires_clarification(golden_db):
-    client = TestClient(app)
+    client = signed_in_client(app)
     for question in (
         "How many units of SKU-UNKNOWN are in stock?",
         "How many units of Alpha Laptop and Beta Charger are in stock?",
@@ -195,7 +196,7 @@ def test_g09_unknown_or_ambiguous_product_requires_clarification(golden_db):
 
 
 def test_g10_same_sku_availability_has_independent_location_evidence(golden_db):
-    payload = TestClient(app).post("/ask", json={
+    payload = signed_in_client(app).post("/ask", json={
         "question": "How many units of SKU-A are in stock?"
     }).json()
     assert payload["intent"] == "stock"
@@ -215,7 +216,7 @@ def test_g11_missing_period_and_december_rollover_do_not_reuse_october_sales(
     assert analytics._month_bounds() == ("2026-12-01", "2027-01-01")
     assert analytics.top() == []
     assert analytics.revenue() == []
-    result = decision(TestClient(app))
+    result = decision(signed_in_client(app))
     assert result["as_of"] == "2026-12"
     assert result["records"] == []
     assert "REVIEW replenishment priority" not in result["answer"]
@@ -223,14 +224,14 @@ def test_g11_missing_period_and_december_rollover_do_not_reuse_october_sales(
 
 def test_g12_orphan_sku_in_completed_sales_is_rejected(golden_db):
     change(golden_db, "UPDATE order_lines SET sku='MISSING' WHERE id=1")
-    response = TestClient(app).post("/ask", json={"question": QUESTION})
+    response = signed_in_client(app).post("/ask", json={"question": QUESTION})
     assert response.status_code == 503
     assert "REVIEW replenishment priority" not in response.text
 
 
 def test_g13_demo_retail_data_remains_read_only_across_requests(golden_db):
     before = sha256(golden_db.read_bytes()).hexdigest()
-    client = TestClient(app)
+    client = signed_in_client(app)
     for question in (
         QUESTION,
         "Which products are top sellers?",
@@ -251,4 +252,4 @@ def test_g14_old_timestamp_is_not_a_freshness_sla(golden_db):
     assert rows and all(row["updated_at"].startswith("2025-01-01") for row in rows)
     # Existing Week 1 code still applies the illustrative heuristic. DO NOT
     # mistake this for freshness-aware safe replenishment advice.
-    assert "REVIEW replenishment priority" in decision(TestClient(app))["answer"]
+    assert "REVIEW replenishment priority" in decision(signed_in_client(app))["answer"]
