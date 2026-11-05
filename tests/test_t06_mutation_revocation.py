@@ -50,3 +50,30 @@ def test_other_owner_cannot_mutate_even_with_active_auth(owned_session):
                                 principal=intruder)
     assert sessions.get_customer_memory(
         sid, owner_user_id=first.user_id)["consent"] is False
+
+
+def test_revoke_before_create_session_write_fails_closed(owned_session):
+    _client, _sid, principal = owned_session
+    auth.revoke_session(principal)
+    before = sessions.list_sessions(owner_user_id=principal.user_id)
+    with pytest.raises(PermissionError):
+        sessions.create_session(
+            "After logout", owner_user_id=principal.user_id, principal=principal)
+    assert sessions.list_sessions(owner_user_id=principal.user_id) == before
+
+
+def test_server_session_endpoint_passes_principal_for_atomic_create(owned_session, monkeypatch):
+    """Simulate revocation after middleware preflight, before DB INSERT."""
+    import retailiq.api.sessions as session_api
+    client, _sid, principal = owned_session
+    real_create = sessions.create_session
+
+    def revoke_then_create(title, *, owner_user_id, principal=None):
+        auth.revoke_session(active_principal(client))
+        return real_create(title, owner_user_id=owner_user_id, principal=principal)
+
+    monkeypatch.setattr(session_api, "create_session", revoke_then_create)
+    response = client.post("/api/sessions", json={"title": "After logout"})
+    assert response.status_code == 401, response.text
+    assert not any(s["title"] == "After logout"
+                   for s in sessions.list_sessions(owner_user_id=principal.user_id))
