@@ -308,13 +308,23 @@ function App(){
 
   const busy=phase==='running';
 
-  function secureFetch(url:string, init:RequestInit={}){
+  async function secureFetch(url:string, init:RequestInit={}):Promise<Response>{
+    const epoch=accountEpoch.current;
     const headers=new Headers(init.headers);
     if(init.method && !['GET','HEAD'].includes(init.method.toUpperCase())){
       if(!account?.csrf_token)throw new Error('Sign in again to continue.');
       headers.set('X-CSRF-Token',account.csrf_token);
     }
-    return fetch(url,{...init,headers,credentials:'same-origin'});
+    const response=await fetch(url,{...init,headers,credentials:'same-origin'});
+    if(response.status===401 && epoch===accountEpoch.current){
+      // Session expired/was revoked outside the mounted Workspace. Do not
+      // leave private messages or review decisions visible behind a stale UI.
+      clearWorkspace();
+      setAccount(null);
+      setPassword('');
+      setAuthError('Your session expired. Sign in again.');
+    }
+    return response;
   }
   function clearWorkspace(){
     ++requestSerial.current;
