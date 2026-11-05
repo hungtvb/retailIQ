@@ -67,9 +67,10 @@ def test_server_session_endpoint_passes_principal_for_atomic_create(owned_sessio
     import retailiq.api.sessions as session_api
     client, _sid, principal = owned_session
     real_create = sessions.create_session
+    original_principal = principal
 
     def revoke_then_create(title, *, owner_user_id, principal=None):
-        auth.revoke_session(active_principal(client))
+        auth.revoke_session(original_principal)
         return real_create(title, owner_user_id=owner_user_id, principal=principal)
 
     monkeypatch.setattr(session_api, "create_session", revoke_then_create)
