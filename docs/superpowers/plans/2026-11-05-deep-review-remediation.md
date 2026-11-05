@@ -3,6 +3,8 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
 > **Codex execution note:** Tasks 1–3 are independent and may run in parallel with disjoint file scopes. Do not commit; leave changes in the working tree for the Lead to review and commit. Task 4 runs after 1–3. Task 5 is the Lead gate.
+>
+> **Status (2026-11-05):** Tasks 1–4 implemented and committed on `fix/deep-review-remediation` (`a9d98f7` domain, `ba20477` retrieval evidence, `cc4b6a9` portability/CI, `7126554` docs). Task 5 evidence: full pytest **527 passed / 1 pre-existing Windows-symlink failure / 2 skipped**; strict audits (`audit_queries`, `audit_workflows`, `audit_edge_scenarios`, `audit_freshness`, `report_source_reliability`) all exit 0; `check_docs_links` 0 errors. Deferred register unchanged (no Important/Minor backlog items fixed).
 
 **Goal:** Fix the Critical findings from the 2026-11-05 deep review (wrong KPI period/scope, ungrounded answers labelled as verified, weak evidence gates, Windows-broken live gates, stale docs) on branch `fix/deep-review-remediation`, without touching paid-provider behavior.
 
