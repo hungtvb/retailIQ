@@ -31,7 +31,8 @@ def login(body: Credentials, request: Request):
     if user_id is None:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     try:
-        token, _csrf = auth.issue_auth_session(user_id)
+        token, _csrf = auth.issue_auth_session(
+            user_id, replace_token=request.cookies.get(auth.COOKIE_NAME))
     except ValueError:
         raise HTTPException(status_code=401, detail="Invalid credentials") from None
     user = auth.safe_user(user_id)
