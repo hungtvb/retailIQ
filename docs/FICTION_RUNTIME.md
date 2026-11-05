@@ -1,6 +1,6 @@
 # Fiction unified runtime — M0 boundary
 
-**Status:** Issue [#31](https://github.com/hungtvb/retailIQ/issues/31): read-only data/SQL foundation only; **not** a chat, LangGraph, MCP, RAG or security migration. Do not interpret a local SQL PASS as Fiction E2E acceptance.
+**Status:** Issue [#31](https://github.com/hungtvb/retailIQ/issues/31) owns the read-only data/SQL foundation. Bounded UC-01 chat, T04 MCP and T05 policy explanation now build on it; this is not a general Fiction or security migration. Do not interpret a local SQL PASS as Fiction E2E acceptance.
 
 ## Release and local setup
 
@@ -42,6 +42,8 @@ Previous draft PRs [#24](https://github.com/hungtvb/retailIQ/pull/24) and [#25](
 
 - `pytest` small fixtures: offline contract/negative tests, **not real-data acceptance**.
 - `verify_fiction_runtime` on the actual 209,063,936-byte database: **real local SQLite / independent SQL oracle**, no provider.
-- T03 same-session follow-up remains separately verified with controlled fixtures. **T02 G1 real-provider `/ask`** is verified both before and after R1 by [baseline live CI 41776582027](https://github.com/hungtvb/retailIQ/actions/runs/41776582027) and [post-refactor live CI 41790444949](https://github.com/hungtvb/retailIQ/actions/runs/41790444949) with one explicit historical CASE-ID and full published Fiction SQLite/policy oracle. T04 real stdio MCP + independent SQL oracle are verified separately by [CI 41768927458](https://github.com/hungtvb/retailIQ/actions/runs/41768927458). Neither proves broad LLM routing, authenticated HITL, RAG, or Fiction browser full E2E. RAG/HITL/Chrome end-to-end acceptance remains pending. Record dataset SHA, commit, exact command and observed evidence before marking downstream CAP PASS.
+- T03 same-session follow-up remains separately verified with controlled fixtures. **T02 G1 real-provider `/ask`** is verified both before and after R1 by [baseline live CI 41776582027](https://github.com/hungtvb/retailIQ/actions/runs/41776582027) and [post-refactor live CI 41790444949](https://github.com/hungtvb/retailIQ/actions/runs/41790444949) with one explicit historical CASE-ID and full published Fiction SQLite/policy oracle. T04 real stdio MCP + independent SQL oracle are verified separately by [CI 41768927458](https://github.com/hungtvb/retailIQ/actions/runs/41768927458). Scoped T05 policy explanation is separately implemented and provider-verified; [UC-01 evidence](CAPABILITY_LEDGER.md#scoped-uc-01-evidence) records its limits. Broad LLM routing, general RAG/5,003-document Chroma, authenticated HITL and Fiction browser full E2E remain open. Record dataset SHA, commit, exact command and observed evidence before marking downstream CAP PASS.
+
+Real-release CI now runs on path-scoped pull requests, a monthly schedule and manual dispatch; see the [CI cadence and LFS budget](CAPABILITY_LEDGER.md#fiction-ci-cadence-and-lfs-budget) for quota and evidence limits.
 
 **Implementation references:** [Python 3.12 `-O` removes assert statements](https://docs.python.org/3.12/using/cmdline.html#cmdoption-O); [SQLite URI read-only/immutable semantics](https://www.sqlite.org/uri.html).

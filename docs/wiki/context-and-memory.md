@@ -23,7 +23,7 @@ Theo LangGraph, **checkpointer** phục vụ state ngắn hạn theo thread; **s
 
 ## HOW — điểm vào thực tế
 
-- `retailiq/api/http.py`: `_perform_turn()` nạp gần đây **tối đa 12 turns/messages theo helper**, session's active agent và memory *chỉ khi consented*. HTTP/SSE có concurrency guard cho cùng session.
+- `retailiq/api/http.py`: `_perform_turn()` nạp gần đây **tối đa 12 turns/messages theo helper**, session's active agent và memory *chỉ khi consented*. HTTP/SSE có concurrency guard cho cùng session **trong từng process**. Local demo bắt buộc `workers=1`: SSE slots, session lock và JSONL logging đều là per-process, không an toàn với nhiều workers.
 - `retailiq/orchestration/week1_graph.py`: `followup_intent()`, `resolve_followup()`, `bounded_history()`; graph checkpoint là local single-process SQLite; xóa session phải cleanup checkpoint.
 - `retailiq/infrastructure/sessions.py`: session messages, bounded local traces, `get_customer_memory()`/`save_customer_memory()`, delete cascade. Một stored trace thiếu không có nghĩa là agent không chạy.
 - `retailiq/domain/customer_memory.py`: whitelist các preference an toàn, từ chối free-text PII, lưu consent rõ.

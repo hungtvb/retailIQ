@@ -6,7 +6,7 @@ RetailIQ is a **retail decision-support copilot** for B2C electronics and access
 
 **Faster · Easier · Reliable** are product goals, **not measured achievements**. RetailIQ supports human decisions; sensitive pricing or order changes require governed execution and approval rather than unchecked autonomous actions.
 
-**Business-data boundary:** Fiction Retail is an independent synthetic B2C company and source of a pinned unified SQLite and knowledge-document release. RetailIQ is the separate natural-language assistant consuming those sources, not their data generator. The current chat still uses the legacy fixture; Fiction M0 is read-only and not yet wired into chat. See [Fiction Runtime](FICTION_RUNTIME.md).
+**Business-data boundary:** Fiction Retail is an independent synthetic B2C company and source of a pinned unified SQLite and knowledge-document release. RetailIQ is the separate natural-language assistant consuming those sources, not their data generator. Ordinary/legacy questions still use the synthetic fixture; the bounded full-mode CASE-ID chat path and verified follow-ups are wired to read-only Fiction sources. See [Fiction Runtime](FICTION_RUNTIME.md).
 
 ## Business problem
 
