@@ -93,6 +93,26 @@ def is_multi_stock_question(question: str) -> bool:
  return stock and ranked and plural
 
 
+def unsupported_sales_metric(question: str) -> bool:
+  """Do not re-label order counts or units sold as monetary revenue."""
+  text = fold_text(question)
+  count = bool(re.search(r'\b(?:how many|number of|count|bao nhieu|so luong|so don)\b', text))
+  orders = bool(re.search(r'\b(?:orders?|shipments?|shipped|delivered|don hang|don da giao)\b', text))
+  if orders and (count or not re.search(r'\b(?:revenue|doanh thu)\b', text)):
+   return True
+  units = bool(re.search(r'\b(?:units?|items?|products?|san pham)\b', text))
+  sold = bool(re.search(r'\b(?:sold|sell|selling|da ban|ban duoc)\b', text))
+  return count and units and sold
+
+
+def unsupported_sales_metric_reply(question: str) -> str:
+  if is_vietnamese(question):
+   return ('Chưa thể xác minh số đơn giao hàng hoặc số lượng đã bán bằng truy vấn này. '
+           'Vui lòng hỏi về doanh thu thuần hoặc sản phẩm bán chạy theo số lượng.')
+  return ('This query cannot verify shipped-order counts or units sold. '
+          'Please ask for net revenue or top sellers by units instead.')
+
+
 def intent(q):
  q=q.lower()
  if is_price_extreme(q):return 'product'
@@ -100,6 +120,7 @@ def intent(q):
  if any(x in q for x in ['top seller','best seller','bán chạy']):return 'top'
  if re.search(r'\btop\s*(?:[2-9]|[1-9]\d+)\s+(?:sellers?|best sellers?|'
               r'sản phẩm bán chạy|san pham ban chay)\b', fold_text(q)):return 'top'
+ if unsupported_sales_metric(q):return 'general'
  if any(x in q for x in ['revenue','doanh thu','sales performance']):return 'revenue'
  if _mentions(q, ('sales','sold','orders','doanh số','đơn hàng')):return 'revenue'
  if any(x in q for x in ['stock','inventory','tồn kho','in stock','available units','còn hàng','còn bao nhiêu']):return 'stock'
@@ -144,6 +165,8 @@ def do(q,category, *, stock_lookup=None):
   answer=retailiq_reply({'question':q,'intent':'latest','records':rows,'answer':''})['answer']
   return {'answer':answer,'records':rows,'contexts':[]}
  if category=='general':
+  if unsupported_sales_metric(q):
+   return {'answer':unsupported_sales_metric_reply(q),'records':[],'contexts':[]}
   answer=('Xin chào! Tôi là RetailIQ. Bạn có thể hỏi về tồn kho, doanh thu, hàng bán chạy hoặc thông tin sản phẩm.'
           if is_vietnamese(q) else
           'Hello! I am RetailIQ. You can ask about inventory, revenue, top sellers, or product information.')

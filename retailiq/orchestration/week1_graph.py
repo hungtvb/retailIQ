@@ -14,7 +14,8 @@ import threading
 from pathlib import Path
 import sqlite3
 from retailiq.queries import (intent, do, product_sku, wants_single_latest_product,
-                              requested_top_count, is_multi_stock_question, is_price_extreme)
+                              requested_top_count, is_multi_stock_question, is_price_extreme,
+                              unsupported_sales_metric, unsupported_sales_metric_reply)
 from retailiq.reply import retailiq_reply
 from retailiq.domain.analytics import (DomainDataError, month, products,
                                        requested_month, top)
@@ -244,6 +245,12 @@ def route(state: State):
         }, goto='backorder_agent')
 
     category = followup_intent(state['question'], state.get('history', []))
+    if category == 'general' and unsupported_sales_metric(state['question']):
+        log_event('agent.routed', agent='retailiq', intent='general',
+                  route_fallback=False, execution_mode='full')
+        return Command(update={'effective_question': state['question'],
+                               'intent': 'general', 'route_fallback': False, 'skill': ''},
+                       goto='retailiq')
     # Do not send malformed/ambiguous case IDs to a paid model or business tool.
     if category == 'backorder':
         _case_id_for_uc01(state['question'])
@@ -343,6 +350,11 @@ def retailiq(state: State):
     if is_memory_question(state['question']):
         return Command(update={
             'answer': memory_answer(state['question'], state.get('customer_memory')),
+            'active_agent': 'retailiq', 'records': [], 'contexts': [],
+        }, goto='retailiq_reply')
+    if unsupported_sales_metric(state['question']):
+        return Command(update={
+            'answer': unsupported_sales_metric_reply(state['question']),
             'active_agent': 'retailiq', 'records': [], 'contexts': [],
         }, goto='retailiq_reply')
     reply = chat_model().invoke([
@@ -681,8 +693,10 @@ def run(q: str, *, history: list[dict] | None = None, active_agent: str = '',
     result = validate_graph_result(result)
     # A conversational answer carries no business evidence, so it must not be
     # labelled as a verified SQL/RAG execution.
-    conversational = (result.get('active_agent') == _CONVERSATIONAL_AGENT
-                      and not result.get('records') and not result.get('contexts'))
+    # Empty results and clarifications are not verified SQL/RAG evidence,
+    # even if a specialist agent was selected.
+    no_evidence = not result.get('records') and not result.get('contexts')
+    conversational = (no_evidence and result['intent'] not in ('backorder', 'fiction_stock'))
     if conversational:
         mode = CONVERSATIONAL_MODE
     elif result['intent'] == 'backorder':

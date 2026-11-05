@@ -90,7 +90,7 @@ def test_plain_store_revenue_still_answered(seeded):
 def test_data_question_routing():
     assert intent('What were our sales last month?') == 'revenue'
     assert intent('Top 3 sellers') == 'top'
-    assert intent('How many orders did we ship in October?') == 'revenue'
+    assert intent('How many orders did we ship in October?') == 'general'
     assert intent('Doanh so thang 10') == 'revenue'
 
 
@@ -129,3 +129,69 @@ def test_general_answer_is_labelled_unverified(seeded, monkeypatch):
     assert general['mode'] == CONVERSATIONAL_LABEL
     assert 'No verified business data used' in general['limitations']
     assert general['records'] == [] and general['contexts'] == []
+
+
+
+@pytest.mark.parametrize('question', [
+    'How many orders did we ship in October?',
+    'How many units did we sell in October?',
+    'Show our shipped orders in October',
+    'Có bao nhiêu đơn hàng đã giao trong tháng 10?',
+])
+def test_unsupported_sales_counts_do_not_turn_into_revenue(seeded, question):
+    assert intent(question) == 'general'
+    result = do(question, 'general')
+    assert result['records'] == [] and result['contexts'] == []
+    assert STORE_TOTAL not in result['answer']
+    assert 'revenue' in result['answer'].lower() or 'doanh thu' in result['answer'].lower()
+
+
+@pytest.mark.parametrize('question', [
+    'Revenue in Atlantis in October 2026?',
+    'Revenue in October 2026 at Atlantis?',
+])
+def test_unknown_english_in_location_clarifies(seeded, question):
+    result = do(question, 'revenue')
+    assert result['query_plan']['scope'] == 'clarify'
+    assert result['records'] == []
+    assert STORE_TOTAL not in result['answer']
+
+
+@pytest.mark.parametrize('question', [
+    'Revenue in October 2026?',
+    'Revenue in online channel in October 2026?',
+])
+def test_period_and_channel_are_not_locations(seeded, question):
+    result = do(question, 'revenue')
+    assert result['query_plan']['scope'] != 'clarify'
+    assert result['records']
+
+
+def test_graph_unsupported_counts_never_call_llm_or_revenue(seeded, monkeypatch):
+    pytest.importorskip('langgraph')
+    def forbidden_model():
+        raise AssertionError('Unsupported metric must not invoke an LLM')
+    monkeypatch.setattr(graph, 'chat_model', forbidden_model)
+    result = graph.run('How many orders did we ship in October?')
+    assert result['intent'] == 'general'
+    assert result['records'] == [] and result['contexts'] == []
+    assert result['mode'] == CONVERSATIONAL_LABEL
+    assert 'No verified business data used' in result['limitations']
+    assert STORE_TOTAL not in result['answer']
+
+
+@pytest.mark.parametrize('question', [
+    'Revenue in Atlantis in October 2026?',
+    'Revenue for AlphaBook in October 2026?',
+    'What was revenue in Q3 2026?',
+])
+def test_graph_clarification_not_labelled_verified(seeded, monkeypatch, question):
+    pytest.importorskip('langgraph')
+    monkeypatch.setattr(graph, 'chat_model', _fake_chat_model)
+    result = graph.run(question)
+    assert result['intent'] == 'revenue'
+    assert result['query_plan']['scope'] == 'clarify'
+    assert result['records'] == [] and result['contexts'] == []
+    assert result['mode'] == CONVERSATIONAL_LABEL
+    assert 'No verified business data used' in result['limitations']
+    assert STORE_TOTAL not in result['answer']

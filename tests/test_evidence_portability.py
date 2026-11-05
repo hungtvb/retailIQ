@@ -74,7 +74,10 @@ def test_fiction_workflow_has_path_scoped_pr_and_recurring_triggers():
     paths = triggers["pull_request"].get("paths")
     assert isinstance(paths, list) and paths, "Fiction PR runs must be path scoped"
     assert {"data/fiction/**", "retailiq/domain/fiction.py",
-            "scripts/_evidence_io.py"} <= set(paths)
+            "retailiq/domain/backorder.py", "retailiq/domain/uc01_review.py",
+            "retailiq/orchestration/fiction_handlers.py",
+            "retailiq/orchestration/fiction_requests.py",
+            "retailiq/api/http.py", "scripts/_evidence_io.py"} <= set(paths)
 
 
 def test_ci_keeps_python_tests_unfiltered_without_fiction_jobs():

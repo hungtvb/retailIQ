@@ -16,7 +16,7 @@ Scope = Literal["store", "product", "ranked_product", "clarify"]
 # A location-shaped subject. Revenue cannot be filtered by location, so even a
 # resolvable one must ask for clarification rather than answer the store total.
 _LOCATION_SUBJECT_RE = re.compile(
-    r'\b(?:tại|tai|at)\s+([^\s,?.!]+(?:\s+[^\s,?.!]+){0,2})'
+    r'\b(?:tại|tai|at|in)\s+([^\s,?.!]+(?:\s+[^\s,?.!]+){0,2})'
 )
 
 # Channel and period words are not locations; "tại cửa hàng" or "at present"
@@ -29,7 +29,7 @@ _NON_LOCATION_HEADS = frozenset({
     'the', 'a', 'an', 'this', 'that', 'these', 'those', 'present', 'moment',
     'now', 'most', 'least', 'all', 'each', 'every', 'which', 'what', 'your',
     'our', 'my',
-})
+}) | frozenset(_ENGLISH_MONTHS) | frozenset({'month', 'months', 'quarter', 'year', 'years', 'q1', 'q2', 'q3', 'q4', 'online', 'channel', 'oct', 'sept'})
 
 # An explicit SKU-shaped token that the catalog lookup could not resolve.
 _SKU_TOKEN_RE = re.compile(r'\b[A-Z]{2,5}-\d{2,}\b')
@@ -95,16 +95,15 @@ def _names_location_subject(text: str, known_locations) -> bool:
     folded = fold_text(text)
     if _names_known_location(text, known_locations):
         return True
-    match = _LOCATION_SUBJECT_RE.search(folded)
-    if not match:
-        return False
-    subject = match.group(1)
-    head = subject.split()[0]
-    if head in _NON_LOCATION_HEADS:
-        return False
-    if any(word in subject for word in _GENERIC_SUBJECT_WORDS):
-        return False
-    return True
+    for match in _LOCATION_SUBJECT_RE.finditer(folded):
+        subject = match.group(1)
+        head = subject.split()[0]
+        if head in _NON_LOCATION_HEADS or re.fullmatch(r'20\d{2}(?:[-/]\d{1,2})?', head):
+            continue
+        if any(word in subject.split() for word in _GENERIC_SUBJECT_WORDS):
+            continue
+        return True
+    return False
 
 
 def _names_product_subject(question: str, text: str) -> bool:
