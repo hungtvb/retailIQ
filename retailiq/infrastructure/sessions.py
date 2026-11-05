@@ -128,8 +128,15 @@ def _connect():
         connection.close()
 
 
-def create_session(title: str = 'New conversation', *, owner_user_id: str) -> dict:
-    if not owner_user_id:
+def create_session(title: str = 'New conversation', *, owner_user_id: str,
+                   principal: SecurityContext | None = None) -> dict:
+    """Create a conversation; authenticated HTTP callers validate under the writer lock.
+
+    principal=None remains for offline fixture/CLI provisioning only. HTTP must
+    pass the middleware-derived principal, never a caller-controlled user ID.
+    """
+    if not owner_user_id or (principal is not None and
+                             principal.user_id != owner_user_id):
         raise PermissionError('Authenticated owner required')
     sid = str(uuid4())
     title = title.strip()[:80] or 'New conversation'
@@ -138,6 +145,16 @@ def create_session(title: str = 'New conversation', *, owner_user_id: str) -> di
         user = c.execute('SELECT disabled FROM users WHERE id=?', (owner_user_id,)).fetchone()
         if user is None or user['disabled']:
             raise PermissionError('Authenticated owner required')
+        if principal is not None:
+            active = c.execute('''SELECT 1 FROM auth_sessions a
+                JOIN users u ON u.id=a.user_id
+                WHERE a.id=? AND a.user_id=? AND u.role=?
+                  AND a.revoked_at IS NULL AND a.expires_at>?
+                  AND u.disabled=0''', (
+                      principal.auth_session_id, principal.user_id,
+                      principal.role, int(time.time()))).fetchone()
+            if active is None:
+                raise PermissionError('Authentication required')
         c.execute('INSERT INTO sessions (id, title, owner_user_id) VALUES (?,?,?)',
                   (sid, title, owner_user_id))
     return get_session(sid, owner_user_id=owner_user_id, include_messages=False)
