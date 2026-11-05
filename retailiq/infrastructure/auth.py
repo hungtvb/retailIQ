@@ -135,7 +135,13 @@ def authenticate_credentials(username: str, password: str, peer_ip: str = "local
     return None
 
 
-def issue_auth_session(user_id: str) -> tuple[str, str]:
+def issue_auth_session(user_id: str, *, replace_token: str | None = None) -> tuple[str, str]:
+    """Atomically replace this browser's prior cookie session when signing in again.
+
+    Do not revoke independent devices/sessions. Revocation under the same writer
+    lock prevents an old in-flight SSE stream from remaining authorized after an
+    account switch. A failed issuance rolls back the replacement.
+    """
     _schema()
     token, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
     now = int(time.time())
@@ -144,6 +150,10 @@ def issue_auth_session(user_id: str) -> tuple[str, str]:
         user = db.execute("SELECT disabled FROM users WHERE id=?", (user_id,)).fetchone()
         if user is None or user["disabled"]:
             raise ValueError("Inactive user")
+        if isinstance(replace_token, str) and 24 <= len(replace_token) <= 128:
+            db.execute("UPDATE auth_sessions SET revoked_at=? "
+                       "WHERE token_hash=? AND revoked_at IS NULL",
+                       (now, _digest(replace_token)))
         db.execute("INSERT INTO auth_sessions(id,user_id,token_hash,csrf_secret,created_at,expires_at) "
                    "VALUES(?,?,?,?,?,?)",
                    (str(uuid4()), user_id, _digest(token), csrf, now, now + SESSION_TTL_SECONDS))
