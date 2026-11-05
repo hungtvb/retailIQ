@@ -16,7 +16,7 @@ Scope = Literal["store", "product", "ranked_product", "clarify"]
 # A location-shaped subject. Revenue cannot be filtered by location, so even a
 # resolvable one must ask for clarification rather than answer the store total.
 _LOCATION_SUBJECT_RE = re.compile(
-    r'\b(?:tại|tai|at|in)\s+([^\s,?.!]+(?:\s+[^\s,?.!]+){0,2})'
+    r'\b(?:tại|tai|at|in)\s+([^\s,?.!]+(?:\s+(?!(?:tại|tai|at|in)\b)[^\s,?.!]+){0,2})'
 )
 
 # Channel and period words are not locations; "tại cửa hàng" or "at present"
