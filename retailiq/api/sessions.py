@@ -105,15 +105,22 @@ def remove_session(session_id: str, request: Request):
             if get_session(session_id, owner_user_id=principal.user_id,
                            include_messages=False) is None:
                 raise HTTPException(status_code=404, detail='Session not found')
-            # Remove graph state first; if it fails, retain the session for retry.
+            # Checkpoints live in another local SQLite store. Keep the auth
+            # writer lock across their cleanup and session DELETE so logout
+            # cannot commit first and still allow checkpoint mutation.
             from retailiq.orchestration.week1_graph import delete_session_checkpoints
-            try:
-                delete_session_checkpoints(session_id)
-            except Exception as error:
-                log_event('chat.checkpoint_delete_failed', level='ERROR',
-                          error_type=type(error).__name__)
-                raise HTTPException(status_code=503, detail='Checkpoint cleanup failed') from None
-            delete_session(session_id, owner_user_id=principal.user_id, principal=principal)
+
+            def cleanup_checkpoints():
+                try:
+                    delete_session_checkpoints(session_id)
+                except Exception as error:
+                    log_event('chat.checkpoint_delete_failed', level='ERROR',
+                              error_type=type(error).__name__)
+                    raise HTTPException(status_code=503,
+                                        detail='Checkpoint cleanup failed') from None
+
+            delete_session(session_id, owner_user_id=principal.user_id,
+                           principal=principal, before_delete=cleanup_checkpoints)
     except PermissionError:
         raise HTTPException(status_code=401, detail='Authentication required') from None
     except SessionBusyError:
