@@ -35,6 +35,7 @@ class Case:
     sku: str = ''
     category: str = ''
     channel: str = ''
+    expected_source: str = ''
 
 
 # Predictions are from reading the current source, NOT recorded test results.
@@ -82,7 +83,7 @@ CASES = (
     Case('CTX-02','context',('Doanh thu tháng 10 năm 2026?','Còn tháng trước?'),'revenue','LIKELY_PASS','history/period','Prior-month revenue follow-up',period='2026-09'),
     Case('CTX-03','context',('Top 5 sản phẩm bán chạy tháng 9 năm 2026?','Tồn kho của các sản phẩm đó?'),'stock_top','LIKELY_FAIL','history/multi_sku/period','Pronoun = five September SKUs',period='2026-09',n=5),
     Case('CTX-04','context',('Top 5 sản phẩm bán chạy tháng 9 năm 2026?','Tồn kho của sản phẩm đứng thứ 2?'),'stock_rank','LIKELY_FAIL','history/rank/period','Second-ranked SKU from September',period='2026-09',n=2),
-    Case('RAG-01','product',('Thông số USB-C GaN Charger 65W như thế nào?',),'product_sources','LIKELY_PASS','retrieval/grounding','Document-backed product answer'),
+    Case('RAG-01','product',('Thông số USB-C GaN Charger 65W như thế nào?',),'product_sources','LIKELY_PASS','retrieval/grounding','Document-backed product answer',expected_source='data/product_docs/EL-003.md'),
 )
 
 
@@ -227,8 +228,14 @@ def assess(case: Case, response: dict, oracle: Oracle) -> tuple[bool,str,dict]:
         return ok,'All selected SKUs must have correct stock; handoff if requested',{'period':case.period,'sku_available':expected}
     if check == 'product_sources':
         contexts = response.get('contexts') or []
-        ok = response.get('intent') == 'product' and isinstance(contexts,list) and bool(contexts) and bool(answer.strip())
-        return ok,'Document source required',{'minimum_sources':1}
+        grounded = (isinstance(contexts, list) and any(
+            isinstance(c, dict) and str(c.get('source', '')).endswith(case.expected_source)
+            for c in contexts))
+        ok = (response.get('intent') == 'product' and isinstance(contexts, list)
+              and bool(contexts) and bool(answer.strip())
+              and (not case.expected_source or grounded))
+        return ok,'Expected document must be among retrieved sources',{
+            'minimum_sources': 1, 'expected_source': case.expected_source}
     raise ValueError('Unknown check '+check)
 
 
