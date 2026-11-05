@@ -2,9 +2,17 @@ name: RetailIQ Week 1 tests
 on:
   push:
   pull_request:
+  schedule:
+    # Weekly real-Fiction integrity run: a merge must never be the only chance
+    # for the 209 MB data gates to execute (deep review C4).
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
 jobs:
   python-tests:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -24,6 +32,7 @@ jobs:
       - name: Business query acceptance audit (report gaps, do not hide them)
         run: python -m scripts.audit_queries --mode offline --strict
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: retailiq-query-acceptance
           path: data/query_audit_report.json
@@ -104,89 +113,3 @@ jobs:
       # The retired EL-SKU browser MCP opt-in is incompatible with the single
       # Fiction source contract. Actual Fiction MCP stdio + compiled graph + SSE
       # are exercised above; browser-specific Fiction MCP acceptance stays #30.
-
-  # This gate is intentionally PR-scoped: ordinary changes must not fetch
-  # the 209MB Fiction LFS release. It verifies actual data, not a test fixture.
-  fiction-t04-release:
-    if: github.event_name == 'pull_request' && contains(github.event.pull_request.title, 'T04')
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Install supported-by-current-slice MCP dependencies
-        run: python -m pip install 'mcp>=1.28,<2' 'langchain-mcp-adapters>=0.1,<1'
-      - name: Fetch published Fiction LFS release (not source fixture)
-        env:
-          GIT_LFS_SKIP_SMUDGE: '1'
-        run: |
-          git lfs version
-          git clone --depth 1 --filter=blob:none https://github.com/hungtvb/fiction-retail.git "$RUNNER_TEMP/fiction-retail"
-          git -C "$RUNNER_TEMP/fiction-retail" lfs pull --include="data/fiction_retail.sqlite" --exclude=""
-          test "$(stat -c%s "$RUNNER_TEMP/fiction-retail/data/fiction_retail.sqlite")" -eq 209063936
-      - name: Pinned real Fiction release / independent SQL / MCP stdio
-        run: |
-          python -m scripts.verify_t04_real_release \
-            --db "$RUNNER_TEMP/fiction-retail/data/fiction_retail.sqlite" \
-            --manifest "$RUNNER_TEMP/fiction-retail/manifest.json" \
-            --retailiq-manifest data/fiction/manifest.json
-
-  # PR-scoped T02/graph-boundary regression on published Fiction, no provider secrets.
-  # Refactor R1-A/R1-B can alter G1 routing; use the same oracle gate, no new workflow.
-  # The paid G1 follows only after code merge and manual main dispatch.
-  fiction-t02-oracle:
-    if: github.event_name == 'pull_request' && (contains(github.event.pull_request.title, 'T02') || contains(github.event.pull_request.title, 'R1-A') || contains(github.event.pull_request.title, 'R1-B') || contains(github.event.pull_request.title, 'T05'))
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    env:
-      RETAILIQ_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Install offline Fiction + compiled LangGraph runtime (no provider)
-        run: |
-          python -m pip install -r requirements-offline.txt 'langgraph>=1,<2' 'langchain-core>=1,<2' 'langchain>=1,<2' 'langgraph-checkpoint-sqlite>=3,<4'
-      - name: Download published Fiction SQLite and source policy (no provider)
-        env:
-          GIT_LFS_SKIP_SMUDGE: '1'
-        run: |
-          git lfs version
-          git clone --depth 1 --filter=blob:none https://github.com/hungtvb/fiction-retail.git "$RUNNER_TEMP/fiction-retail"
-          git -C "$RUNNER_TEMP/fiction-retail" lfs pull --include="data/fiction_retail.sqlite" --exclude=""
-          test "$(stat -c%s "$RUNNER_TEMP/fiction-retail/data/fiction_retail.sqlite")" -eq 209063936
-          test -f "$RUNNER_TEMP/fiction-retail/knowledge/policies/FR-WH-2026-10-04.md"
-      - name: Pinned G1 SQL/policy oracle + real API/graph with FAKE router (NO LLM)
-        run: |
-          python -m scripts.verify_uc01_live_release --oracle-only \
-            --db "$RUNNER_TEMP/fiction-retail/data/fiction_retail.sqlite" \
-            --manifest "$RUNNER_TEMP/fiction-retail/manifest.json" \
-            --knowledge-root "$RUNNER_TEMP/fiction-retail/knowledge" \
-            --retailiq-manifest data/fiction/manifest.json \
-            --out data/quality_reports/uc01_t02_g1.json
-      - name: T05 exact-policy G1 source, graph and citation (FAKE model, NO LLM)
-        if: contains(github.event.pull_request.title, 'T05')
-        run: |
-          python -m scripts.verify_uc01_policy_live --oracle-only \
-            --db "$RUNNER_TEMP/fiction-retail/data/fiction_retail.sqlite" \
-            --manifest "$RUNNER_TEMP/fiction-retail/manifest.json" \
-            --knowledge-root "$RUNNER_TEMP/fiction-retail/knowledge" \
-            --retailiq-manifest data/fiction/manifest.json \
-            --out data/quality_reports/uc01_t05_policy.json
-
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: retailiq-t02-real-release-oracle
-          path: |
-            data/quality_reports/uc01_t02_g1.json
-            data/quality_reports/uc01_t05_policy.json
-          if-no-files-found: ignore
-          retention-days: 7

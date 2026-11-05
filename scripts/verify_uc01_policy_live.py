@@ -10,11 +10,11 @@ from contextlib import closing
 import json
 import os
 from pathlib import Path
-import tempfile
 import time
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from scripts._evidence_io import safe_tempdir
 from scripts.verify_uc01_live_release import (
     CASE, CUTOFF, DOCUMENT, POLICY, POLICY_SHA, RELEASE_SHA, SNAPSHOT,
     WAREHOUSE, _check, _hash_file, independent_oracle,
@@ -111,7 +111,7 @@ def execute_policy_turns(db: Path, manifest: Path, knowledge: Path, oracle: dict
     def actual_factory():
         return ObservedModel(original_factory())
 
-    with tempfile.TemporaryDirectory(prefix="retailiq-t05-live-") as temp:
+    with safe_tempdir(prefix="retailiq-t05-live-") as temp:
         folder = Path(temp)
         env = {
             "RETAILIQ_MODE": "full",
