@@ -15,7 +15,11 @@ class NewSession(BaseModel):
 def new_session(request: Request, body: NewSession = NewSession()):
     principal = _principal(request)
     auth.assert_active(principal)
-    session = create_session(body.title, owner_user_id=principal.user_id)
+    try:
+        session = create_session(body.title, owner_user_id=principal.user_id,
+                                 principal=principal)
+    except PermissionError:
+        raise HTTPException(status_code=401, detail='Authentication required') from None
     with bind_context(session=session['id']):
         log_event('chat.session_created')
     return session
