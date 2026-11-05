@@ -323,6 +323,16 @@ flowchart LR
 5. **Authentication and candidate selection:** enforce T06 authenticated ownership on all fetched messages/trace/proposal data. A 401/account change clears old account state before rendering new content. Do not leak Analyst chat to Manager inbox. For multiple eligible warehouse candidates, either provide a backend-verified selector with explicit snapshot ID or visibly state that only the single-candidate flow is supported; do not silently choose. The UI must never calculate proposal eligibility or approval from chat text.
 6. **Compatibility:** preserve legacy chat and workflow-simulation behavior without claiming it represents real Fiction calls. Keep desktop Chat+Graph layout, responsive view, accessibility and reduced-motion behavior. Avoid extra LLM calls for UI or visualization.
 
+### Delivery slices (one verified vertical slice at a time)
+
+1. **T07-A — Answer fidelity:** only the UC-01 verified result envelope and owned-session persistence/restore; show case/cutoff/disposition/approval separately, bounded findings/limitations/source refs and explicit truncation. Reuse `fiction_handlers.backorder_update` output and `sessions.add_turn/get_session`; preserve the existing authorization and source verifier boundaries. This slice should pass G1/G2/G3 and reload tests before changing graph event contracts.
+2. **T07-B — Observed lineage:** instrument existing `observed('tool.sql')`, `rag.policy_retrieval`, policy LLM, and real MCP call sites **only when executed**; pair start/end with one bounded `invocation_id` (plus `parent_invocation_id` when supported), emitted request/result direction and safe status/record counts. Implement allowlists **in both** `observability.SAFE_FIELDS/UI_FIELDS` and `sessions._TRACE_FIELDS`, with bounded identifiers. Missing, dropped, repeated and failed events must not become fake completed edges; do not require SQL/MCP/RAG to occur together in one G1 run.
+3. **T07-C — Browser failure and HITL:** real Chromium exercises persisted evidence, denied/cross-owner reads, revoked SSE, account changes, Manager status and no-write. When another browser tab changes the authenticated account, refuse to render a response under the stale account identity; a 200 returned for another valid user is not authorization for the previous tab's UI. Reuse T06 server identity and session contracts, no second auth system.
+
+**Multi-candidate scope decision for the first slice:** keep server-side rejection rather than implementing a candidate picker without demonstrated need. Replace the current generic `VERIFICATION_FAILED`/“No eligible proposal” display for ambiguous candidates with an explicit, non-sensitive `MULTIPLE_CANDIDATES_REQUIRE_SELECTION` reason and a user-visible limitation. Never create/submit an arbitrary proposal. A verified selector can be a separately reviewed follow-up when actual user demand justifies it.
+
+**Acceptance oracle:** check the actual rendered user-visible answer as well as the structured records; a correct `records` array with omitted/misleading findings is FAIL. Preserve exact identity, source hash, historical cutoff and requested/available units across reloads. For traces, assert event IDs and observed direction against backend logs, not screenshot appearance alone.
+
 ### Acceptance scenarios and cost gate
 
 | ID | Run mode | Essential assertion |
@@ -337,5 +347,5 @@ flowchart LR
 
 **Execution/cost:** targeted pytest + independent read-only SQL/policy oracles + actual local MCP + Chromium. PR CI is **offline/mock LLM**; do **not** dispatch paid live LLM for UI/evidence formatting. One opt-in, small provider-backed browser-to-decision regression belongs to **T08 after T06 and T07 merge**, not every T07 change. Store generated evidence outside Git and record exact commit, mode, expected/observed and limitations.
 
-**Review questions before coding:** (a) which existing event producers can honestly emit paired invocation/return identities without a broad graph rewrite? (b) is a selectable multi-candidate UI required in the first T07 slice or explicitly deferred with an honest limitation? (c) which bounded verified fields may be persisted without crossing T06 access controls? Resolve these by inspecting current merged code; do not create a separate logging or UI framework.
+**Design review gate:** verify the exact persistence allowlist, event identifiers and backend auth identity checks against merged T06 code before implementation. Multi-candidate UI selection is explicitly deferred with a truthful, machine-readable ambiguity reason. No new telemetry framework, UI redesign or paid-provider CI is authorized by this proposal.
 
