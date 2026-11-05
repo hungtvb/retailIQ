@@ -291,3 +291,51 @@ Require exactly one updated row; race/duplicate/wrong version and revoked manage
 
 **Technical references:** [OWASP Session Management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html); [OWASP CSRF Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html); [LangGraph interrupts](https://docs.langchain.com/oss/python/langgraph/interrupts) (**deferred until a workflow truly resumes**).
 
+## 11. T07 — Verified UC-01 chat, SSE and truthful graph (PROPOSED; REVIEW BEFORE CODE)
+
+**Owner / gate:** Chat and SSE #21, UI/evidence #30, parent UC-01 #34. This is a T07 implementation proposal against `main@dc8eb1ac`; T06 implementation [PR #61](https://github.com/hungtvb/retailIQ/pull/61) is **not merged or accepted** at drafting time. Review and merge this section before T07 code. Recheck the merged T06 auth/session contract before implementation; no claim of T07/T08 acceptance is made here. Reuse the approved [Review 10 design](https://github.com/hungtvb/retailIQ/issues/30) and the existing runtime.
+
+**Business result:** An Analyst investigating a historical backorder can see what is verified, why it is qualified, which historical case/cutoff/policy/snapshot support it and what Manager review can or cannot do. The visible graph shows **executed** request/return steps, not a decorative planned agent diagram. A persisted answer survives session reload without silently losing its evidence/limitations.
+
+### Target flow and scope
+
+~~~mermaid
+flowchart LR
+    A[Authenticated owned chat] --> B[Existing LangGraph UC-01]
+    B --> C[Actual SQL / MCP / policy calls]
+    C --> D[Trusted verification and final AnswerResult]
+    C --> E[Redacted execution events]
+    D --> F[One authoritative SSE result and owned persisted turn]
+    E --> G[Bounded SSE logs and owned trace]
+    F --> H[Existing React chat and evidence panel]
+    G --> I[Existing SVG graph: observed calls and returns]
+    H --> J[Local Manager proposal status from T06 API]
+~~~
+
+**Reuse first:** `retailiq/api/http.py`, `retailiq/observability.py`, `retailiq/infrastructure/sessions.py`, existing Fiction answer/envelope and `frontend/src/main.tsx` + `frontend/src/graph.ts`. Keep the current SSE lifecycle `started / log / result | error / done` and source-verifier ownership. No second answer schema, event bus, verifier agent, React Flow migration, UI redesign or Fiction database mutation. **UC-01 shows actual progress and a verified final; no raw model-token streaming or simulated token chunks for unverified business claims.** General safe token streaming remains separately owned by #21 and is not a T07 UC-01 acceptance blocker.
+
+### Contract and failure boundaries
+
+1. **Answer and persistence:** preserve existing AnswerResult fields. Render and persist only bounded, trusted `disposition`, `approval_status`, `findings` (text and source refs), `limitations`, `evidence_refs`, verified source/version, and case evidence cutoff where present. Reuse the existing owned-session evidence storage; don't persist raw documents, prompts, arbitrary tool outputs, or model reasoning. Missing or oversized evidence is shown as **unavailable/truncated**, never reconstructed from model prose. On reload, the same case/cutoff/disposition and source refs must remain visible.
+2. **Actual execution graph:** extend the existing redacted event allowlist minimally with optional per-call `invocation_id`, `parent_invocation_id`, step status and grounded request/result direction metadata. Emit a request edge on an actual invocation and a return edge only on a recorded success/failure response; repeated calls/retries have distinct identities. Do not derive reverse edges from graph configuration, a planned route, or mere presence of an answer. Existing events without identifiers remain readable as a **limited/legacy trace**; they do not prove bidirectional flow. Use bounded source IDs/record counts only, no raw records or credentials.
+3. **SSE and durable result:** at most one final verified result for a successful turn, or an explicit error, followed by completion; correlation to request ID, session ID and authorized principal is mandatory. Queue drops/disconnects/revocations must not create invented graph steps, cross-user events or a second persisted answer. Reflect incomplete trace capture honestly; never show dropped steps as completed. Reuse current SSE worker/owner rechecks and T06 session permissions rather than adding infrastructure.
+4. **User-facing semantics:** separate technical execution state, evidence disposition (`SUPPORTED / NEEDS_REVIEW / INSUFFICIENT_EVIDENCE`) and local Manager proposal state (`PENDING / APPROVED_LOCAL / REJECTED_LOCAL / EXPIRED / INVALIDATED`). Manager local decision is not a warehouse transfer or a graph Agent approval. Show case ID, historical cutoff, candidate warehouse/snapshot, requested vs historical available, exact policy references, significant limitations and next action. Do not label a historical snapshot **current stock**. Only render linked evidence that actually has an authorized resolvable endpoint; otherwise display its verified reference as text.
+5. **Authentication and candidate selection:** enforce T06 authenticated ownership on all fetched messages/trace/proposal data. A 401/account change clears old account state before rendering new content. Do not leak Analyst chat to Manager inbox. For multiple eligible warehouse candidates, either provide a backend-verified selector with explicit snapshot ID or visibly state that only the single-candidate flow is supported; do not silently choose. The UI must never calculate proposal eligibility or approval from chat text.
+6. **Compatibility:** preserve legacy chat and workflow-simulation behavior without claiming it represents real Fiction calls. Keep desktop Chat+Graph layout, responsive view, accessibility and reduced-motion behavior. Avoid extra LLM calls for UI or visualization.
+
+### Acceptance scenarios and cost gate
+
+| ID | Run mode | Essential assertion |
+|---|---|---|
+| T07-G1 | Existing real Fiction G1 + fake router, FastAPI/SSE/Chromium | Exact case/cutoff/policy/snapshot and NEEDS_REVIEW are displayed and restored; local proposal status is distinct; source unchanged |
+| T07-G2/G3 | Deterministic source-verified cases | Recorded exclusions stay scope-qualified; absent snapshots show INSUFFICIENT_EVIDENCE, never zero stock or transfer approval |
+| T07-EVENT | Real traced SQL/MCP/RAG calls with instrumented local adapter | Every visible request/result arrow corresponds to a recorded invocation; repeated/failed calls remain distinct; no ghost MCP/LLM activity |
+| T07-STREAM | Controlled SSE disconnect, error, truncated queue and session revocation | No fabricated final, duplicated committed turn, leaked cross-owner event or false completed graph |
+| T07-RELOAD | Owned session/trace persistence, Chromium | Source/ref/finding/limitation and trace view survive reload; old account is cleared on logout/401 |
+| T07-HITL | Authenticated Analyst/Manager on T06 code | Manager receives only bounded proposal; approve/reject status visible to owner, no Fiction write, no agent approval fiction |
+| T07-AMBIG | Multi-candidate fixture | Explicit verified snapshot selection or honest unsupported/clarification state; never auto-select or submit wrong candidate |
+
+**Execution/cost:** targeted pytest + independent read-only SQL/policy oracles + actual local MCP + Chromium. PR CI is **offline/mock LLM**; do **not** dispatch paid live LLM for UI/evidence formatting. One opt-in, small provider-backed browser-to-decision regression belongs to **T08 after T06 and T07 merge**, not every T07 change. Store generated evidence outside Git and record exact commit, mode, expected/observed and limitations.
+
+**Review questions before coding:** (a) which existing event producers can honestly emit paired invocation/return identities without a broad graph rewrite? (b) is a selectable multi-candidate UI required in the first T07 slice or explicitly deferred with an honest limitation? (c) which bounded verified fields may be persisted without crossing T06 access controls? Resolve these by inspecting current merged code; do not create a separate logging or UI framework.
+
