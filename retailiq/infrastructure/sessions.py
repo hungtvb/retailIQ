@@ -12,6 +12,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from uuid import UUID, uuid4
 from datetime import datetime
+from typing import Callable
 import re
 import time
 from retailiq.security import SecurityContext
@@ -392,7 +393,14 @@ def save_customer_memory(sid: str, *, consent: bool, preferences: dict,
 
 
 def delete_session(sid: str, *, owner_user_id: str,
-                   principal: SecurityContext) -> bool:
+                   principal: SecurityContext,
+                   before_delete: Callable[[], None] | None = None) -> bool:
+    """Serialize revocation, optional checkpoint cleanup and session deletion.
+
+    Cleanup must only happen after verified owner/auth inside this SQLite writer
+    lock. An exception in cleanup rolls back the session deletion; graph state
+    is a separate local store and not otherwise cross-DB transactional.
+    """
     if principal.user_id != owner_user_id:
         raise PermissionError('Authenticated owner required')
     with _connect() as c:
@@ -402,6 +410,8 @@ def delete_session(sid: str, *, owner_user_id: str,
         if row is None:
             return False
         _assert_owned_active_in_transaction(c, sid, principal)
+        if before_delete is not None:
+            before_delete()
         return c.execute('DELETE FROM sessions WHERE id=? AND owner_user_id=?',
                          (sid, owner_user_id)).rowcount > 0
 
