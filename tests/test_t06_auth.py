@@ -138,3 +138,27 @@ def test_openapi_schema_and_docs_require_authenticated_local_user(api):
     for path in ("/openapi.json", "/docs", "/redoc"):
         granted = api.get(path)
         assert granted.status_code == 200, (path, granted.status_code)
+
+
+def test_switch_account_rotates_previous_browser_session(api):
+    """A new login must revoke the old cookie before private data is released."""
+    user_a = _create_user("browser_a", "analyst")
+    assert _login(api, "browser_a").status_code == 200
+    old_token = api.cookies.get(auth.COOKIE_NAME)
+    assert old_token
+    old_principal = auth.principal_from_token(old_token)
+    assert old_principal and old_principal.user_id == user_a
+
+    user_b = _create_user("browser_b", "manager")
+    assert _login(api, "browser_b").status_code == 200
+    assert auth.principal_from_token(old_token) is None
+    current = api.get("/api/auth/me")
+    assert current.status_code == 200
+    assert current.json()["user_id"] == user_b
+    assert current.json()["role"] == "manager"
+
+    # Reusing the old cookie cannot read data, including on another HTTP client.
+    with TestClient(app) as stale:
+        stale.cookies.set(auth.COOKIE_NAME, old_token)
+        assert stale.get("/api/sessions").status_code == 401
+
