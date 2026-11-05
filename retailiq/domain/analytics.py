@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 import os
 import re
+import unicodedata
 
 from retailiq.infrastructure.sqlite import query
 
@@ -20,32 +21,80 @@ class DomainDataError(ValueError):
 _SKU = re.compile(r"^[A-Z0-9][A-Z0-9._-]{0,63}$")
 
 
+def fold_text(text: str) -> str:
+    """Casefold and strip Vietnamese diacritics for literal phrase matching."""
+    if not isinstance(text, str):
+        raise ValueError('Text must be a string')
+    decomposed = unicodedata.normalize('NFD', text.casefold())
+    stripped = ''.join(char for char in decomposed if not unicodedata.combining(char))
+    return stripped.replace('đ', 'd')
+
+
 def month() -> str:
     """Configured date is deliberate and reproducible for the synthetic demo."""
     return date.fromisoformat(os.getenv('RETAILIQ_AS_OF', '2026-10-28')).strftime('%Y-%m')
 
 
+_ENGLISH_MONTHS = ('january', 'february', 'march', 'april', 'may', 'june', 'july',
+                   'august', 'september', 'october', 'november', 'december')
+
+# A month name is temporal only in explicit grammar ("in May", "May 2026",
+# "May of 2026"); a bare "may" is the English modal verb far more often.
+_ENGLISH_MONTH_RE = re.compile(
+    r'\b(?:in|of|for)\s+(' + '|'.join(_ENGLISH_MONTHS) + r')\b(?:\s+(20\d{2})\b)?'
+    r'|\b(' + '|'.join(_ENGLISH_MONTHS) + r')\s+(?:of\s+)?(20\d{2})\b'
+)
+
+# Wording that refers to the configured reporting month rather than an
+# unresolved period; these stay answered as the reference month. Matched on
+# diacritic-folded text so "thang nay" behaves like "tháng này".
+_REFERENCE_MONTH_RE = re.compile(
+    r'\bthis\s+month\b|\bcurrent\s+month\b|\bmonth\s+to\s+date\b|\bmtd\b'
+    r'|\bthang\s+nay\b|\bthang\s+hien\s+tai\b'
+)
+
+# Any period wording that cannot be resolved must clarify, never guess a month.
+# Matched on diacritic-folded text ("quý" -> "quy", "năm" -> "nam").
+_PERIOD_HINT_RE = re.compile(
+    r'\b(?:quarter|quy|q[1-4]|year|years|nam|previous|last|next|month|months|thang)\b'
+    r'|\b(?:truoc|sau)\b'
+    r'|\b20\d{2}\b'
+)
+
+
+def _looks_period_like(text: str) -> bool:
+    """True when the text talks about a sales period it did not pin down."""
+    return bool(_PERIOD_HINT_RE.search(fold_text(text)))
+
+
 def requested_month(question: str) -> str:
-    """Resolve an explicit sales month against the demo reference year."""
+    """Resolve an explicit sales month against the demo reference year.
+
+    Unsupported period wording raises DomainDataError instead of silently
+    answering a different month; wording that is not temporal at all keeps the
+    configured reference month. Vietnamese is matched diacritic-insensitively.
+    """
     reference = date.fromisoformat(os.getenv('RETAILIQ_AS_OF', '2026-10-28'))
-    text = question.casefold()
-    if 'tháng trước' in text or 'last month' in text:
+    text = fold_text(question)
+    if 'thang truoc' in text or 'last month' in text:
         previous = reference.replace(day=1) - timedelta(days=1)
         return previous.strftime('%Y-%m')
-    english_months = ('january', 'february', 'march', 'april', 'may', 'june',
-                      'july', 'august', 'september', 'october', 'november', 'december')
-    english = re.search(
-        r'\b(' + '|'.join(english_months) + r')\s*(20\d{2})?\b', text
-    )
+    english = _ENGLISH_MONTH_RE.search(text)
     if english:
-        return f'{int(english.group(2) or reference.year):04d}-{english_months.index(english.group(1)) + 1:02d}'
-    match = re.search(r'tháng\s+(1[0-2]|0?[1-9])(?:\s*(?:năm|/|-)\s*(20\d{2}))?', text)
-    if not match:
-        match = re.search(r'\b(20\d{2})[-/](1[0-2]|0?[1-9])\b', text)
-        if match:
-            return f'{int(match.group(1)):04d}-{int(match.group(2)):02d}'
+        name = english.group(1) or english.group(3)
+        year = english.group(2) or english.group(4) or reference.year
+        return f'{int(year):04d}-{_ENGLISH_MONTHS.index(name) + 1:02d}'
+    match = re.search(r'\bthang\s+(1[0-2]|0?[1-9])(?!\d)(?:\s*(?:nam|/|-)\s*(20\d{2}))?', text)
+    if match:
+        return f'{int(match.group(2) or reference.year):04d}-{int(match.group(1)):02d}'
+    match = re.search(r'\b(20\d{2})[-/](1[0-2]|0?[1-9])(?!\d)\b', text)
+    if match:
+        return f'{int(match.group(1)):04d}-{int(match.group(2)):02d}'
+    if _REFERENCE_MONTH_RE.search(text):
         return reference.strftime('%Y-%m')
-    return f'{int(match.group(2) or reference.year):04d}-{int(match.group(1)):02d}'
+    if _looks_period_like(text):
+        raise DomainDataError('Unrecognized sales period')
+    return reference.strftime('%Y-%m')
 
 
 def _month_bounds(period: str | None = None) -> tuple[str, str]:
@@ -137,6 +186,28 @@ def inventory(sku: str) -> list[dict]:
     ''', (normalized,))
     # No stock rows is a valid empty result; never invent stock or index rows[0].
     return _validate_inventory(rows, normalized)
+
+
+def inventory_locations() -> list[str]:
+    """Known warehouse/store display names, derived from inventory evidence.
+
+    Location-filtered revenue is unsupported, so the resolver needs the real
+    location vocabulary instead of a hard-coded city list.
+    """
+    rows = query('''
+        SELECT DISTINCT l.name AS location
+        FROM inventory AS i
+        JOIN locations AS l ON l.id = i.location_id
+        ORDER BY l.name
+    ''')
+    names: list[str] = []
+    for row in rows:
+        name = row.get('location')
+        if not isinstance(name, str) or not name.strip():
+            raise DomainDataError('Inventory location name is missing')
+        if name not in names:
+            names.append(name)
+    return names
 
 
 def _ensure_sales_lines_valid(start: str, end: str) -> None:
