@@ -166,3 +166,48 @@ def test_session_revoked_while_sse_worker_runs_drops_result_and_turn(api, monkey
     assert "PRIVATE_STREAM_FINAL" not in response.text
     with sqlite3.connect(sessions._path()) as db:
         assert db.execute("SELECT count(*) FROM messages WHERE session_id=?", (sid,)).fetchone()[0] == 0
+
+
+def test_switch_account_mid_sse_drops_old_users_result(api, monkeypatch):
+    """A new login on the same browser token cannot deliver the old user's SSE."""
+    user_a, headers = _login(api, "stream_switch_a")
+    sid = sessions.create_session("Stream", owner_user_id=user_a)["id"]
+    old_token = api.cookies.get(auth.COOKIE_NAME)
+    assert old_token
+    entered = threading.Event()
+    release = threading.Event()
+
+    def controlled_ask(question, **kwargs):
+        entered.set()
+        assert release.wait(10), "test barrier timed out"
+        return {"answer": "OLD_ACCOUNT_PRIVATE_STREAM_RESULT",
+                "active_agent": "retailiq", "intent": "general",
+                "records": [], "contexts": []}
+
+    monkeypatch.setattr(http, "ask", controlled_ask)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(api.post, "/ask/stream",
+                             json={"question": "Show my private case", "session_id": sid},
+                             headers=headers)
+        try:
+            assert entered.wait(10), "worker never started"
+            auth.create_local_user("stream_switch_b", "analyst", PASSWORD)
+            # A second client carries the old browser cookie on the new login
+            # while the first client's original SSE response is still pending.
+            with TestClient(http.app) as switched:
+                switched.cookies.set(auth.COOKIE_NAME, old_token)
+                next_login = switched.post("/api/auth/login", headers=ORIGIN,
+                    json={"username": "stream_switch_b", "password": PASSWORD})
+                assert next_login.status_code == 200, next_login.text
+                assert switched.get("/api/auth/me").status_code == 200
+            assert auth.principal_from_token(old_token) is None
+        finally:
+            release.set()
+        response = future.result(timeout=15)
+    assert response.status_code == 200
+    assert "OLD_ACCOUNT_PRIVATE_STREAM_RESULT" not in response.text
+    with sqlite3.connect(sessions._path()) as db:
+        assert db.execute(
+            "SELECT count(*) FROM messages WHERE session_id=?", (sid,)
+        ).fetchone()[0] == 0
+
