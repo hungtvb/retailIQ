@@ -92,7 +92,17 @@ def journey(page, base: str, analyst: tuple[str, str],
     # trivially passes while the submit control is not rendered at all.
     expect(page.get_by_role("button", name="Submit for Manager review")).to_have_count(0)
     expect(page.locator(".review-boundary")).to_contain_text("No warehouse transfer")
-    page.get_by_role("button", name="Sign out").click()
+    # Revoke the browser's real auth session via an out-of-band API client.
+    # The still-mounted Workspace must clear confidential state on the next 401.
+    auth_info = page.request.get(base + "/api/auth/me")
+    assert auth_info.status == 200
+    revoked = page.request.post(base + "/api/auth/logout", headers={
+        "Origin": base, "X-CSRF-Token": auth_info.json()["csrf_token"],
+    })
+    assert revoked.status == 200
+    page.get_by_role("button", name="Refresh").click()
+    expect(page.get_by_role("heading", name="Sign in")).to_be_visible(timeout=15000)
+    assert page.locator(".message-assistant").count() == 0
     page.reload(wait_until="domcontentloaded")
     expect(page.get_by_role("heading", name="Sign in")).to_be_visible()
 
