@@ -195,3 +195,63 @@ flowchart TD
 **Explicitly deferred:** remove legacy analytics/fixture after Fiction replacement UCs, MCP SDK migration, dynamic planner #23, policy RAG T05, authenticated HITL T06, product UI consolidation, new agent infrastructure and ROI optimization. These are **not hidden work in R1**.
 
 **Technical reference:** [LangGraph Python Graph API checklist](https://docs.langchain.com/oss/python/langgraph/use-graph-api) — shared state, `Command` control transfer and runtime dependency boundaries; no new LangGraph API or version upgrade is proposed.
+
+## Harness H0 — bounded execution and controlled planning (Review 03, proposed 2026-11-07)
+
+**Status: DESIGN PROPOSAL ONLY; no runtime implementation or acceptance.** Baseline: `main@dc8eb1ac692461d3c94bf27f8f000658e353d02d`. This section refines [Review 03 / issue #23](https://github.com/hungtvb/retailIQ/issues/23) using lessons from Claude Code's harness (bounded agent loop, tool mediation, lifecycle observability). It does **not** supersede [Review 02 context / #22](https://github.com/hungtvb/retailIQ/issues/22), [Review 08 evidence / #28](https://github.com/hungtvb/retailIQ/issues/28), [Review 09 security / #29](https://github.com/hungtvb/retailIQ/issues/29) or UC-01's reviewed Implementation Detail.
+
+### H0.1 — code-grounded baseline and non-goals
+
+| Existing responsibility | Observed implementation on baseline | Remaining contract gap |
+|---|---|---|
+| Loop and graph | `week1_graph.run` executes one compiled `StateGraph`; `recursion_limit=12`; router/agents/verifier already exist | Graph recursion bound is **not** a complete request-level model/tool/task/time budget |
+| Provider | `core/config.py::chat_model`: per-call timeout 20s by default, `max_retries=1` | Timeout does not cancel a whole synchronous graph or account for all provider SDK retries/cost |
+| Tools | Governed read-only SQL, `mcp_adapter.py` envelope/source verification and stdio timeout 45s, product RAG; SQL transient retry up to two attempts | No unified, observable logical invocation accounting / per-run stop reason |
+| Result | `validate_graph_result` and UC-01 source/policy checks, verified-final commit via `api/http.py::_perform_turn` | No general plan-completeness verifier for novel multi-source questions |
+| Context | `bounded_history`, verified committed UC-01 case binding, SQLite sessions and LangGraph checkpointer | General rank/entity/period resolution is still #22; must not trust assistant text or stale checkpoint as authoritative |
+| Trace/UI | `observability.py` redacted JSONL, `/ask/stream` execution events, separate graph rendering | Need machine-readable observed task start/result/stop; never show proposed tasks as executed |
+
+**Do not:** copy Claude Code's autonomous Bash/file tools, install a new harness framework, introduce a second event store/graph, treat deterministic workflow UI nodes as live agents, change legacy and Fiction semantics, or slip authentication/HITL/T07 changes into this work. PR #63 already owns answer-integrity remediations; reconcile its changes before harness code. The established UC-01 path remains a fixed, governed capability; generic composition must not bypass its CASE-ID/cutoff/policy/source gates.
+
+### H0.2 — trusted execution contracts (proposed; exact Python types finalized in the first implementation slice)
+
+**RequestContext** is created for each turn from authenticated principal *when available* (#29/T06), explicit user request, the session's **committed and verified** evidence (#22), source version, and an internal request ID. Session UUID, graph checkpoint, model/tool response, document text and prior assistant prose never confer identity or authorization. Explicit current-turn constraints override only named inherited dimensions; missing or ambiguous identity/period/location/rank must clarify, not broaden scope.
+
+**CapabilitySpec** maps a fixed ID to an existing reviewed domain handler, typed input/output, read/write class, authority, source/evidence requirements and permission predicate. There is **no** import-by-name, dynamically registered model-provided tool, arbitrary SQL, or LLM-granted permissions. Read-only inventory/order MCP remains verified at its existing adapter boundary.
+
+**TaskPlan v1**, for *new* multi-capability requests only, has bounded `tasks[]` of stable task IDs, allowlisted capability ID, typed arguments, dependency IDs, original-question dimension coverage, committed evidence bindings, plan origin (`direct | template | model_proposed`) and required outputs. One plan proposal → deterministic validation → execution → verification; at most one *explicitly justified* repair, never open-ended replan. Existing direct routes/UC-01 do not have to pass through an LLM planner.
+
+**PlanValidator** checks: known IDs/schema; unique task IDs and acyclic dependencies; required capability coverage (no silently dropped stock, warranty, revenue or channel dimensions); authorized identity/location/channel/period; exact SKU/product_id and rank binding across tasks; source version/time fitness (#28); fan-out/task limits; typed bindings to actual verified predecessor outputs. Model-generated `verified`, `permission_granted` and source timestamps are untrusted claims. Unsupported or ambiguous requests return **CLARIFY** or **DENIED** without partial unauthorized tool execution.
+
+**RunBudget** is owned by the existing execution boundary, not by the prompt. It counts **logical** model invocations, tool invocations, tasks, retries, and elapsed time, with a reason on stop. Proposed initial *review candidates*, not production-configured or measured limits: 6 tasks, fan-out 5, 4 logical model calls, 12 logical tool calls, 90s cooperative request deadline, one plan repair. Final ceilings must be calibrated with Phase-0 scenario measurements and may vary by reviewed capability. LangGraph's recursion limit remains independent. An SDK-internal retry may create extra physical provider requests; trace it separately where observable and do not claim a strict token-cost ceiling without provider-layer evidence. No synchronous Python/LLM worker can be forcibly killed merely because the cooperative deadline has elapsed. Preserve existing provider and MCP timeouts until separately reviewed.
+
+**Execution state** is independent of business disposition and manager approval:
+
+```text
+PLANNING -> VALIDATING -> EXECUTING -> VERIFYING -> COMPLETED
+              |             |             |
+              +--> CLARIFY   +--> FAILED   +--> FAILED
+              +--> DENIED   +--> STOPPED  +--> STOPPED
+```
+
+`COMPLETED` means a verifiable response; `CLARIFY` is a safe request for missing context; `DENIED` is an authorization/policy refusal; `FAILED` is a runtime/data failure; `STOPPED` is budget, cancellation checkpoint, or no-progress termination. `SUPPORTED | NEEDS_REVIEW | INSUFFICIENT_EVIDENCE` remains a **business** finding disposition, not execution success/failure; Manager approval remains another orthogonal state. Verified partial facts are allowed with explicit limitations, never an unsupported final conclusion.
+
+**Tool boundary** is `validate args + context authorization + budget preflight -> existing handler/MCP -> validate envelope + source/scope/time -> record observed result`. Pre- and post-use events are internal callbacks/interceptors on current paths, not a general-purpose hook plugin system. A transient read may retry only through existing idempotent retry policy; never auto-retry approvals/mutations, source conflicts, invalid schema, permission failures or LLM-generated repair outside the review contract. For a failed or disconnected stream, never emit unverified business answer tokens; persist only a validated final turn. Worker completion after client disconnect is not proof of successful cancellation.
+
+### H0.3 — instrumentation and verification
+
+Reuse `observability.log_event`, request/session correlation, redaction and existing SSE; **do not** store raw prompts, credentials, tool arguments containing PII, policy text or complete SQL results. Proposed events: `harness.plan_proposed`, `harness.plan_validated`, `harness.task_started`, `harness.task_completed`, `harness.task_failed`, `harness.evidence_checked`, `harness.run_verified`, `harness.turn_committed`, `harness.run_stopped`, and `harness.run_completed`. `run_verified` means the graph result passed its evidence gate; it is **not** a persisted or delivered answer. `turn_committed` is emitted only after successful session persistence. `run_completed` requires successful terminal verification **and** successful commit when a session is used (stateless answers have no session commit); no success event may precede a failed commit. If logging itself fails, existing diagnostics report the log failure rather than fabricating another success. Emit only measured fields: request ID, task/capability ID, execution mode, source/evidence IDs or safe hashes, count/latency, reason code and status. Do not infer event edges from the planned graph; T07/#30 owns presentation of observed invocations and returns. Keep telemetry failures non-fatal, but expose existing logging health counters.
+
+The authoritative final is still assembled by reviewed domain logic and `validate_graph_result` and committed via existing HTTP/session path. Before commit, verify plan-output coverage, exact requested scope, required source fitness and citation lineage; fail closed or return an explicit verified partial result. Checkpoint state is an **execution continuation mechanism**, not a substitute for committed conversation/evidence storage. Tests must simulate failed turn, retry, interrupted stream and session deletion with actual tool-argument capture.
+
+### H0.4 — implementation slices, dependencies and stop gates
+
+1. **H0 / baseline and design (this PR):** record code-grounded limits, current CI evidence and a reproducible measurement protocol under `SCENARIO_ACCEPTANCE.md`. No new provider calls or runtime changes; measured p50/p95, token counts and route mismatches remain *PENDING* until executed on an exact commit.
+2. **H1-A / execution accounting:** add small per-request run lifecycle/budget and safe events to existing graph/API seams, with deterministic tests; preserve routing, response envelope, sessions and UC-01 behavior. This slice does **not** require the generic planner.
+3. **H1-B / capability contract + validator:** reuse domain/MCP/RAG handlers for allowlisted multi-capability plans, connect with #22 verified context, #28 evidence and T06 auth only when merged. The primary flow is a fixed validated DAG inside existing LangGraph, not a new engine; single-step fast paths stay unchanged.
+4. **H1-C / conservative proposal and execution:** allow controlled structured LLM proposals only for requests the direct path cannot completely cover. Compare against deterministic interpretation, log disagreement and require approval through code validation before execution. Commit only independently verified outputs; new planning paths require a reviewed business/use-case detail before coding.
+5. **H2 / conditional adaptive supervisor:** only after a failing golden case proves post-evidence replanning is needed. Otherwise defer adaptive orchestration, subagent expansion and parallel fan-out optimization.
+
+**Merge/implementation gates:** (a) review and merge this design PR, record final approved `docs/DESIGN.md` commit in issue #23 and the implementation PR; (b) reconcile open #63 answer-integrity fixes, #61 authentication and #62/T07 SSE before touching their files; (c) run `SCENARIO_ACCEPTANCE.md` H0 golden and adversarial cases with exact SHA and explicit offline/mock/real-MCP/provider modes; (d) review code PRs independently, do not merge or call capability ACCEPTED based only on green tests; (e) only after merged runtime behavior changes run the opt-in, secret-scoped live gate if needed. Track acceptance in `CAPABILITY_LEDGER.md` only with actual artifact evidence. A denied/invalid plan, unauthorized scope, wrong SKU/time, silent omitted subtask, uncontrolled retry or leaked unverified final is a **stop/rollback condition**.
+
+**References:** [LangGraph Python Graph API](https://docs.langchain.com/oss/python/langgraph/use-graph-api), [LangGraph persistence](https://docs.langchain.com/oss/python/langgraph/persistence), [Review 03 requirements](https://github.com/hungtvb/retailIQ/issues/23), and the [Claude Code harness study](https://deepwiki.com/zackautocracy/claude-code) as an architectural reference, **not** a compatibility or source-authority dependency.

@@ -155,3 +155,53 @@ For every reported result, record the **test SHA, run date, environment, executi
 - **Run artifacts:** CI artifacts or access-controlled external storage. Keep generated reports, screenshots and traces outside Git (do not delete existing historical artifacts without preserving them).
 
 A locally verified MCP stdio call is not a hosted integration; model-free simulated approvals are not authenticated HITL; provider-backed product RAG is distinct from offline lexical retrieval. Do not label one mode as another.
+
+## Harness H0 — baseline protocol and proposed acceptance (Review 03 / issue #23)
+
+**Status: PLAN / NOT EXECUTED for this change.** This is the reproducible protocol for the [Harness H0 design](DESIGN.md#harness-h0--bounded-execution-and-controlled-planning-review-03-proposed-2026-11-07). Existing historical CI successes must not be presented as new harness acceptance. Use `main@dc8eb1ac692461d3c94bf27f8f000658e353d02d` as the read-only design baseline; code PRs must record their own SHA. Open PR #63 changes routing, answer integrity and audit checks, so rebase and remeasure **after** its integration rather than copying its results into current `main`.
+
+### Baseline measurement method (H0-B)
+
+1. Record exact Git SHA, model/deployment (or `none`), execution mode, fixture/source SHA and request/session IDs. Keep generated results, JSONL traces and reports **outside Git**.
+2. Use disposable synthetic fixtures for legacy paths. For Fiction UC-01 use only the published, pinned release and independent SQL/policy oracle; no EL/FR fallback and no fabricated available stock.
+3. For every scenario capture: actual route/agent/capability sequence, sanitized typed tool arguments and verified outputs, source/evidence IDs, clarification/stop reason, outcome vs independent oracle, logical model/tool calls, counted retries, wall-clock time and tokens **only if the provider reports them**. Do not convert estimates into measured token usage.
+4. Run each deterministic/mocked scenario at least once; repeat latency comparisons with enough identical runs to disclose sample count, median and p95 rather than extrapolating from one sample. Actual provider calls are manual/opt-in via the existing live gate, never implicitly triggered by this docs PR. Treat model/SDK-internal retry counts as **unknown** unless instrumented at the right layer.
+5. Start from the existing targeted no-provider commands below, then add harness-specific tests in implementation PRs. Passing a fixture test does not establish real LLM routing accuracy. All answers involving business facts require independent domain evidence.
+
+```bash
+python -m pytest -q tests/test_orchestration_hardening.py tests/test_harness_fixes.py tests/test_agent_execution_instrumentation.py tests/test_full_mode_dispatch.py
+python -m scripts.audit_queries --mode offline --strict
+python -m scripts.audit_edge_scenarios --strict
+```
+
+Existing [main CI #41858108933](https://github.com/hungtvb/retailIQ/actions/runs/41858108933) is a historical `success` on the baseline SHA, **not** a harness design test. The [#63 branch Python CI #41978086402](https://github.com/hungtvb/retailIQ/actions/runs/41978086402) is on a **different, unmerged** SHA. No new harness baseline or paid-provider suite was executed as part of this design proposal.
+
+### Golden and negative scenario matrix (H0-S; all pending)
+
+| ID | Request / fault injection | Independent acceptance oracle | Minimum mode |
+|---|---|---|---|
+| H0-01 | Clear single-SKU inventory query | Exactly one authorized reviewed inventory read; exact SKU/location/source, no unnecessary planner or model calls on deterministic fast path | offline_synthetic + mocked graph |
+| H0-02 | Top-5 ranked sales for period P then inspect stock | Five exact source-ranked product identities; stock uses those IDs, retains ranking period and records inventory freshness separately; no missing capability | mocked graph + independent SQL |
+| H0-03 | Rank #2 follow-up after the ranking changes in the DB | Resolve the previously **committed** displayed SKU, or clarify if original evidence absent; never silently recalculate the rank | session + independent SQL |
+| H0-04 | Price + stock + warranty; separate September rank and October revenue | Plan covers all requested supported dimensions with original/inherited scopes; cannot substitute whole-store totals or omit one source | mocked graph + independent SQL/RAG |
+| H0-05 | UC-01 G1 with real CASE-ID; followed by order details | Same source SHA/case/cutoff/policy and exact evidence lineage; validated result, no operational write; MCP is real stdio only when explicitly tested | real Fiction oracle + local_mcp_stdio; provider-backed optional |
+| H0-06 | Unknown SKU/warehouse, ambiguous period or ranking | Targeted CLARIFY, no global/unscoped fallback, no unsupported business conclusion | offline_synthetic + mocked graph |
+| H0-07 | Model proposes unknown tool, arbitrary SQL, unbound output or a dependency cycle | Trusted plan validator DENIES/CLARIFIES before any tool execution; no model-granted permission | mocked |
+| H0-08 | Task limit/fan-out/model/tool-call or deadline budget exceeded | STOPPED with stable reason; bounded observed calls, no unverified final business answer; a cooperative timeout is **not** reported as forced cancellation | mocked + time-controlled |
+| H0-09 | Duplicate read invocation, transient `database is locked`, non-transient corruption | Deduplicate only when safe/equivalent; transient read bounded at reviewed attempts, corrupt/permission/contract errors never retried | mocked + SQLite fault |
+| H0-10 | Wrong SKU/source version, stale/undated observation, conflicting applicable policy | Domain evidence gate blocks unsupported decision; verified partial facts may appear with explicit limitations/reason codes | Fiction oracle + mocked |
+| H0-11 | Failed session commit after graph verification, lost SSE client, checkpoint resume, then new question | `run_verified` may exist, but no `turn_committed`/`run_completed` or successful final when persistence fails; no stale/uncommitted context leak, unsafe approval retry or cross-session reuse; observed execution retains request ID | API/session/SSE mocked |
+| H0-12 | Unauthorized user/session/cross-location request and same-browser identity switch | Enforced server-side owner/location scope; denied before read or HITL; **requires merged T06** and authenticated Chromium gate, not a fake role label | authenticated browser after T06 |
+| H0-13 | Injected document/tool text attempts to change permissions or plan | Untrusted text cannot mutate tool allowlist, owner, business source/time/coverage or verified outcome | mocked retrieval + tool result |
+| H0-14 | Events include a proposed node never executed; telemetry sink unavailable | No phantom execution edge; logging failure non-fatal yet counted; only verified final answer committed and displayed | API/SSE + mocked |
+
+**Acceptance threshold:** every scenario required by a code slice must compare expected vs observed **business facts, control flow, tool arguments, evidence refs and side effects**, not just regex matches on the final answer. The first design PR may mark none of H0-S as PASS. A source-backed regression or denied plan with missing event/reason fails the harness gate even if HTTP returns 200. Mark ambiguous/unsupported outcomes as gaps; never auto-skip.
+
+### Per-slice release gates
+
+- **H1-A:** cases H0-01, 05, 06, 08–11, 14 + existing graph/SSE/session tests; distinguish logical call count, real provider attempts, deadline observation and worker cancellation. Zero silent extra business writes.
+- **H1-B:** cases H0-02–04, 07, 10, 12–13 + scoped auth/context/evidence fixtures after dependencies are merged. Test plan coverage, scope preservation and output lineage on the actual selected tools.
+- **H1-C:** add multilingual paraphrases, rule/model disagreements, source loss between tasks, bounded repair and provider-backed comparisons; use an independent oracle and a **manual** paid gate only when relevant. Record false routing, omission, clarification, cost and latency relative to H0.
+- **H2:** **no gate scheduled** until a real scenario demonstrates the fixed plan/DAG cannot suffice. If adopted, test no-progress/duplicate detection and additional model/tool spend against Phase 1.
+
+**Reporting template:** `commit | scenario | mode | input/fixture/source SHA | expected | observed | route/task/tool trace | tokens (reported/unknown) | elapsed | outcome/stop_reason | artifact location | remaining gaps`. Owner #23 and affected UC Issues receive actual test links after execution; update `CAPABILITY_LEDGER.md` only when acceptance evidence changes.
