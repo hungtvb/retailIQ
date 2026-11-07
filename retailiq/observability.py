@@ -40,7 +40,7 @@ _MAX_LOG_LINE_BYTES = 8192
 SAFE_FIELDS = frozenset({
     'agent', 'previous_agent', 'target_agent', 'intent', 'skill', 'tool',
     'status', 'status_code', 'method', 'path', 'duration_ms', 'route_fallback',
-    'execution_mode', 'error_type', 'record_count', 'context_count',
+    'execution_mode', 'error_type', 'stop_reason', 'record_count', 'context_count',
     'subagent', 'mcp_server', 'input_tokens', 'output_tokens',
     'session_id', 'request_id', 'stack_trace',
 })
