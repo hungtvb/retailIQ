@@ -293,6 +293,8 @@ def execute_golden_case(db: Path, manifest: Path, knowledge: Path, oracle: dict,
             graph._fiction_store_cached.cache_clear()
             try:
                 with TestClient(app) as client:
+                    from scripts.isolated_auth import login_fixture_client
+                    login_fixture_client(client)
                     session_reply = client.post("/api/sessions", json={})
                     _check(session_reply.status_code == 201, "Failed to create isolated session")
                     session = session_reply.json()["id"]

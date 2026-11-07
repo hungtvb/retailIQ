@@ -31,7 +31,7 @@ RetailIQ uses **synthetic** local data rather than live POS/OMS, ERP/WMS or PIM 
 | Product documents and index | `data/product_docs/`, `data/knowledge/` and configured RAG index | Re-index using `python -m scripts.index_products`; offline lexical search is not vector retrieval |
 | Local diagnostics | `data/logs/retailiq.jsonl` / `RETAILIQ_LOG_FILE` | Rotating JSONL telemetry, **not** an immutable compliance audit or remote LangSmith traces |
 
-The API is loopback-only by middleware checks of peer and Host. This is **not identity authentication, RBAC, a tenant boundary or production security**. Retail analytics use read-only parameterized queries via `retailiq/infrastructure/sqlite.py`; no unrestricted LLM-generated SQL is executed.
+The API is loopback-only by middleware checks of peer and Host. **T06 Draft branch only:** local Analyst/Manager authentication, owner-scoped application conversations and CSRF protection have been added but remain unaccepted pending CI/browser tests; this is **not production IAM or tenant security**. Retail analytics use read-only parameterized queries via `retailiq/infrastructure/sqlite.py`; no unrestricted LLM-generated SQL is executed.
 
 ## 2. Data model
 
@@ -64,11 +64,11 @@ Seed fixture: 10 catalog SKUs, three locations and 120 generated orders. This is
 
 | Table | Key fields | Contract |
 |---|---|---|
-| `sessions` | `id` UUID text PK, `title`, `active_agent`, `created_at`, `updated_at` | Local sessions, not authenticated customers |
+| `sessions` | `id` UUID text PK, `owner_user_id`, `title`, `active_agent`, timestamps | New rows belong to an authenticated local user; ownerless legacy rows are not automatically assigned or exposed |
 | `messages` | `id` PK, `session_id` FK, `role`, `content`, `intent`, `agent`, `evidence_json`, `request_id`, `created_at` | Stored after successful turn; bounded evidence metadata is not authoritative inventory/sales data; `request_id` added via compatibility migration |
 | `execution_traces` | (`session_id`, `request_id`) PK, `events_json`, `truncated`, `created_at` | Allowlisted, bounded event metadata for recorded assistant turns only; no raw prompts, tool outputs or stack traces |
 | `customer_session_memory` | `session_id` PK/FK, `preferences_json`, `consented_at`, `updated_at` | Explicit opt-in preferences, limited to that same session; delete session cascades to preferences |
-| `workflow_runs` | `id` PK, `scenario`, `status`, `trace_json`, `report`, `created_at`, `decision_at` | Stored in workflow SQLite only. A recorded approval is simulated, not an authorized external write |
+| `workflow_runs` | `id` PK, `owner_user_id`, `scenario`, `status`, `trace_json`, `report`, timestamps | Separate workflow SQLite, owner-scoped over the HTTP interface; NULL legacy owners hidden. Review is a simulation, **not** an authenticated UC-01 Manager decision |
 
 The sessions API returns **at most 200 newest messages** in display order and flags `messages_truncated`; older rows can still exist. A saved `execution_traces` record may be absent for a legacy or non-streamed turn; absence is not proof of an empty execution. The preference store accepts only validated attributes and requires explicit consent.
 
@@ -109,6 +109,8 @@ Inspect `GET /openapi.json` from the running FastAPI app for precise runtime sch
 
 ### Chat and interface
 
+**T06 Draft branch only (not accepted/merged):** `POST /api/auth/login` accepts CLI-provisioned local credentials with matching Origin and sets an opaque `HttpOnly` session cookie; `GET /api/auth/me` returns local user metadata and a CSRF token; `POST /api/auth/logout` revokes the cookie. Business, sessions, workflow, ROI and diagnostics endpoints require a valid user cookie (`401` otherwise). Stateful requests also require same-origin `Origin` or verified `Referer` and `X-CSRF-Token` (`403` otherwise). Only static/login assets and `/health` remain public. **The React Workspace login/logout, CSRF and Manager review controls have been implemented on the Draft branch but are awaiting Chromium and security acceptance.** No hardcoded user or password.
+
 | Method / path | Input | Success / meaningful errors |
 |---|---|---|
 | `GET /health` | — | `{"status":"ok"}` (process only; no provider readiness) |
@@ -131,7 +133,24 @@ Inspect `GET /openapi.json` from the running FastAPI app for precise runtime sch
 | `DELETE /api/sessions/{session_id}/memory` | Revoke stored preferences; `204` |
 | `GET /api/sessions/{session_id}/traces/{request_id}` | Recorded, allowlisted local execution event trace; `404` if session/trace absent (including older/non-streamed turns) |
 
-All session/memory endpoints lack authenticated customer identity. An arbitrary session UUID is not proof that the caller owns a real customer's data.
+**T06 Draft branch only:** all session, history, consent and trace reads/writes now filter by the validated `owner_user_id`; unknown/foreign/ownerless sessions return indistinguishable `404`. A session UUID never grants ownership. Turns recheck active auth and owner atomically in the application SQLite write transaction; SSE rechecks auth before releasing queued events. These local staff accounts are not customer identity records.
+
+### UC-01 historical Analyst proposal and Manager local decision (T06 Draft)
+
+These APIs use **the application SQLite** for immutable proposals and decisions. They recompute canonical Fiction facts and effective warehouse policy from the **pinned SQL release at the recorded evidence cutoff**. A historical `NEEDS_REVIEW` finding remains unchanged after local review. There is **no stock transfer, inventory reservation, order update or LangGraph interrupt/resume**.
+
+| Method / path | Authorization and result |
+|---|---|
+| `GET /api/uc01/eligibility?session_id=...` | Analyst owner only: provisional, source-reverified candidate; `eligible=false` for missing/invalid case binding |
+| `POST /api/uc01/proposals` | Analyst only: `{"session_id":"UUID","candidate_snapshot_id":null}`; optional snapshot ID required when several verified candidates; `201` new, `200` identical same-owner idempotent, `409` existing conflicting review cycle, `422` invalid or changed historical source |
+| `GET /api/uc01/my-proposals` | Analyst owner only: bounded proposal statuses, including reviewed/expired |
+| `GET /api/uc01/proposals` | Manager-only bounded pending inbox, with no Analyst chat/memory/trace |
+| `GET /api/uc01/proposals/{proposal_id}` | Manager-only immutable proposal facts and local review status |
+| `POST /api/uc01/proposals/{proposal_id}/decision` | Authenticated Manager only: `{"decision":"approve"|"reject","expected_version":1}`. The backend independently re-verifies source, cutoff, selected snapshot and policy before atomic CAS. `200` returns `APPROVED_LOCAL`/`REJECTED_LOCAL`, version 2, reviewer and timestamp; `409` stale/expired/duplicate, `403` unauthorized/CSRF, `503` SQLite transaction failure |
+
+One review cycle exists per `(case_id, source_sha256, cutoff)`, independent of conversation. Identity and active auth are rechecked within the same app-SQLite write transaction as proposal insertion or Manager decision. Effective `EXPIRED` proposals are excluded from the Manager inbox. These routes do **not** return client-provided authorization fields, raw prompts, customer records or Analyst chat.
+
+**Evidence modes:** Python synthetic sealed 27-table fixture tests, independent published Fiction LFS G1 oracle with authenticated HTTP + fake intent router (no paid LLM), and planned real Chromium Workspace tests. The published G1 oracle verifies Fiction SHA-256 is unchanged after the complete local Manager decision. **Draft code is not production RBAC certification.**
 
 ### Freshness, semantic layer, workflow simulation
 
@@ -142,8 +161,8 @@ All session/memory endpoints lack authenticated customer identity. An arbitrary 
 | `POST /api/workflows/freshness/route` | `{"metric":"available_stock","sku":"EL-003","requested_tier":"15_min"}`. Metric is one of stock/revenue/top sellers/product knowledge/order state; tier optional. `sku` required **only** for inventory. Inventory performs read-only SQL (optional local MCP re-read) and evaluates row timestamps; other metrics return selected routes with `UNVERIFIED` timestamp status. |
 | `POST /api/workflows/freshness/question` | `{"question":"Tồn kho của top seller ngay bây giờ?"}` (3–500 chars). Deterministically classify source needs; multiple sources return `REQUIRES_ORCHESTRATION` **without executing joined tools**; unrecognized intent `422`; stock without resolvable SKU `NEEDS_PRODUCT`. |
 | `POST /api/workflows/run` | `{"scenario":"week4","sku":"EL-003","quantity":1,"role":"analyst"}`. Existing scenario IDs `week1`, `week2`, `week3`, `alerts`, `week4`; quantity 1–20. Executes **deterministic local scenario** and persists events/report; not the chat LangGraph or autonomous agents. |
-| `GET /api/workflows/runs/{run_id}` | Return run status, events, graph definition, report and `simulation_notice`; `404` absent |
-| `POST /api/workflows/runs/{run_id}/review` | `{"role":"manager","decision":"approve"}` or `reject`; records a **simulated** one-shot manager decision when pending. Caller-supplied role is **not authentication**. `403` wrong role, `404` missing, `409` not pending; no operational business write |
+| `GET /api/workflows/runs/{run_id}` | Authenticated owner only; return bounded synthetic run details and `simulation_notice`; `404` absent, ownerless or foreign |
+| `POST /api/workflows/runs/{run_id}/review` | Authenticated **run owner** only; `{"role":"manager","decision":"approve"}` or `reject` records a **simulated** one-shot decision when pending. The role selector is **not Manager authorization** for UC-01. `403` wrong simulated role, `404` missing/foreign, `409` not pending; no Fiction write |
 
 Scenario names retain historical course IDs for compatibility; they are not a recommendation to organize permanent source code by course weeks. A displayed graph node or simulated role does not prove independent agent invocation or A2A transport.
 
@@ -151,11 +170,11 @@ Scenario names retain historical course IDs for compatibility; they are not a re
 
 | Method / path | Meaning |
 |---|---|
-| `GET /api/logs` | Read allowlisted local events; optional `limit` 1–200, `level` INFO/WARNING/ERROR/DEBUG, session and request filters. `source: local_rotating_jsonl`; `Cache-Control: no-store`; **not** remote trace or production audit. |
+| `GET /api/logs` | **T06 Draft branch:** `403` for every signed-in user until a reviewed owner-scoped disclosure design exists; global events must not leak across users. Server-side rotating JSONL remains operator-only; request-scoped saved execution traces use authenticated session ownership. |
 | `GET /api/roi/defaults` | Return editable assumptions, not observed costs |
 | `POST /api/roi/estimate` | `ROIForm` workload, time, cost and token/rate estimates; result is illustrative and **not** verified time savings/ROI. Exact bounds in `retailiq/api/roi.py`. |
 
-Non-loopback peer/Host requests to the app are rejected with `403`, including health, logs and workflows. Do not expose these unauthenticated local interfaces on a public network.
+Non-loopback peer/Host requests are rejected with `403`, including health, logs and workflows. Local auth is defense in depth, not permission to expose the application on a public network.
 
 ## 6. Local Fiction MCP contract (not HTTP routes)
 

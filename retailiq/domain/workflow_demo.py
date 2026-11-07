@@ -238,25 +238,34 @@ def _connect():
     connection.execute("""CREATE TABLE IF NOT EXISTS workflow_runs (
       id TEXT PRIMARY KEY, scenario TEXT NOT NULL, status TEXT NOT NULL,
       trace_json TEXT NOT NULL, report TEXT NOT NULL,
-      created_at TEXT NOT NULL, decision_at TEXT
+      created_at TEXT NOT NULL, decision_at TEXT, owner_user_id TEXT
     )""")
+    columns = {row["name"] for row in connection.execute("PRAGMA table_info(workflow_runs)")}
+    if "owner_user_id" not in columns:
+        # Ownerless records from pre-auth demo remain hidden to signed-in users.
+        connection.execute("ALTER TABLE workflow_runs ADD COLUMN owner_user_id TEXT")
+    connection.execute("CREATE INDEX IF NOT EXISTS ix_workflow_runs_owner ON workflow_runs(owner_user_id,id)")
     return connection
 
 
-def _save(scenario: str, status: str, events: list[dict], report: str) -> dict:
+def _save(scenario: str, status: str, events: list[dict], report: str, *,
+          owner_user_id: str | None = None) -> dict:
     run_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     with closing(_connect()) as db:
         with db:
-            db.execute("INSERT INTO workflow_runs VALUES (?,?,?,?,?,?,NULL)",
-                       (run_id, scenario, status, json.dumps(events), report, now))
-    return read_run(run_id)
+            db.execute("""INSERT INTO workflow_runs
+                (id,scenario,status,trace_json,report,created_at,decision_at,owner_user_id)
+                VALUES (?,?,?,?,?,?,NULL,?)""",
+                       (run_id, scenario, status, json.dumps(events), report, now, owner_user_id))
+    return read_run(run_id, owner_user_id=owner_user_id)
 
 
-def read_run(run_id: str) -> dict | None:
+def read_run(run_id: str, *, owner_user_id: str | None = None) -> dict | None:
     with closing(_connect()) as db:
         record = db.execute(
-            "SELECT * FROM workflow_runs WHERE id = ?", (run_id,)).fetchone()
+            "SELECT * FROM workflow_runs WHERE id=? AND owner_user_id IS ?",
+            (run_id, owner_user_id)).fetchone()
     if record is None:
         return None
     result = dict(record)
@@ -267,15 +276,17 @@ def read_run(run_id: str) -> dict | None:
     return result
 
 
-def review_run(run_id: str, role: str, decision: str) -> dict:
+def review_run(run_id: str, role: str, decision: str, *,
+               owner_user_id: str | None = None) -> dict:
     if role != "manager":
         raise PermissionError("Only the simulated manager role may review proposals")
     if decision not in ("approve", "reject"):
         raise ValueError("Review must be approve or reject")
     with closing(_connect()) as db:
         with db:
-            row = db.execute("SELECT status,trace_json,scenario,report FROM workflow_runs WHERE id=?",
-                             (run_id,)).fetchone()
+            row = db.execute("""SELECT status,trace_json,scenario,report
+                FROM workflow_runs WHERE id=? AND owner_user_id IS ?""",
+                (run_id, owner_user_id)).fetchone()
             if row is None:
                 raise KeyError("Workflow run not found")
             if row["status"] != "pending_manager":
@@ -302,14 +313,14 @@ def review_run(run_id: str, role: str, decision: str) -> dict:
                       ". This is a recorded simulation, not a catalog or order mutation.")
             changed = db.execute(
                 "UPDATE workflow_runs SET status=?,trace_json=?,report=?,decision_at=? "
-                "WHERE id=? AND status='pending_manager'",
+                "WHERE id=? AND owner_user_id IS ? AND status='pending_manager'",
                 (outcome, json.dumps(events), report,
-                 datetime.now(timezone.utc).isoformat(), run_id))
+                 datetime.now(timezone.utc).isoformat(), run_id, owner_user_id))
             if changed.rowcount != 1:
                 raise ValueError("Workflow review conflict")
     log_event("workflow.review.completed", agent="manager_approval",
               status=outcome, execution_mode="offline")
-    return read_run(run_id)
+    return read_run(run_id, owner_user_id=owner_user_id)
 
 
 def _freshness(rows: list[dict]) -> dict:
@@ -327,7 +338,7 @@ def _freshness(rows: list[dict]) -> dict:
 
 
 def run_demo(scenario: str, sku: str, quantity: int = 1,
-             role: str = "analyst") -> dict:
+             role: str = "analyst", *, owner_user_id: str | None = None) -> dict:
     if scenario not in GRAPH:
         raise ValueError("Unknown scenario")
     if role not in ("analyst", "manager"):
@@ -476,4 +487,4 @@ def run_demo(scenario: str, sku: str, quantity: int = 1,
                       str(quantity) + " units of " + product["sku"] +
                       ". No order was created.")
             status = "blocked"
-    return _save(scenario, status, events, report)
+    return _save(scenario, status, events, report, owner_user_id=owner_user_id)

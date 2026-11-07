@@ -244,9 +244,29 @@ def run_audit(mode: str = 'offline', ids: set[str] | None = None) -> dict:
                            'RETAILIQ_CHECKPOINT_DB':str(directory/'checkpoint.sqlite3')}):
             from fastapi.testclient import TestClient
             from retailiq.api import app
+            from retailiq.infrastructure import auth
+            from secrets import token_urlsafe
+            from uuid import uuid4
             oracle = Oracle(database)
             results = []
             with TestClient(app) as client:
+                # This runner is an isolated local HTTP consumer, not a test
+                # auth bypass. No static or reusable credentials are committed.
+                username = "audit_" + uuid4().hex[:20]
+                password = token_urlsafe(32)
+                auth.create_local_user(username, "analyst", password)
+                login = client.post(
+                    "/api/auth/login",
+                    headers={"Origin": "http://testserver"},
+                    json={"username": username, "password": password})
+                if login.status_code != 200:
+                    raise RuntimeError("Audit could not authenticate its isolated HTTP client")
+                me = client.get("/api/auth/me")
+                if me.status_code != 200:
+                    raise RuntimeError("Audit could not obtain the local CSRF token")
+                client.headers.update({
+                    "Origin": "http://testserver",
+                    "X-CSRF-Token": me.json()["csrf_token"]})
                 for case in CASES:
                     if ids is not None and case.id not in ids:
                         continue

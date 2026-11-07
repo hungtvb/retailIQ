@@ -16,10 +16,15 @@ import queue
 import threading
 import os
 from retailiq.observability import bind_context, new_request_id, log_event, log_exception, observed, request_id, bind_event_sink
+from urllib.parse import urlsplit
+from retailiq.infrastructure import auth as local_auth
+from retailiq.security import SecurityContext
+from retailiq.api.auth import router as auth_router
 from retailiq.api.roi import router as roi_router
 from retailiq.api.sessions import router as sessions_router
 from retailiq.api.logs import router as logs_router
 from retailiq.api.workflows import router as workflows_router
+from retailiq.api.uc01_proposals import router as uc01_router
 from fastapi import Request
 
 # Bound streaming capacity: prevent slow providers or disconnected clients
@@ -28,10 +33,12 @@ _STREAM_WORKER_SLOTS = threading.BoundedSemaphore(value=8)
 _STREAM_QUEUE_LIMIT = 128
 
 app = FastAPI(title='RetailIQ Copilot - Four-Week Local Demo')
+app.include_router(auth_router)
 app.include_router(roi_router)
 app.include_router(sessions_router)
 app.include_router(logs_router)
 app.include_router(workflows_router)
+app.include_router(uc01_router)
 app.mount('/assets', StaticFiles(directory=Path(__file__).resolve().parents[2] / 'web' / 'assets'), name='assets')
 
 # New product UI is independently built and served alongside the existing
@@ -70,14 +77,54 @@ def _local_demo_request(request: Request) -> bool:
     return permitted_peer and permitted_host
 
 
+def _same_origin(request: Request) -> bool:
+    """Require a real same-origin Origin or Referer, never trust forwarded host."""
+    raw = request.headers.get("origin") or request.headers.get("referer")
+    if not raw:
+        return False
+    try:
+        provided, expected = urlsplit(raw), urlsplit(str(request.url))
+    except ValueError:
+        return False
+    return (provided.scheme in ("http", "https")
+            and provided.scheme == expected.scheme
+            and provided.netloc.lower() == expected.netloc.lower()
+            and not provided.username and not provided.password)
+
+
+def _auth_failure(code: int, detail: str) -> JSONResponse:
+    return JSONResponse(status_code=code, content={"detail": detail},
+                        headers={"Cache-Control": "no-store",
+                                 "X-Content-Type-Options": "nosniff"})
+
+
 @app.middleware('http')
 async def record_http(request: Request, call_next):
     if not _local_demo_request(request):
         return JSONResponse(status_code=403, content={
             'detail': 'Remote access is unavailable. Connect through the configured trusted host.'
         })
-    rid = new_request_id()
     path = request.url.path
+    protected = path.startswith('/api/') or path in (
+        '/ask', '/ask/stream', '/docs', '/redoc', '/openapi.json')
+    mutating = request.method in ('POST', 'PUT', 'PATCH', 'DELETE')
+    # Check credentials and CSRF before dispatching any route, SQL, MCP or LLM.
+    if protected and mutating and not _same_origin(request):
+        return _auth_failure(403, 'Origin not allowed')
+    if protected and path != '/api/auth/login':
+        principal = local_auth.principal_from_token(
+            request.cookies.get(local_auth.COOKIE_NAME))
+        if principal is None:
+            return _auth_failure(401, 'Authentication required')
+        request.state.principal = principal
+        if mutating and not local_auth.verify_csrf(
+                principal, request.headers.get('x-csrf-token')):
+            return _auth_failure(403, 'CSRF validation failed')
+        # Global diagnostic logs remain private; workflow runs now filter owner
+        # and stateless freshness/definitions carry no conversation data.
+        if path.startswith('/api/logs'):
+            return _auth_failure(403, 'Unscoped endpoint is unavailable')
+    rid = new_request_id()
     safe_path = _safe_http_path(path)
     is_api = path.startswith('/api/') or path in ('/ask', '/ask/stream')
     # Avoid emitting a new log event for every read of the log viewer itself.
@@ -143,22 +190,25 @@ def home():
     return (Path(__file__).resolve().parents[2] / 'web' / 'index.html').read_text(encoding='utf8')
 
 
-def _perform_turn(data: AskBody) -> dict:
-    """One shared execution path for ordinary POST and live streamed POST."""
+def _perform_turn(data: AskBody, principal: SecurityContext) -> dict:
+    """Load owned context; transactionally recheck auth when committing turns."""
+    local_auth.assert_active(principal)
     guard = session_mutation(data.session_id) if data.session_id else nullcontext()
     with guard:
         current = None
         if data.session_id is not None:
-            current = get_session(data.session_id, include_messages=False)
+            current = get_session(data.session_id, owner_user_id=principal.user_id,
+                                  include_messages=False)
             if current is None:
                 raise _SessionNotFound('Session not found')
         with observed('chat.turn', execution_mode='full' if os.getenv('RETAILIQ_MODE') == 'full' else 'offline'):
             if data.session_id is None:
                 result = ask(data.question)
             else:
-                prior = history(data.session_id, limit=12)
-                memory = get_customer_memory(data.session_id)
-                context = (last_committed_case_binding(data.session_id)
+                prior = history(data.session_id, limit=12, owner_user_id=principal.user_id)
+                memory = get_customer_memory(data.session_id, owner_user_id=principal.user_id)
+                context = (last_committed_case_binding(data.session_id,
+                                                       owner_user_id=principal.user_id)
                            if os.getenv('RETAILIQ_MODE') == 'full' else None)
                 kwargs = {'history': prior, 'active_agent': current['active_agent']}
                 if memory['consent']:
@@ -166,7 +216,9 @@ def _perform_turn(data: AskBody) -> dict:
                 if context:
                     kwargs['verified_case_context'] = context
                 result = ask(data.question, **kwargs)
-                add_turn(data.session_id, data.question, {**result, 'request_id': request_id()})
+                add_turn(data.session_id, data.question,
+                         {**result, 'request_id': request_id()}, principal=principal)
+    local_auth.assert_active(principal)
     log_event('chat.turn_result', agent=result.get('active_agent'),
               intent=result.get('intent'), skill=result.get('skill'),
               route_fallback=result.get('route_fallback'),
@@ -176,14 +228,17 @@ def _perform_turn(data: AskBody) -> dict:
 
 
 @app.post('/ask')
-def answer(data: AskBody):
+def answer(data: AskBody, request: Request):
+    principal = request.state.principal
     with bind_context(session=data.session_id):
         try:
-            return _perform_turn(data)
+            return _perform_turn(data, principal)
         except InvalidCaseId as error:
             raise HTTPException(status_code=422, detail=str(error)) from None
         except _SessionNotFound:
             raise HTTPException(status_code=404, detail='Session not found') from None
+        except PermissionError:
+            raise HTTPException(status_code=401, detail='Authentication required') from None
         except SessionBusyError:
             raise HTTPException(status_code=409, detail='Session is processing another request') from None
         except IndexNotReadyError as error:
@@ -212,7 +267,11 @@ def stream_answer(data: AskBody, request: Request):
     events emitted by the same backend functions that write rotating JSONL.
     This is event streaming, not token-by-token LLM generation.
     """
-    if data.session_id and get_session(data.session_id, include_messages=False) is None:
+    principal = request.state.principal
+    local_auth.assert_active(principal)
+    if (data.session_id and
+            get_session(data.session_id, owner_user_id=principal.user_id,
+                        include_messages=False) is None):
         raise HTTPException(status_code=404, detail='Session not found')
     if not _STREAM_WORKER_SLOTS.acquire(blocking=False):
         raise HTTPException(status_code=503, detail='Chat streaming capacity reached; retry later',
@@ -221,9 +280,18 @@ def stream_answer(data: AskBody, request: Request):
     events: queue.Queue = queue.Queue(maxsize=_STREAM_QUEUE_LIMIT)
     disconnected = threading.Event()
 
+    def authorized() -> bool:
+        try:
+            local_auth.assert_active(principal)
+            return (not data.session_id or
+                    get_session(data.session_id, owner_user_id=principal.user_id,
+                                include_messages=False) is not None)
+        except PermissionError:
+            return False
+
     def enqueue_final(kind, payload):
         # Model/tool may finish after the client disconnected.
-        if disconnected.is_set():
+        if disconnected.is_set() or not authorized():
             return
         # No blocked worker when a browser stops draining its event queue.
         while True:
@@ -244,7 +312,7 @@ def stream_answer(data: AskBody, request: Request):
             # bounded transport queue. Traces remain available after disconnect.
             if len(trace_events) < 161:
                 trace_events.append(payload)
-            if disconnected.is_set():
+            if disconnected.is_set() or not authorized():
                 return
             try:
                 events.put_nowait(('log', payload))
@@ -255,10 +323,11 @@ def stream_answer(data: AskBody, request: Request):
         try:
             with bind_context(request=rid, session=data.session_id), bind_event_sink(push_log):
                 try:
-                    result = _perform_turn(data)
+                    result = _perform_turn(data, principal)
                     if data.session_id:
                         try:
-                            save_execution_trace(data.session_id, rid, trace_events)
+                            save_execution_trace(data.session_id, rid, trace_events,
+                                                 principal=principal)
                         except Exception as error:
                             # Telemetry persistence cannot invalidate a saved
                             # business answer; history will truthfully say no trace.
@@ -303,12 +372,18 @@ def stream_answer(data: AskBody, request: Request):
 
     def live_events():
         try:
+            if not authorized():
+                return
             yield _sse('started', {'request_id': rid, 'session_id': data.session_id,
                                    'transport': 'sse', 'stream_kind': 'execution_events'})
             while True:
+                if not authorized():
+                    break
                 try:
                     kind, payload = events.get(timeout=10)
                 except queue.Empty:
+                    if not authorized():
+                        break
                     if not worker.is_alive() and events.empty():
                         yield _sse('error', {'code': 'worker_exited', 'request_id': rid,
                                             'message': 'Stream worker stopped unexpectedly'})
@@ -316,6 +391,8 @@ def stream_answer(data: AskBody, request: Request):
                         break
                     yield ': heartbeat\n\n'
                     continue
+                if not authorized():
+                    break
                 if kind == 'done':
                     yield _sse('done', payload)
                     break

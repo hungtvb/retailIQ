@@ -123,6 +123,8 @@ def audit() -> dict:
         with patch.dict(os.environ, environment):
             from retailiq.api import app
             with TestClient(app) as client:
+                from scripts.isolated_auth import login_fixture_client
+                login_fixture_client(client)
                 def week1():
                     run = run_scenario(client, "week1")
                     rows = sql(db, """SELECT li.sku,SUM(li.quantity) AS units

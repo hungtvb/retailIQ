@@ -55,6 +55,8 @@ def audit() -> dict:
         }
         with patch.dict(os.environ, env):
             with TestClient(app) as client:
+                from scripts.isolated_auth import login_fixture_client
+                login_fixture_client(client)
                 def post(path, data):
                     response = client.post(path, json=data)
                     assert response.status_code == 200, (

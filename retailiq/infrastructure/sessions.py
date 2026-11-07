@@ -1,6 +1,6 @@
 """Local durable chat sessions; independent from the read-only retail analytics fixture.
 
-Local demo only: no authentication or tenant isolation. Avoid putting API secrets in messages.
+Conversation rows are owner-scoped. Pre-auth ownerless rows remain inaccessible.
 """
 from __future__ import annotations
 import os
@@ -12,7 +12,10 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from uuid import UUID, uuid4
 from datetime import datetime
+from typing import Callable
 import re
+import time
+from retailiq.security import SecurityContext
 
 DEFAULT_DB = Path(__file__).resolve().parents[2] / 'data' / 'chat_sessions.sqlite3'
 MAX_SESSION_MESSAGES = 200  # Bounded API response; older messages stay in SQLite.
@@ -83,6 +86,7 @@ def _connect():
         connection.executescript('''
         CREATE TABLE IF NOT EXISTS sessions (
             id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT 'New conversation',
+            owner_user_id TEXT REFERENCES users(id),
             active_agent TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
@@ -109,6 +113,11 @@ def _connect():
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         ''')
+        session_columns = {row['name'] for row in connection.execute('PRAGMA table_info(sessions)')}
+        if 'owner_user_id' not in session_columns:
+            # Do not auto-assign existing local conversations during upgrade.
+            connection.execute('ALTER TABLE sessions ADD COLUMN owner_user_id TEXT REFERENCES users(id)')
+        connection.execute('CREATE INDEX IF NOT EXISTS ix_sessions_owner_updated ON sessions(owner_user_id, updated_at)')
         message_columns = {row['name'] for row in connection.execute('PRAGMA table_info(messages)')}
         if 'evidence_json' not in message_columns:
             connection.execute('ALTER TABLE messages ADD COLUMN evidence_json TEXT')
@@ -120,23 +129,46 @@ def _connect():
         connection.close()
 
 
-def create_session(title: str = 'New conversation') -> dict:
+def create_session(title: str = 'New conversation', *, owner_user_id: str,
+                   principal: SecurityContext | None = None) -> dict:
+    """Create a conversation; authenticated HTTP callers validate under the writer lock.
+
+    principal=None remains for offline fixture/CLI provisioning only. HTTP must
+    pass the middleware-derived principal, never a caller-controlled user ID.
+    """
+    if not owner_user_id or (principal is not None and
+                             principal.user_id != owner_user_id):
+        raise PermissionError('Authenticated owner required')
     sid = str(uuid4())
     title = title.strip()[:80] or 'New conversation'
     with _connect() as c:
-        c.execute('INSERT INTO sessions (id, title) VALUES (?,?)', (sid, title))
-    return get_session(sid, include_messages=False)
+        c.execute('BEGIN IMMEDIATE')
+        user = c.execute('SELECT disabled FROM users WHERE id=?', (owner_user_id,)).fetchone()
+        if user is None or user['disabled']:
+            raise PermissionError('Authenticated owner required')
+        if principal is not None:
+            active = c.execute('''SELECT 1 FROM auth_sessions a
+                JOIN users u ON u.id=a.user_id
+                WHERE a.id=? AND a.user_id=? AND u.role=?
+                  AND a.revoked_at IS NULL AND a.expires_at>?
+                  AND u.disabled=0''', (
+                      principal.auth_session_id, principal.user_id,
+                      principal.role, int(time.time()))).fetchone()
+            if active is None:
+                raise PermissionError('Authentication required')
+        c.execute('INSERT INTO sessions (id, title, owner_user_id) VALUES (?,?,?)',
+                  (sid, title, owner_user_id))
+    return get_session(sid, owner_user_id=owner_user_id, include_messages=False)
 
 
-def get_session(sid: str, *, include_messages: bool = True) -> dict | None:
+def get_session(sid: str, *, owner_user_id: str, include_messages: bool = True) -> dict | None:
     with _connect() as c:
-        row = c.execute('SELECT * FROM sessions WHERE id=?', (sid,)).fetchone()
+        row = c.execute('SELECT * FROM sessions WHERE id=? AND owner_user_id=?',
+                        (sid, owner_user_id)).fetchone()
         if row is None:
             return None
         result = dict(row)
         if include_messages:
-            # Pull the newest bounded window rather than allocating all messages
-            # for a long-running session. Preserve ascending presentation order.
             rows = c.execute('''SELECT id, role, content, intent, agent, request_id, evidence_json, created_at
                 FROM messages WHERE session_id=? ORDER BY id DESC LIMIT ?''',
                 (sid, MAX_SESSION_MESSAGES + 1)).fetchall()
@@ -150,21 +182,25 @@ def get_session(sid: str, *, include_messages: bool = True) -> dict | None:
         return result
 
 
-def list_sessions(limit: int = 50) -> list[dict]:
+def list_sessions(*, owner_user_id: str, limit: int = 50) -> list[dict]:
     with _connect() as c:
         return [dict(r) for r in c.execute('''
             SELECT s.*, (SELECT COUNT(*) FROM messages m WHERE m.session_id=s.id) AS message_count
-            FROM sessions s ORDER BY s.updated_at DESC, s.rowid DESC LIMIT ?
-        ''', (min(max(limit, 1), 100),))]
+            FROM sessions s WHERE s.owner_user_id=?
+            ORDER BY s.updated_at DESC, s.rowid DESC LIMIT ?
+        ''', (owner_user_id, min(max(limit, 1), 100)))]
 
 
-def history(sid: str, limit: int = 12) -> list[dict]:
+def history(sid: str, limit: int = 12, *, owner_user_id: str) -> list[dict]:
     with _connect() as c:
-        if not c.execute('SELECT 1 FROM sessions WHERE id=?', (sid,)).fetchone():
+        if not c.execute('SELECT 1 FROM sessions WHERE id=? AND owner_user_id=?',
+                         (sid, owner_user_id)).fetchone():
             raise KeyError('Unknown session')
         rows = c.execute('''SELECT role, content, intent, agent FROM messages
-            WHERE session_id=? ORDER BY id DESC LIMIT ?''', (sid, min(max(limit, 1), 30))).fetchall()
+            WHERE session_id=? ORDER BY id DESC LIMIT ?''',
+            (sid, min(max(limit, 1), 30))).fetchall()
         return [dict(r) for r in reversed(rows)]
+
 
 
 
@@ -230,15 +266,17 @@ def _committable_case_binding(response: dict) -> dict | None:
     return value
 
 
-def last_committed_case_binding(sid: str) -> dict | None:
+def last_committed_case_binding(sid: str, *, owner_user_id: str) -> dict | None:
     """Same-session latest *committed assistant turn* only; no chat text/checkpoints.
 
     A topic switch, missing/truncated/corrupt evidence or a failed turn cannot
     supply an inherited case. Authorization/ownership is separate (#29).
     """
     with _connect() as c:
-        row = c.execute('''SELECT intent, agent, evidence_json FROM messages
-            WHERE session_id=? AND role='assistant' ORDER BY id DESC LIMIT 1''', (sid,)).fetchone()
+        row = c.execute('''SELECT m.intent, m.agent, m.evidence_json FROM messages m
+            JOIN sessions s ON s.id=m.session_id
+            WHERE m.session_id=? AND s.owner_user_id=? AND m.role='assistant'
+            ORDER BY m.id DESC LIMIT 1''', (sid, owner_user_id)).fetchone()
     if row is None or row['intent'] != 'backorder' or row['agent'] != 'backorder_agent':
         return None
     raw = row['evidence_json']
@@ -252,12 +290,27 @@ def last_committed_case_binding(sid: str) -> dict | None:
     return dict(binding) if _valid_case_binding(binding) else None
 
 
-def add_turn(sid: str, question: str, response: dict) -> None:
-    """Atomic pair of messages; only called after successful execution."""
+def _assert_owned_active_in_transaction(c: sqlite3.Connection, sid: str,
+                                        principal: SecurityContext) -> sqlite3.Row:
+    """Use the SAME writer connection as the mutation; never a separate auth preflight."""
+    row = c.execute('''SELECT s.title FROM sessions s
+        JOIN users u ON u.id=s.owner_user_id
+        JOIN auth_sessions a ON a.user_id=u.id
+        WHERE s.id=? AND s.owner_user_id=? AND a.id=? AND u.role=?
+          AND u.disabled=0 AND a.revoked_at IS NULL AND a.expires_at>?''',
+        (sid, principal.user_id, principal.auth_session_id, principal.role,
+         int(time.time()))).fetchone()
+    if row is None:
+        raise PermissionError('Authentication or ownership required')
+    return row
+
+
+def add_turn(sid: str, question: str, response: dict, *,
+             principal: SecurityContext) -> None:
+    """An authenticated write lock atomically commits both messages or neither."""
     with _connect() as c:
-        row = c.execute('SELECT title FROM sessions WHERE id=?', (sid,)).fetchone()
-        if row is None:
-            raise KeyError('Unknown session')
+        c.execute('BEGIN IMMEDIATE')
+        row = _assert_owned_active_in_transaction(c, sid, principal)
         if len(question) > 500:
             raise ValueError('Question is too long for a single chat turn')
         answer = str(response['answer'])
@@ -288,11 +341,12 @@ def add_turn(sid: str, question: str, response: dict) -> None:
                      WHERE id=?''', (title, agent, sid))
 
 
-def get_customer_memory(sid: str) -> dict:
+def get_customer_memory(sid: str, *, owner_user_id: str) -> dict:
     """Return explicitly consented preferences, limited to this exact session."""
     from retailiq.domain.customer_memory import validate_preferences
     with _connect() as c:
-        if c.execute('SELECT 1 FROM sessions WHERE id=?', (sid,)).fetchone() is None:
+        if c.execute('SELECT 1 FROM sessions WHERE id=? AND owner_user_id=?',
+                     (sid, owner_user_id)).fetchone() is None:
             raise KeyError('Unknown session')
         row = c.execute(
             'SELECT preferences_json FROM customer_session_memory WHERE session_id=?',
@@ -303,7 +357,8 @@ def get_customer_memory(sid: str) -> dict:
         return {'consent': True, 'preferences': values, 'scope': 'session_only'}
 
 
-def save_customer_memory(sid: str, *, consent: bool, preferences: dict) -> dict:
+def save_customer_memory(sid: str, *, consent: bool, preferences: dict,
+                         owner_user_id: str, principal: SecurityContext) -> dict:
     """Opt-in persistence; opting out also deletes prior values transactionally.
 
     Caller must use session_mutation(sid) for consistency with chat/delete.
@@ -312,9 +367,16 @@ def save_customer_memory(sid: str, *, consent: bool, preferences: dict) -> dict:
     if not isinstance(consent, bool):
         raise ValueError('Memory consent must be explicitly true or false')
     safe = validate_preferences(preferences)
+    if principal.user_id != owner_user_id:
+        raise PermissionError('Authenticated owner required')
     with _connect() as c:
-        if c.execute('SELECT 1 FROM sessions WHERE id=?', (sid,)).fetchone() is None:
+        c.execute('BEGIN IMMEDIATE')
+        if c.execute('SELECT 1 FROM sessions WHERE id=? AND owner_user_id=?',
+                     (sid, owner_user_id)).fetchone() is None:
             raise KeyError('Unknown session')
+        # Revocation and this mutation acquire the same application SQLite
+        # writer lock. A stale preflight cannot authorize a later write.
+        _assert_owned_active_in_transaction(c, sid, principal)
         if not consent:
             if safe:
                 raise ValueError('Cannot save preferences without consent')
@@ -330,9 +392,28 @@ def save_customer_memory(sid: str, *, consent: bool, preferences: dict) -> dict:
         return {'consent': True, 'preferences': safe, 'scope': 'session_only'}
 
 
-def delete_session(sid: str) -> bool:
+def delete_session(sid: str, *, owner_user_id: str,
+                   principal: SecurityContext,
+                   before_delete: Callable[[], None] | None = None) -> bool:
+    """Serialize revocation, optional checkpoint cleanup and session deletion.
+
+    Cleanup must only happen after verified owner/auth inside this SQLite writer
+    lock. An exception in cleanup rolls back the session deletion; graph state
+    is a separate local store and not otherwise cross-DB transactional.
+    """
+    if principal.user_id != owner_user_id:
+        raise PermissionError('Authenticated owner required')
     with _connect() as c:
-        return c.execute('DELETE FROM sessions WHERE id=?', (sid,)).rowcount > 0
+        c.execute('BEGIN IMMEDIATE')
+        row = c.execute('SELECT 1 FROM sessions WHERE id=? AND owner_user_id=?',
+                        (sid, owner_user_id)).fetchone()
+        if row is None:
+            return False
+        _assert_owned_active_in_transaction(c, sid, principal)
+        if before_delete is not None:
+            before_delete()
+        return c.execute('DELETE FROM sessions WHERE id=? AND owner_user_id=?',
+                         (sid, owner_user_id)).rowcount > 0
 
 
 # Metadata-only, bounded execution traces. No prompts, answers, SQL, tokens or
@@ -345,7 +426,8 @@ _TRACE_FIELDS = frozenset({
 })
 
 
-def save_execution_trace(sid: str, rid: str, events: list[dict]) -> bool:
+def save_execution_trace(sid: str, rid: str, events: list[dict], *,
+                         principal: SecurityContext) -> bool:
     """Persist only events associated with an actual saved assistant turn.
 
     Ignore a late trace after deletion, a mismatched request, and any event
@@ -372,6 +454,8 @@ def save_execution_trace(sid: str, rid: str, events: list[dict]) -> bool:
             safe.pop()
             payload = json.dumps(safe, ensure_ascii=False, separators=(',', ':'), allow_nan=False)
     with _connect() as c:
+        c.execute('BEGIN IMMEDIATE')
+        _assert_owned_active_in_transaction(c, sid, principal)
         exists = c.execute('''SELECT 1 FROM messages
             WHERE session_id=? AND role='assistant' AND request_id=? LIMIT 1''',
             (sid, rid)).fetchone()
@@ -384,14 +468,16 @@ def save_execution_trace(sid: str, rid: str, events: list[dict]) -> bool:
     return True
 
 
-def get_execution_trace(sid: str, rid: str) -> dict | None:
+def get_execution_trace(sid: str, rid: str, *, owner_user_id: str) -> dict | None:
     """None means absent/legacy, not a synthetic empty execution."""
     with _connect() as c:
         row = c.execute('''SELECT t.events_json,t.truncated
             FROM execution_traces t
             JOIN messages m ON m.session_id=t.session_id AND m.request_id=t.request_id
-            WHERE t.session_id=? AND t.request_id=? AND m.role='assistant' LIMIT 1''',
-            (sid, rid)).fetchone()
+            JOIN sessions s ON s.id=t.session_id
+            WHERE t.session_id=? AND s.owner_user_id=? AND t.request_id=?
+              AND m.role='assistant' LIMIT 1''',
+            (sid, owner_user_id, rid)).fetchone()
         if not row:
             return None
         return {'request_id': rid, 'events': json.loads(row['events_json']),

@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
+from tests.auth_client import signed_in_client, active_principal
 
 from retailiq.api import app
 from retailiq.api import http
@@ -18,7 +19,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv('RETAILIQ_MODE', 'offline')
     monkeypatch.setenv('RETAILIQ_CHAT_DB', str(tmp_path / 'sessions.sqlite3'))
     monkeypatch.setenv('RETAILIQ_LOG_FILE', str(tmp_path / 'events.jsonl'))
-    return TestClient(app)
+    return signed_in_client(app)
 
 
 def test_registry_releases_all_idle_gates_even_after_exceptions():
@@ -78,6 +79,8 @@ def test_sse_capacity_rejection_is_fast_and_does_not_spawn_worker(client, monkey
 
 
 def test_sse_worker_frees_slot_even_if_stream_body_is_not_consumed(monkeypatch, tmp_path):
+    monkeypatch.setenv('RETAILIQ_CHAT_DB', str(tmp_path / 'stream_auth.sqlite'))
+    actor = signed_in_client(app)
     monkeypatch.setenv('RETAILIQ_MODE', 'offline')
     monkeypatch.setenv('RETAILIQ_LOG_FILE', str(tmp_path / 'events.jsonl'))
     semaphore = threading.BoundedSemaphore(value=1)
@@ -92,7 +95,8 @@ def test_sse_worker_frees_slot_even_if_stream_body_is_not_consumed(monkeypatch, 
 
     monkeypatch.setattr(http, 'ask', slow_ask)
     response = http.stream_answer(http.AskBody(question='Get the inventory report'),
-                                  SimpleNamespace(state=SimpleNamespace(request_id='test-slot')))
+                                  SimpleNamespace(state=SimpleNamespace(request_id='test-slot',
+                                                                        principal=active_principal(actor))))
     try:
         assert entered.wait(timeout=2)
         assert not semaphore.acquire(blocking=False)
@@ -111,6 +115,7 @@ def test_local_only_guard_rejects_untrusted_host(client):
     assert rejected.status_code == 403
     assert 'Remote access is unavailable' in rejected.json()['detail']
     assert client.get('/assets/agent-identity.js', headers={'host': 'outside.example'}).status_code == 403
+    # The local host alone is not an authorization credential.
     assert client.get('/api/sessions', headers={'host': 'localhost:8000'}).status_code == 200
 
 
@@ -140,10 +145,11 @@ def test_oversized_answer_rejected_atomically(client):
         sessions.add_turn(sid, 'A valid business question', {
             'answer': 'x' * (sessions.MAX_STORED_ANSWER_CHARS + 1),
             'active_agent': 'sales_agent'
-        })
+        }, principal=active_principal(client))
     assert client.get(f'/api/sessions/{sid}').json()['messages'] == []
     with pytest.raises(ValueError, match='too long'):
-        sessions.add_turn(sid, 'q' * 501, {'answer': 'OK'})
+        sessions.add_turn(sid, 'q' * 501, {'answer': 'OK'},
+                          principal=active_principal(client))
     assert client.get(f'/api/sessions/{sid}').json()['messages'] == []
 
 

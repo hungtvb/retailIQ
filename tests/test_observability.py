@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
+from tests.auth_client import signed_in_client
 from retailiq.api import app
 from retailiq.observability import bind_context, log_event, log_exception, list_events
 
@@ -12,7 +13,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv('RETAILIQ_MODE', 'offline')
     monkeypatch.setenv('RETAILIQ_CHAT_DB', str(tmp_path / 'sessions.sqlite3'))
     monkeypatch.setenv('RETAILIQ_LOG_FILE', str(tmp_path / 'events.jsonl'))
-    return TestClient(app)
+    return signed_in_client(app)
 
 
 def test_log_events_and_session_request_correlation(client):
@@ -27,16 +28,17 @@ def test_log_events_and_session_request_correlation(client):
         'question':'How many units of the top seller are in stock?', 'session_id':sid})
     assert second.status_code == 200
     assert second.json()['handoff']['to'] == 'inventory_agent'
-    payload = client.get(f'/api/logs?session_id={sid}').json()
-    events = payload['events']
-    assert payload['source'] == 'local_rotating_jsonl'
+    # Private operator-file logs may be inspected inside tests, not exposed
+    # through the old global API to any signed-in business user.
+    assert client.get(f'/api/logs?session_id={sid}').status_code == 403
+    events = list_events(session_id=sid)
     names = [e['event'] for e in events]
     assert 'agent.handoff' in names
     assert 'agent.routed' in names
     assert 'tool.offline_lookup.completed' in names
     assert 'chat.turn.completed' in names
     assert 'chat.turn_result' in names
-    by_req = client.get('/api/logs', params={'request_id': request_id}).json()['events']
+    by_req = list_events(request_id=request_id)
     assert by_req and all(e['request_id'] == request_id for e in by_req)
     assert any(e.get('duration_ms') is not None for e in events)
     assert all('question' not in e and 'answer' not in e for e in events)
@@ -51,7 +53,8 @@ def test_failures_include_private_stack_without_exception_message(client, monkey
     assert result.status_code == 503
     assert 'topsecret' not in result.text
     assert result.headers['X-Request-ID']
-    visible = client.get('/api/logs?level=ERROR').json()['events']
+    assert client.get('/api/logs?level=ERROR').status_code == 403
+    visible = list_events(level='ERROR')
     assert any(x.get('error_type') == 'RuntimeError' for x in visible)
     assert all('stack_trace' not in x for x in visible)
     file = Path(__import__('os').environ['RETAILIQ_LOG_FILE']).read_text()
@@ -70,9 +73,10 @@ def test_severity_filters_ids_and_validation(client):
     assert len(results) == 1
     assert results[0]['event'] == 'sensitive.test'
     assert 'prompt' not in results[0] and 'api_key' not in results[0]
-    assert client.get('/api/logs?limit=1000').status_code == 422
-    assert client.get('/api/logs?level=BOGUS').status_code == 422
-    assert client.get('/api/logs?request_id=foo').status_code == 422
+    # Authorization rejects before parameter-validation or log reads.
+    assert client.get('/api/logs?limit=1000').status_code == 403
+    assert client.get('/api/logs?level=BOGUS').status_code == 403
+    assert client.get('/api/logs?request_id=foo').status_code == 403
 
 
 def test_no_prompt_or_sensitive_keys_written(client):
@@ -112,6 +116,6 @@ def test_dynamic_paths_are_sanitized_and_log_api_is_uncached(client):
     assert _safe_http_path('/api/customer-secret-in-url') == '/api/other'
     assert _safe_http_path('/api/roi/estimate') == '/api/roi/estimate'
     response = client.get('/api/logs')
-    assert response.status_code == 200
+    assert response.status_code == 403
     assert response.headers['Cache-Control'] == 'no-store'
     assert response.headers['X-Content-Type-Options'] == 'nosniff'

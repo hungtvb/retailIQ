@@ -216,6 +216,8 @@ def run_audit() -> dict:
                 "RETAILIQ_WORKFLOW_USE_MCP":"0",
             }):
                 with TestClient(app) as client:
+                    from scripts.isolated_auth import login_fixture_client
+                    login_fixture_client(client)
                     try:
                         evidence=action(client,Oracle(db),db)
                         results.append({"id":case_id,"week":week,"description":description,

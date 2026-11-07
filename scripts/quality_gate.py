@@ -12,6 +12,10 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timezone
 from hashlib import sha256
+from http.cookies import SimpleCookie
+from secrets import token_urlsafe
+from uuid import uuid4
+from unittest.mock import patch
 import json
 import os
 from pathlib import Path
@@ -54,9 +58,34 @@ def percentile(values, p):
 class LocalHTTP:
     def __init__(self, port):
         self.url = "http://127.0.0.1:" + str(port)
+        self._cookie = None
+        self._csrf = None
+
+    def authenticate(self, username, password):
+        # Real HTTP login for this isolated localhost benchmark; never a bypass.
+        status, headers, _, _ = self.call(
+            "/api/auth/login", method="POST",
+            payload={"username": username, "password": password})
+        check(status == 200, "Benchmark login failed")
+        cookie_header = next((v for k, v in headers.items()
+                              if k.casefold() == "set-cookie"), "")
+        jar = SimpleCookie()
+        jar.load(cookie_header)
+        check("retailiq_sid" in jar, "Opaque session cookie missing")
+        self._cookie = "retailiq_sid=" + jar["retailiq_sid"].value
+        profile, _, _ = self.json("/api/auth/me")
+        token = profile.get("csrf_token")
+        check(isinstance(token, str) and len(token) >= 24, "CSRF bootstrap failed")
+        self._csrf = token
 
     def call(self, path, *, method="GET", payload=None, host=None, timeout=15):
         headers = {}
+        if method in ("POST", "PUT", "PATCH", "DELETE"):
+            headers["Origin"] = self.url
+            if self._csrf is not None:
+                headers["X-CSRF-Token"] = self._csrf
+        if self._cookie is not None:
+            headers["Cookie"] = self._cookie
         if payload is not None:
             headers["Content-Type"] = "application/json"
         if host:
@@ -249,10 +278,10 @@ def exercise_e2e(http, report, db_path):
         http.json("/api/roi/estimate", method="POST",
                   payload={"assisted_share": -0.1}, expected=422)
         http.json("/api/sessions", expected=403, host="untrusted.example")
-        logs, _, _ = http.json("/api/logs?limit=5")
-        check(isinstance(logs["events"], list), "Log API contract missing")
+        logs, _, _ = http.json("/api/logs?limit=5", expected=403)
+        check("events" not in logs, "Unscoped diagnostic events exposed")
         check("OPENAI_API_KEY" not in json.dumps(logs), "API secret key name exposed")
-        return {"negative_cases": 5, "observability": "local-redacted"}
+        return {"negative_cases": 6, "observability": "authenticated-global-logs-denied"}
     run("422, 404, 403, host guard and log viewer", boundaries)
 
 
@@ -328,7 +357,7 @@ def main():
         "git_sha": os.environ.get("GITHUB_SHA", "local-unpinned"),
         "runner": {"os": platform.platform(), "python": platform.python_version(),
                    "cpu_count": os.cpu_count()},
-        "mode": "real localhost HTTP/SSE with deterministic offline provider substitute",
+        "mode": "authenticated real localhost HTTP/SSE with deterministic offline provider substitute",
         "remote_llm_verified": False,
         "real_vector_db_verified": False,
         "real_langsmith_traces_verified": False,
@@ -361,6 +390,13 @@ def main():
         })
         for key in ("OPENAI_API_KEY", "LANGSMITH_API_KEY", "OPENAI_BASE_URL"):
             env.pop(key, None)
+        # Provision the real local password hash before the server starts.
+        # Credential values are ephemeral and never saved to an artifact.
+        username = "benchmark_" + uuid4().hex[:20]
+        password = token_urlsafe(32)
+        from retailiq.infrastructure import auth
+        with patch.dict(os.environ, {"RETAILIQ_CHAT_DB": str(temp / "sessions.sqlite3")}):
+            auth.create_local_user(username, "analyst", password)
         logfile = (temp / "server.txt").open("w", encoding="utf-8")
         server = subprocess.Popen(
             [sys.executable, "-m", "uvicorn", "retailiq.api:app",
@@ -382,6 +418,8 @@ def main():
                     pass
                 time.sleep(0.1)
             check(healthy, "Uvicorn failed to start on localhost")
+            http.authenticate(username, password)
+            password = None
             exercise_e2e(http, report, db_path)
             benchmark(http, opts.samples, report)
         except Exception as error:

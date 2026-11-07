@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import sqlite3
 from fastapi.testclient import TestClient
+from tests.auth_client import signed_in_client
 import pytest
 
 from retailiq.api import app
@@ -19,6 +20,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv('RETAILIQ_CHAT_DB', str(tmp_path / 'chat.sqlite3'))
     monkeypatch.setenv('RETAILIQ_CHECKPOINT_DB', str(tmp_path / 'checkpoints.sqlite3'))
     with TestClient(app) as client:
+        signed_in_client(app, client=client)
         yield client
 
 

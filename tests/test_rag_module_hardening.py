@@ -453,7 +453,8 @@ def test_index_not_ready_has_safe_actionable_rest_and_sse_errors(monkeypatch, tm
         raise indexing.IndexNotReadyError('INTERNAL_SECRET_PATH')
 
     monkeypatch.setattr(http, 'ask', not_ready)
-    client = TestClient(app)
+    from tests.auth_client import signed_in_client
+    client = signed_in_client(app)
     body = {'question': 'Tell me about the product'}
     rest = client.post('/ask', json=body)
     assert rest.status_code == 503

@@ -227,9 +227,9 @@ flowchart TD
 
 **Technical references:** [LangChain retrieval and 2-step RAG](https://docs.langchain.com/oss/python/deepagents/retrieval); [Chroma query metadata filtering](https://docs.trychroma.com/docs/querying-collections/metadata-filtering) (future scoped vector comparison, not a T05 dependency).
 
-## 10. T06 — Authenticated Manager HITL (PROPOSED; REVIEW BEFORE CODE)
+## 10. T06 — Authenticated Manager HITL (APPROVED DESIGN; CODE PR #61 UNDER REVIEW)
 
-**Gate and owner:** this is the **T06-specific implementation design**, not approval to code until this revision is reviewed and merged. It refines the already **approved architecture decision** in [Review 09 / #29](https://github.com/hungtvb/retailIQ/issues/29); parent [UC-01 #34](https://github.com/hungtvb/retailIQ/issues/34). Inspected baseline: `main@ff981e193256d9bf6fd46e11cb6e02ed32b27c26` (T05 accepted). The implementation Issue and PR must cite this section's **eventual approved merge SHA**, not this proposal branch.
+**Gate and owner:** this is the **approved T06 implementation design**, merged at `main@8f5ee7858ae1510de4ab4a3da76448ed11a771af` via [design PR #59](https://github.com/hungtvb/retailIQ/pull/59); implementation is tracked separately in [PR #61](https://github.com/hungtvb/retailIQ/pull/61) and is **not accepted or merged by this design approval**. It refines the already **approved architecture decision** in [Review 09 / #29](https://github.com/hungtvb/retailIQ/issues/29); parent [UC-01 #34](https://github.com/hungtvb/retailIQ/issues/34). Inspected baseline: `main@ff981e193256d9bf6fd46e11cb6e02ed32b27c26` (T05 accepted). The implementation Issue and PR cite the **approved design merge SHA** above, not the former proposal branch.
 
 **Business outcome:** an authenticated Analyst submits an *evidence-backed historical backorder candidate* for Manager review; an authenticated Manager accepts or rejects that **local proposal only**. The decision is attributable, one-time, versioned and visible to the submitting user. **Neither decision causes stock transfer, inventory reservation, order update nor shipment.** Preserve T01–T05 case identity, source release, evidence cutoff, policy validity and original `NEEDS_REVIEW` finding. A historical observation is not current operational inventory.
 
@@ -243,7 +243,7 @@ flowchart TD
 
 **Scope:** exactly two roles (`analyst`, `manager`), CLI-provisioned local accounts, backend authorization, owner-scoped chat and trace, local proposal review, minimal Workspace login and proposal controls. No public signup, JWT, SSO, admin UI, per-warehouse permissions, production security certification or Fiction writes. **Only the Manager's review decision is recorded; no warehouse transfer is authorized or executed.**
 
-### Proposed trust flow (not implemented)
+### Approved trust flow (implementation verification belongs to PR #61)
 
 ~~~mermaid
 flowchart TD

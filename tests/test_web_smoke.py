@@ -1,12 +1,14 @@
 """Regression coverage for local UI and API entrypoint (offline mode)."""
 import pytest
 from fastapi.testclient import TestClient
+from tests.auth_client import signed_in_client
 from retailiq.api import app
 
 @pytest.fixture
-def client(monkeypatch):
+def client(monkeypatch, tmp_path):
     monkeypatch.setenv("RETAILIQ_MODE", "offline")
-    return TestClient(app)
+    monkeypatch.setenv("RETAILIQ_CHAT_DB", str(tmp_path / 'chat.sqlite'))
+    return signed_in_client(app)
 
 def test_homepage_served(client):
     response=client.get("/")
