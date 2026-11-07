@@ -9,9 +9,47 @@ from dataclasses import asdict, dataclass, replace
 import re
 from typing import Callable, Literal
 
-from retailiq.domain.analytics import requested_month
+from retailiq.domain.analytics import _ENGLISH_MONTHS, fold_text, requested_month
 
 Scope = Literal["store", "product", "ranked_product", "clarify"]
+
+# A location-shaped subject. Revenue cannot be filtered by location, so even a
+# resolvable one must ask for clarification rather than answer the store total.
+_LOCATION_SUBJECT_RE = re.compile(
+    r'\b(?:tại|tai|at|in)\s+([^\s,?.!]+(?:\s+(?!(?:tại|tai|at|in)\b)[^\s,?.!]+){0,2})'
+)
+
+# Channel and period words are not locations; "tại cửa hàng" or "at present"
+# describe a sales channel or a reporting period, not a city.
+_GENERIC_SUBJECT_WORDS = frozenset({
+    'store', 'warehouse', 'shop', 'branch', 'outlet', 'online', 'hub', 'kenh',
+    'kho', 'cua hang', 'cua hang vat ly', 'chi nhanh', 'physical',
+})
+_NON_LOCATION_HEADS = frozenset({
+    'the', 'a', 'an', 'this', 'that', 'these', 'those', 'present', 'moment',
+    'now', 'most', 'least', 'all', 'each', 'every', 'which', 'what', 'your',
+    'our', 'my',
+}) | frozenset(_ENGLISH_MONTHS) | frozenset({'month', 'months', 'quarter', 'year', 'years', 'q1', 'q2', 'q3', 'q4', 'online', 'channel', 'oct', 'sept'})
+
+# An explicit SKU-shaped token that the catalog lookup could not resolve.
+_SKU_TOKEN_RE = re.compile(r'\b[A-Z]{2,5}-\d{2,}\b')
+
+# Product subject after a marker; the marker alone is not proof (the following
+# phrase may be a month, channel or ranking rather than a product).
+_PRODUCT_MARKER_RE = re.compile(
+    r'(?:\bof\b|\bfor\b|doanh\s+thu\s+của|doanh\s+thu\s+cua'
+    r'|của\s+sản\s+phẩm|cua\s+san\s+pham)'
+    r'\s+([^\s,?.!]+(?:\s+[^\s,?.!]+){0,3})'
+)
+_NON_PRODUCT_HEADS = frozenset({
+    'the', 'a', 'an', 'this', 'that', 'these', 'those', 'all', 'both', 'every',
+    'most', 'least', 'month', 'months', 'thang', 'year', 'years', 'nam',
+    'quarter', 'quy', 'q1', 'q2', 'q3', 'q4', 'last', 'previous', 'next',
+    'online', 'store', 'kenh', 'channel', 'completed', 'top', 'sellers',
+    'seller', 'best', 'us',
+    # Generic Vietnamese store words are not a product subject.
+    'cua', 'hang', 'kho', 'chung', 'toi', 'minh', 'cong', 'ty',
+}) | frozenset(_ENGLISH_MONTHS)
 
 
 @dataclass(frozen=True)
@@ -27,24 +65,74 @@ class RevenuePlan:
         return {"metric": "net_revenue_vnd", **asdict(self)}
 
 
+def _names_known_location(text: str, known_locations) -> bool:
+    """Case- and diacritic-insensitive match against the location vocabulary."""
+    if known_locations is None:
+        names = []
+    elif callable(known_locations):
+        names = known_locations()
+    else:
+        names = known_locations
+    if not isinstance(names, (list, tuple)):
+        return False
+    folded = fold_text(text)
+    compact = re.sub(r'\s+', '', folded)
+    for raw in names:
+        if not isinstance(raw, str) or not raw.strip():
+            continue
+        name = fold_text(raw).strip()
+        if name in _GENERIC_SUBJECT_WORDS:
+            continue  # "Store"/"Warehouse" are channel words, not cities.
+        if name in folded or re.sub(r'\s+', '', name) in compact:
+            return True
+        head = name.split()[0]
+        if len(head) >= 4 and head not in _GENERIC_SUBJECT_WORDS and head in compact:
+            return True
+    return False
+
+
+def _names_location_subject(text: str, known_locations) -> bool:
+    folded = fold_text(text)
+    if _names_known_location(text, known_locations):
+        return True
+    for match in _LOCATION_SUBJECT_RE.finditer(folded):
+        subject = match.group(1)
+        head = subject.split()[0]
+        if head in _NON_LOCATION_HEADS or re.fullmatch(r'20\d{2}(?:[-/]\d{1,2})?', head):
+            continue
+        if any(word in subject.split() for word in _GENERIC_SUBJECT_WORDS):
+            continue
+        return True
+    return False
+
+
+def _names_product_subject(question: str, text: str) -> bool:
+    """True when the question names a product this resolver could not bind."""
+    if _SKU_TOKEN_RE.search(question):
+        return True
+    for match in _PRODUCT_MARKER_RE.finditer(text):
+        head = fold_text(match.group(1)).split()[0]
+        if head not in _NON_PRODUCT_HEADS and not head.isdigit():
+            return True
+    return False
+
+
 def build_revenue_plan(
     question: str,
     *,
     resolve_sku: Callable[[str], str | None],
     is_ranked: Callable[[str], bool],
     ranked_position: Callable[[str], int | None],
+    known_locations: Callable[[], list[str]] | None = None,
 ) -> RevenuePlan:
     """Parse a bounded revenue query without LLM-generated SQL."""
     text = question.casefold()
     period = requested_month(question)
-    if re.search(r"(?:tháng\s*|month\s*)(?:0|1[3-9]|[2-9]\d)\b", text):
+    if re.search(r"(?:thang|month)\s*(?:0|1[3-9]|[2-9]\d)\b", fold_text(question)):
         return RevenuePlan(period, "clarify", reason="Invalid calendar month")
 
-    # A location such as Hanoi cannot be inferred from the store/online channel.
-    if any(location in text for location in (
-        "hà nội", "ha noi", "hanoi", "hồ chí minh", "ho chi minh",
-        "saigon", "sài gòn", "hcmc"
-    )):
+    # A location filter cannot be inferred from the store/online channel.
+    if _names_location_subject(question, known_locations):
         return RevenuePlan(period, "clarify", reason="Location-filtered revenue is not supported")
 
     online = bool(re.search(r"\b(?:online|ecommerce|e-commerce)\b", text))
@@ -66,11 +154,8 @@ def build_revenue_plan(
     if sku:
         return RevenuePlan(period, "product", sku=sku, channel=channel)
 
-    product_reference = bool(re.search(
-        r"(?:của\s+(?:sản phẩm|mặt hàng)|do\s+sản phẩm|"
-        r"for\s+(?:the\s+)?product|product\s+(?:with\s+)?sku\b)", text
-    ))
-    if product_reference:
+    # A named but unresolved subject is not a store-wide question.
+    if _names_product_subject(question, text):
         return RevenuePlan(period, "clarify", reason="Identify the product by a known name or SKU")
     return RevenuePlan(period, "store", channel=channel)
 

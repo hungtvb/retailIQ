@@ -3,10 +3,27 @@
 No orchestration imports: LangGraph and the offline entrypoint share these
 business operations without depending on each other.
 """
-from .analytics import products, inventory, revenue, top, month, requested_month
+from .analytics import (DomainDataError, fold_text, inventory, inventory_locations,
+                        month, products, requested_month, revenue, top)
 from .retrieval import retrieve
 from .language import is_vietnamese
 from .reply import retailiq_reply
+import re
+
+
+def resolve_known_locations() -> list[str]:
+ """Location vocabulary from inventory evidence, never a hard-coded city list."""
+ return inventory_locations()
+
+
+def _mentions(question: str, terms) -> bool:
+ """Accent- and case-insensitive whole-phrase match on folded text."""
+ folded = fold_text(question)
+ for term in terms:
+  candidate = fold_text(term)
+  if re.search(r'(?<![a-z0-9])' + re.escape(candidate) + r'(?![a-z0-9])', folded):
+   return True
+ return False
 
 
 def is_price_extreme(question: str) -> bool:
@@ -76,12 +93,36 @@ def is_multi_stock_question(question: str) -> bool:
  return stock and ranked and plural
 
 
+def unsupported_sales_metric(question: str) -> bool:
+  """Do not re-label order counts or units sold as monetary revenue."""
+  text = fold_text(question)
+  count = bool(re.search(r'\b(?:how many|number of|count|bao nhieu|so luong|so don)\b', text))
+  orders = bool(re.search(r'\b(?:orders?|shipments?|shipped|delivered|don hang|don da giao)\b', text))
+  if orders and (count or not re.search(r'\b(?:revenue|doanh thu)\b', text)):
+   return True
+  units = bool(re.search(r'\b(?:units?|items?|products?|san pham)\b', text))
+  sold = bool(re.search(r'\b(?:sold|sell|selling|da ban|ban duoc)\b', text))
+  return count and units and sold
+
+
+def unsupported_sales_metric_reply(question: str) -> str:
+  if is_vietnamese(question):
+   return ('Chưa thể xác minh số đơn giao hàng hoặc số lượng đã bán bằng truy vấn này. '
+           'Vui lòng hỏi về doanh thu thuần hoặc sản phẩm bán chạy theo số lượng.')
+  return ('This query cannot verify shipped-order counts or units sold. '
+          'Please ask for net revenue or top sellers by units instead.')
+
+
 def intent(q):
  q=q.lower()
  if is_price_extreme(q):return 'product'
  if has_ranked_revenue_reference(q):return 'revenue'
  if any(x in q for x in ['top seller','best seller','bán chạy']):return 'top'
+ if re.search(r'\btop\s*(?:[2-9]|[1-9]\d+)\s+(?:sellers?|best sellers?|'
+              r'sản phẩm bán chạy|san pham ban chay)\b', fold_text(q)):return 'top'
+ if unsupported_sales_metric(q):return 'general'
  if any(x in q for x in ['revenue','doanh thu','sales performance']):return 'revenue'
+ if _mentions(q, ('sales','sold','orders','doanh số','đơn hàng')):return 'revenue'
  if any(x in q for x in ['stock','inventory','tồn kho','in stock','available units','còn hàng','còn bao nhiêu']):return 'stock'
  if any(x in q for x in ['product','sản phẩm','spec','specification','warranty','bảo hành','charger','laptop','usb-c','alphabook','guide','manual','policy','chính sách']):return 'product'
  if product_sku(q):return 'product'
@@ -108,6 +149,13 @@ def wants_single_latest_product(q: str) -> bool:
  if re.search(r'\b(top\s*[2-9]|top\s*10|latest products|newest products|new products)\b',text):
   return False
  return 'mới nhất' in text or bool(re.search(r'\b(latest product|newest product|top\s*1)\b',text))
+def _clarify_sales_period(question: str, error: Exception) -> str:
+ reason = str(error) or 'Unrecognized sales period'
+ return ('Cần làm rõ khoảng thời gian doanh thu: ' + reason + '.'
+         if is_vietnamese(question) else
+         'Please clarify the sales period: ' + reason + '.')
+
+
 def do(q,category, *, stock_lookup=None):
  # Optional trusted read-only inventory adapter. Default stays reviewed SQL.
  stock_read = stock_lookup if stock_lookup is not None else inventory
@@ -117,21 +165,26 @@ def do(q,category, *, stock_lookup=None):
   answer=retailiq_reply({'question':q,'intent':'latest','records':rows,'answer':''})['answer']
   return {'answer':answer,'records':rows,'contexts':[]}
  if category=='general':
+  if unsupported_sales_metric(q):
+   return {'answer':unsupported_sales_metric_reply(q),'records':[],'contexts':[]}
   answer=('Xin chào! Tôi là RetailIQ. Bạn có thể hỏi về tồn kho, doanh thu, hàng bán chạy hoặc thông tin sản phẩm.'
           if is_vietnamese(q) else
           'Hello! I am RetailIQ. You can ask about inventory, revenue, top sellers, or product information.')
   return {'answer':answer,'records':[],'contexts':[]}
  if category=='stock':
   if is_multi_stock_question(q):
-   period=requested_month(q)
-   ranked=top(period)[:requested_top_count(q)]
-   rows=[record for item in ranked for record in stock_read(item['sku'])]
-   by_sku={item['sku']:sum(row['available'] for row in rows
-                           if row['sku']==item['sku']) for item in ranked}
-   answer=('Available stock for ranked completed-order products in '+period+': '+
-           '; '.join(item['name']+' ('+item['sku']+'): '+str(by_sku[item['sku']])+
-                     ' units' for item in ranked)+'.')
-   if not ranked: answer='No completed-order top sellers found for '+period+'.'
+   try:
+    period=requested_month(q)
+    ranked=top(period)[:requested_top_count(q)]
+    rows=[record for item in ranked for record in stock_read(item['sku'])]
+    by_sku={item['sku']:sum(row['available'] for row in rows
+                            if row['sku']==item['sku']) for item in ranked}
+    answer=('Available stock for ranked completed-order products in '+period+': '+
+            '; '.join(item['name']+' ('+item['sku']+'): '+str(by_sku[item['sku']])+
+                      ' units' for item in ranked)+'.')
+    if not ranked: answer='No completed-order top sellers found for '+period+'.'
+   except DomainDataError as error:
+    return {'answer':_clarify_sales_period(q,error),'records':[],'contexts':[]}
    return {'answer':answer,'records':rows,'contexts':[],'period':period}
   sku=product_sku(q)
   if not sku:return {'answer':'Please specify a known product name or SKU.','records':[],'contexts':[]}
@@ -142,11 +195,17 @@ def do(q,category, *, stock_lookup=None):
   return {'answer':f"{rows[0]['name']} ({sku}): {total} available units across locations. "+'; '.join(f"{r['location']}: {r['available']} available (on hand {r['on_hand']}, reserved {r['reserved']})" for r in rows)+'.','records':rows,'contexts':[]}
  if category=='revenue':
   from .domain.analytics import revenue_for_sku
-  from .domain.revenue_plan import build_revenue_plan, with_selected_sku, verify_revenue_evidence
-  plan=build_revenue_plan(
-   q,resolve_sku=product_sku,
-   is_ranked=has_ranked_revenue_reference,
-   ranked_position=ranked_revenue_sku_rank)
+  from .domain.revenue_plan import (RevenuePlan, build_revenue_plan,
+                                    verify_revenue_evidence, with_selected_sku)
+  try:
+   plan=build_revenue_plan(
+    q,resolve_sku=product_sku,
+    is_ranked=has_ranked_revenue_reference,
+    ranked_position=ranked_revenue_sku_rank,
+    known_locations=resolve_known_locations)
+  except DomainDataError as error:
+   # An unresolved period must ask, never answer a different month.
+   plan=RevenuePlan(month(),'clarify',reason=str(error) or 'Unrecognized sales period')
   period=plan.period
   if plan.scope=='clarify':
    answer=('Cần làm rõ yêu cầu doanh thu: '+plan.reason+'.'
@@ -189,8 +248,11 @@ def do(q,category, *, stock_lookup=None):
   return {'answer':answer,'records':rows,'contexts':[],'period':period,
           'query_plan':plan.to_dict()}
  if category=='top':
-  period=requested_month(q)
-  ranked=top(period) if period!=month() else top()
+  try:
+   period=requested_month(q)
+   ranked=top(period) if period!=month() else top()
+  except DomainDataError as error:
+   return {'answer':_clarify_sales_period(q,error),'records':[],'contexts':[]}
   rows=ranked[:requested_top_count(q)]
   if not rows:
    return {'answer':f'No completed-order top sellers for {period}.','records':[],'contexts':[], 'period':period}

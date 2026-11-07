@@ -1,0 +1,132 @@
+name: RetailIQ Fiction integrity
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/fiction-integrity.yml'
+      - 'data/fiction/**'
+      - 'retailiq/domain/fiction.py'
+      - 'retailiq/domain/backorder.py'
+      - 'retailiq/domain/uc01_review.py'
+      - 'retailiq/orchestration/agents.py'
+      - 'retailiq/api/http.py'
+      - 'retailiq/orchestration/fiction_handlers.py'
+      - 'retailiq/orchestration/fiction_requests.py'
+      - 'retailiq/orchestration/week1_graph.py'
+      - 'retailiq/mcp_adapter.py'
+      - 'retailiq/mcp_server.py'
+      - 'retailiq/rag/policy_explanation.py'
+      - 'scripts/_evidence_io.py'
+      - 'scripts/verify_uc01_live_release.py'
+      - 'scripts/verify_uc01_policy_live.py'
+      - 'scripts/verify_t04_real_release.py'
+      - 'scripts/smoke_mcp_stdio.py'
+      - 'requirements-offline.txt'
+  schedule:
+    # Two jobs × 209 MB ≈ 418 MB/month fits the ~1 GB free LFS allowance
+    # alongside path-scoped PR runs; revisit weekly if the repo gets an LFS data pack.
+    - cron: '0 3 1 * *'
+  workflow_dispatch:
+jobs:
+  fiction-t04-release:
+    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install supported-by-current-slice MCP dependencies
+        run: python -m pip install 'mcp>=1.28,<2' 'langchain-mcp-adapters>=0.1,<1'
+      - name: Fetch published Fiction LFS release (not source fixture)
+        env:
+          GIT_LFS_SKIP_SMUDGE: '1'
+        run: |
+          git lfs version
+          # Bounded retry: a transient clone/LFS failure is not a data-integrity
+          # verdict, and the gate must never wait forever on the network.
+          for attempt in 1 2 3; do
+            rm -rf "$RUNNER_TEMP/fiction-retail"
+            if git clone --depth 1 --filter=blob:none https://github.com/hungtvb/fiction-retail.git "$RUNNER_TEMP/fiction-retail" \
+              && git -C "$RUNNER_TEMP/fiction-retail" lfs pull --include="data/fiction_retail.sqlite" --exclude=""; then
+              break
+            fi
+            echo "Fiction LFS fetch failed (attempt ${attempt}/3)" >&2
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            sleep 10
+          done
+          test "$(stat -c%s "$RUNNER_TEMP/fiction-retail/data/fiction_retail.sqlite")" -eq 209063936
+      - name: Pinned real Fiction release / independent SQL / MCP stdio
+        run: |
+          python -m scripts.verify_t04_real_release \
+            --db "$RUNNER_TEMP/fiction-retail/data/fiction_retail.sqlite" \
+            --manifest "$RUNNER_TEMP/fiction-retail/manifest.json" \
+            --retailiq-manifest data/fiction/manifest.json
+
+  fiction-t02-oracle:
+    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RETAILIQ_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install offline Fiction + compiled LangGraph runtime (no provider)
+        run: |
+          python -m pip install -r requirements-offline.txt 'langgraph>=1,<2' 'langchain-core>=1,<2' 'langchain>=1,<2' 'langgraph-checkpoint-sqlite>=3,<4'
+      - name: Download published Fiction SQLite and source policy (no provider)
+        env:
+          GIT_LFS_SKIP_SMUDGE: '1'
+        run: |
+          git lfs version
+          # Bounded retry: a transient clone/LFS failure is not a data-integrity
+          # verdict, and the gate must never wait forever on the network.
+          for attempt in 1 2 3; do
+            rm -rf "$RUNNER_TEMP/fiction-retail"
+            if git clone --depth 1 --filter=blob:none https://github.com/hungtvb/fiction-retail.git "$RUNNER_TEMP/fiction-retail" \
+              && git -C "$RUNNER_TEMP/fiction-retail" lfs pull --include="data/fiction_retail.sqlite" --exclude=""; then
+              break
+            fi
+            echo "Fiction LFS fetch failed (attempt ${attempt}/3)" >&2
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            sleep 10
+          done
+          test "$(stat -c%s "$RUNNER_TEMP/fiction-retail/data/fiction_retail.sqlite")" -eq 209063936
+          test -f "$RUNNER_TEMP/fiction-retail/knowledge/policies/FR-WH-2026-10-04.md"
+      - name: Pinned G1 SQL/policy oracle + real API/graph with FAKE router (NO LLM)
+        run: |
+          python -m scripts.verify_uc01_live_release --oracle-only \
+            --db "$RUNNER_TEMP/fiction-retail/data/fiction_retail.sqlite" \
+            --manifest "$RUNNER_TEMP/fiction-retail/manifest.json" \
+            --knowledge-root "$RUNNER_TEMP/fiction-retail/knowledge" \
+            --retailiq-manifest data/fiction/manifest.json \
+            --out data/quality_reports/uc01_t02_g1.json
+      - name: T05 exact-policy G1 source, graph and citation (FAKE model, NO LLM)
+        run: |
+          python -m scripts.verify_uc01_policy_live --oracle-only \
+            --db "$RUNNER_TEMP/fiction-retail/data/fiction_retail.sqlite" \
+            --manifest "$RUNNER_TEMP/fiction-retail/manifest.json" \
+            --knowledge-root "$RUNNER_TEMP/fiction-retail/knowledge" \
+            --retailiq-manifest data/fiction/manifest.json \
+            --out data/quality_reports/uc01_t05_policy.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: retailiq-t02-real-release-oracle
+          path: |
+            data/quality_reports/uc01_t02_g1.json
+            data/quality_reports/uc01_t05_policy.json
+          if-no-files-found: ignore
+          retention-days: 7

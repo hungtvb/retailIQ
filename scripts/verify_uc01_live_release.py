@@ -16,12 +16,12 @@ import json
 import os
 from pathlib import Path
 import sqlite3
-import tempfile
 import time
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from retailiq.domain.fiction import verify_release
+from scripts._evidence_io import safe_tempdir
 
 CASE = "CASE-06181249-280d-59b3-b00b-b3de7877eb59"
 WAREHOUSE = "bd0b4a2e-3f75-46a1-bf8a-5a82594d70a4"
@@ -268,7 +268,7 @@ def execute_golden_case(db: Path, manifest: Path, knowledge: Path, oracle: dict,
         })
         return result
 
-    with tempfile.TemporaryDirectory(prefix="retailiq-t02-live-") as temp:
+    with safe_tempdir(prefix="retailiq-t02-live-") as temp:
         folder = Path(temp)
         env = {
             "RETAILIQ_MODE": "full", "RETAILIQ_FICTION_DB": str(db.resolve()),

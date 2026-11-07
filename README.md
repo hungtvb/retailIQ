@@ -29,16 +29,18 @@ python -m scripts.seed
 python -m scripts.index_products
 npm --prefix frontend install
 npm --prefix frontend run build
-python -m uvicorn retailiq.api:app --host 127.0.0.1 --port 8000
+python -m uvicorn retailiq.api:app --host 127.0.0.1 --port 8000 --workers 1
 ```
 
 Open **http://127.0.0.1:8000/workspace**. The existing UI is available at `/`.
 
-The commands above run the **existing legacy** `EL-###`/VND chat demo using the seeded retail fixture. They do **not** switch chat, LangGraph, MCP or RAG to Fiction Retail.
+The commands above provision the **existing legacy** `EL-###`/VND synthetic fixture for ordinary questions. The bounded full-mode CASE-ID path is wired to Fiction and requires the separate release below; this is not a general Fiction cutover.
 
-## Fiction Retail local data (M0 only)
+The local demo requires a **single process (`workers=1`)**: SSE slots, session locks and JSONL logging are per process and are unsafe with multiple workers.
 
-RetailIQ also has a separate, **implemented read-only Fiction SQL foundation** (not yet wired to `/ask`). Copy the `fiction-retail-unified-v1.0.0` SQLite object from Fiction Retail Git LFS to `data/fiction/fiction_retail.sqlite`; keep the pinned `data/fiction/manifest.json` from this repo. Verify the exact local release:
+## Fiction Retail local data
+
+RetailIQ also has a separate, **implemented read-only Fiction SQL foundation**, wired to `/ask` for bounded full-mode CASE-ID investigations and verified follow-ups. Copy the `fiction-retail-unified-v1.0.0` SQLite object from Fiction Retail Git LFS to `data/fiction/fiction_retail.sqlite`; keep the pinned `data/fiction/manifest.json` from this repo. Verify the exact local release:
 
 ```bash
 python -m scripts.verify_fiction_runtime --db data/fiction/fiction_retail.sqlite --manifest data/fiction/manifest.json

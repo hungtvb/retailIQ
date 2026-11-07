@@ -15,10 +15,11 @@ import os
 from pathlib import Path
 import sqlite3
 import sys
-import tempfile
 import time
 from types import SimpleNamespace
 from unittest.mock import patch
+
+from scripts._evidence_io import safe_tempdir
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -117,7 +118,7 @@ def main() -> None:
     from retailiq.mcp_adapter import read_fiction_inventory, read_fiction_order
     from retailiq.api import app
 
-    with tempfile.TemporaryDirectory(prefix="retailiq-fiction-mcp-") as tmp:
+    with safe_tempdir(prefix="retailiq-fiction-mcp-") as tmp:
         root = Path(tmp)
         db, manifest, order_id, product_id, warehouse_id, case_id = _scenario_fixture(root)
         original_db_sha = sha256(db.read_bytes()).hexdigest()

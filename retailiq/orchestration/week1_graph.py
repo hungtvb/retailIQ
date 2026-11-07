@@ -14,9 +14,11 @@ import threading
 from pathlib import Path
 import sqlite3
 from retailiq.queries import (intent, do, product_sku, wants_single_latest_product,
-                              requested_top_count, is_multi_stock_question, is_price_extreme)
+                              requested_top_count, is_multi_stock_question, is_price_extreme,
+                              unsupported_sales_metric, unsupported_sales_metric_reply)
 from retailiq.reply import retailiq_reply
-from retailiq.domain.analytics import month, products, requested_month, top
+from retailiq.domain.analytics import (DomainDataError, month, products,
+                                       requested_month, top)
 from retailiq.core.config import chat_model, configure_langsmith
 from retailiq.skills import skill_for, load_skill
 from retailiq.observability import log_event, observed, request_id, session_id
@@ -33,6 +35,12 @@ AGENT_FOR_INTENT = {
     'general': 'retailiq', 'backorder': 'backorder_agent',
     'latest': 'product_agent', 'fiction_stock': 'fiction_inventory_agent',
 }
+
+# The free-form conversation node proves no business data, so its payload must
+# say so instead of borrowing the verified SQL/Chroma banner.
+_CONVERSATIONAL_AGENT = 'retailiq'
+CONVERSATIONAL_MODE = 'LangGraph conversational (no business evidence)'
+UNVERIFIED_LIMITATION = 'No verified business data used'
 
 
 class State(TypedDict, total=False):
@@ -109,8 +117,14 @@ def followup_intent(question: str, history: list[dict] | None = None) -> str:
     if category != 'general':
         return category
     prior = _previous_user_question(history)
-    if prior and requested_month(question) != month() and classify(prior) in ('revenue', 'top'):
-        return classify(prior)
+    if prior and classify(prior) in ('revenue', 'top'):
+        try:
+            follows_period = requested_month(question) != month()
+        except DomainDataError:
+            # An unresolved period is not a follow-up; the business path asks.
+            return category
+        if follows_period:
+            return classify(prior)
     if not _referential(question):
         return category
     if prior and classify(prior) in ('product', 'latest', 'top', 'stock'):
@@ -135,7 +149,11 @@ def resolve_followup(question: str, history: list[dict] | None = None,
     previous = _previous_user_question(history)
     if category == 'stock' and previous and classify(previous) == 'top':
         ranked_count = requested_top_count(previous)
-        ranked_period = requested_month(previous)
+        try:
+            ranked_period = requested_month(previous)
+        except DomainDataError:
+            # No verified period means no verified rank; keep the question.
+            return question
         rank = re.search(r'(?:đứng\s*thứ|xếp\s*thứ|rank(?:ed)?\s*#?)\s*(\d+)', q)
         if rank:
             index = int(rank.group(1)) - 1
@@ -157,7 +175,11 @@ def resolve_followup(question: str, history: list[dict] | None = None,
         if references_group:
             return f'Stock for top {ranked_count} best sellers in {ranked_period}'
     if 'top seller' in q or 'best seller' in q or 'bán chạy' in q:
-        ranked = top(requested_month(question))
+        try:
+            ranked_period = requested_month(question)
+        except DomainDataError:
+            return question
+        ranked = top(ranked_period)
         return question + (' ' + ranked[0]['sku'] if ranked else '')
     # Model answers may contain untrusted RAG text, multiple product names or
     # hallucinated SKUs. Only the user's own explicit reference may anchor a
@@ -177,7 +199,10 @@ def resolve_followup(question: str, history: list[dict] | None = None,
             rows = newest_products(1)
             return question + (' ' + rows[0]['sku'] if rows else '')
         if previous_category == 'top':
-            rows = top(requested_month(content))
+            try:
+                rows = top(requested_month(content))
+            except DomainDataError:
+                return question
             return question + (' ' + rows[0]['sku'] if rows else '')
         if previous_category == 'general' and not _referential(content):
             return question
@@ -220,6 +245,12 @@ def route(state: State):
         }, goto='backorder_agent')
 
     category = followup_intent(state['question'], state.get('history', []))
+    if category == 'general' and unsupported_sales_metric(state['question']):
+        log_event('agent.routed', agent='retailiq', intent='general',
+                  route_fallback=False, execution_mode='full')
+        return Command(update={'effective_question': state['question'],
+                               'intent': 'general', 'route_fallback': False, 'skill': ''},
+                       goto='retailiq')
     # Do not send malformed/ambiguous case IDs to a paid model or business tool.
     if category == 'backorder':
         _case_id_for_uc01(state['question'])
@@ -319,6 +350,11 @@ def retailiq(state: State):
     if is_memory_question(state['question']):
         return Command(update={
             'answer': memory_answer(state['question'], state.get('customer_memory')),
+            'active_agent': 'retailiq', 'records': [], 'contexts': [],
+        }, goto='retailiq_reply')
+    if unsupported_sales_metric(state['question']):
+        return Command(update={
+            'answer': unsupported_sales_metric_reply(state['question']),
             'active_agent': 'retailiq', 'records': [], 'contexts': [],
         }, goto='retailiq_reply')
     reply = chat_model().invoke([
@@ -655,9 +691,20 @@ def run(q: str, *, history: list[dict] | None = None, active_agent: str = '',
     else:
         result = graph.invoke(inputs, config=config)
     result = validate_graph_result(result)
+    # A conversational answer carries no business evidence, so it must not be
+    # labelled as a verified SQL/RAG execution.
+    # Empty results and clarifications are not verified SQL/RAG evidence,
+    # even if a specialist agent was selected.
+    no_evidence = not result.get('records') and not result.get('contexts')
+    conversational = (no_evidence and result['intent'] not in ('backorder', 'fiction_stock'))
+    if conversational:
+        mode = CONVERSATIONAL_MODE
+    elif result['intent'] == 'backorder':
+        mode = 'LangGraph + Fiction verified SQL'
+    else:
+        mode = 'LangGraph Multi-Agent + SQL / Chroma RAG'
     payload = {'question': q, 'intent': result['intent'],
-            'mode': ('LangGraph + Fiction verified SQL' if result['intent'] == 'backorder'
-                     else 'LangGraph Multi-Agent + SQL / Chroma RAG'),
+            'mode': mode,
             'as_of': (result.get('temporal', {}).get('evidence_cutoff')
                       if result['intent'] == 'backorder' else result.get('period', month())),
             'answer': result['answer'],
@@ -668,6 +715,11 @@ def run(q: str, *, history: list[dict] | None = None, active_agent: str = '',
             'skill': result.get('skill', ''),
             'route_fallback': result.get('route_fallback', False),
             'query_plan': result.get('query_plan')}
+    if conversational:
+        limitations = list(result.get('limitations') or [])
+        if UNVERIFIED_LIMITATION not in limitations:
+            limitations.insert(0, UNVERIFIED_LIMITATION)
+        payload['limitations'] = limitations
     if result['intent'] == 'backorder':
         payload.update({key: result[key] for key in
                         ('disposition', 'evidence_refs', 'findings', 'limitations',
