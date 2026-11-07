@@ -143,35 +143,66 @@ def home():
     return (Path(__file__).resolve().parents[2] / 'web' / 'index.html').read_text(encoding='utf8')
 
 
+def _harness_stop_reason(error: Exception, stage: str) -> str:
+    """Bounded, non-sensitive failure labels for run lifecycle telemetry."""
+    if isinstance(error, SessionBusyError):
+        return 'SESSION_BUSY'
+    if isinstance(error, _SessionNotFound):
+        return 'SESSION_NOT_FOUND'
+    if isinstance(error, InvalidCaseId):
+        return 'INVALID_REQUEST_SCOPE'
+    if stage == 'commit':
+        return 'SESSION_COMMIT_FAILED'
+    return 'EXECUTION_FAILED'
+
+
 def _perform_turn(data: AskBody) -> dict:
-    """One shared execution path for ordinary POST and live streamed POST."""
-    guard = session_mutation(data.session_id) if data.session_id else nullcontext()
-    with guard:
-        current = None
-        if data.session_id is not None:
-            current = get_session(data.session_id, include_messages=False)
-            if current is None:
-                raise _SessionNotFound('Session not found')
-        with observed('chat.turn', execution_mode='full' if os.getenv('RETAILIQ_MODE') == 'full' else 'offline'):
-            if data.session_id is None:
-                result = ask(data.question)
-            else:
-                prior = history(data.session_id, limit=12)
-                memory = get_customer_memory(data.session_id)
-                context = (last_committed_case_binding(data.session_id)
-                           if os.getenv('RETAILIQ_MODE') == 'full' else None)
-                kwargs = {'history': prior, 'active_agent': current['active_agent']}
-                if memory['consent']:
-                    kwargs['memory'] = memory
-                if context:
-                    kwargs['verified_case_context'] = context
-                result = ask(data.question, **kwargs)
-                add_turn(data.session_id, data.question, {**result, 'request_id': request_id()})
-    log_event('chat.turn_result', agent=result.get('active_agent'),
-              intent=result.get('intent'), skill=result.get('skill'),
-              route_fallback=result.get('route_fallback'),
-              record_count=len(result.get('records') or []),
-              context_count=len(result.get('contexts') or []))
+    """One shared execution path; completed means verified caller result + commit."""
+    execution_mode = 'full' if os.getenv('RETAILIQ_MODE') == 'full' else 'offline'
+    # The start event describes actual HTTP turn execution, not a proposed graph.
+    log_event('harness.run_started', status='started', execution_mode=execution_mode)
+    stage = 'preflight'
+    try:
+        guard = session_mutation(data.session_id) if data.session_id else nullcontext()
+        with guard:
+            current = None
+            if data.session_id is not None:
+                current = get_session(data.session_id, include_messages=False)
+                if current is None:
+                    raise _SessionNotFound('Session not found')
+            with observed('chat.turn', execution_mode=execution_mode):
+                stage = 'execution'
+                if data.session_id is None:
+                    result = ask(data.question)
+                else:
+                    prior = history(data.session_id, limit=12)
+                    memory = get_customer_memory(data.session_id)
+                    context = (last_committed_case_binding(data.session_id)
+                               if execution_mode == 'full' else None)
+                    kwargs = {'history': prior, 'active_agent': current['active_agent']}
+                    if memory['consent']:
+                        kwargs['memory'] = memory
+                    if context:
+                        kwargs['verified_case_context'] = context
+                    result = ask(data.question, **kwargs)
+                    stage = 'commit'
+                    add_turn(data.session_id, data.question, {**result, 'request_id': request_id()})
+                    # Graph success is not a durable turn until add_turn succeeds.
+                    log_event('harness.turn_committed', status='success',
+                              execution_mode=execution_mode)
+                    stage = 'postcommit'
+        log_event('chat.turn_result', agent=result.get('active_agent'),
+                  intent=result.get('intent'), skill=result.get('skill'),
+                  route_fallback=result.get('route_fallback'),
+                  record_count=len(result.get('records') or []),
+                  context_count=len(result.get('contexts') or []))
+    except Exception as error:
+        log_event('harness.run_stopped', level='WARNING', status='failed',
+                  execution_mode=execution_mode, error_type=type(error).__name__,
+                  stop_reason=_harness_stop_reason(error, stage))
+        raise
+    # A stateless request has no session commit; completion never claims delivery.
+    log_event('harness.run_completed', status='success', execution_mode=execution_mode)
     return {**result, 'session_id': data.session_id, 'request_id': request_id()}
 
 
