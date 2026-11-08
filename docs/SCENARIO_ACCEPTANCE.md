@@ -33,6 +33,33 @@ not an existing local user database. It needs Chromium/Chrome and Playwright.
 The MCP smoke needs the optional `mcp` and `langchain-mcp-adapters` dependencies.
 Its subprocess gets the same isolated fixture via environment variables.
 
+## Agentic testing policy — simulate LLM outputs, execute the real graph
+
+**Status:** testing requirement for future Agentic changes; the new simulated-LLM full-graph runner/fixtures are **not yet implemented or verified**. Tracking: [issue #67](https://github.com/hungtvb/retailIQ/issues/67). This policy does not retroactively change the evidence mode or acceptance of existing tests.
+
+**Primary no-paid Agentic acceptance gate:** The assistant authors varied model-output fixtures using the current prompts and schema contracts, then injects the fixture into the **model invocation boundary only**. Run the real full-mode compiled LangGraph and FastAPI, session persistence, context resolution, plan validation, read-only SQL/MCP/RAG handlers (as relevant), result verifier and SSE. Do **not** invoke the legacy `offline` assistant to claim Agentic acceptance and do **not** substitute fake router/SQL/HTTP responses for the integrated path.
+
+| Evidence mode | Model behavior | Execution/verification | Valid claim |
+|---|---|---|---|
+| `offline_synthetic` | None | Pure business code, deterministic SQLite tests | Business invariant regression only |
+| `simulated_llm_full_graph` | Versioned ChatGPT-authored scripted LLM outputs | Full-mode LangGraph + real local trusted tools + independent oracle | Application robustness to these *specific* model outputs |
+| `provider-backed` | Actual configured API model | Full-mode LangGraph + trusted tools + independent oracle and response grading | Model's observed behavior on the executed scenarios |
+
+### Mandatory simulated-LLM fixture contract
+
+1. **Inspect actual model stages** and structured response schemas before authoring fixtures. Version inputs, output schema/prompt version and source-data snapshot. A fixture must provide an ordered sequence of expected model calls, their stage, schema, and response/exception. ChatGPT may author the outputs before the CI run; the test runner does not directly call this ChatGPT conversation.
+2. **Inject only via a scripted model adapter** at the same factory/interface used by production. Preserve parsed/raw/tool-call shapes as required by the actual model call. Unexpected or extra model calls, missing stages, schema mismatches and unused mandatory responses fail the scenario; there must be no implicit default answer.
+3. **Use realistic conversations**, not only one-turn canonical queries. Include paraphrases, product rank/selection follow-ups, changed period/channel/warehouse, independent parallel goals, ambiguities, conflicting context, invalid identifiers, invented capabilities, malformed structured output, timeouts and malicious instructions. Include correct, incomplete and incorrect model proposals to verify failure handling.
+4. **Keep the rest real:** execute a compiled graph through the real API and temporary session; assert actual observed read-only SQL and (when applicable) MCP transport/tool invocation and verified RAG source. Independent oracle determines exact product IDs, ranking, monetary sums, scope, source hash, cutoff and permitted answer. Do not fabricate runtime business rows.
+5. **Inspect the final response semantically:** required facts present, no omitted goal, correct subject/unit/period/currency, appropriate clarification and limitations, no invented source or confident claim after failure. Deterministic oracles are authoritative for business facts; an optional LLM-as-Judge rubric is advisory and separately reported.
+6. **Run mutation and failure guards:** no writes to Fiction operational data; unauthorized, malformed, model-invented tool or cross-session context must fail closed before the executor. Assert accurate started/stopped/completed/committed events and no successful commit after a failed turn.
+7. **Record evidence:** SHA, fixture ID/version, mode, prompt/schema version, case input, expected vs actual at interpretation/context/plan/tool/final answer, observed tool args/events, oracle outcome, PASS/FAIL/ERROR and limitations. Mock runs have no real model tokens or model latency and must never be labeled live provider acceptance.
+
+**POC-00 minimum conversations** (after reviewed design gate; expand only after evidence): (A) “Top 3 sản phẩm bán chạy tháng 10”; (B) “Top 3 sản phẩm bán chạy và tồn kho của chúng”; (C) following A, “Sản phẩm thứ hai còn bao nhiêu?”. Each case must execute with the full graph and real SQL, first with correct simulated outputs, then with deliberately invalid/incomplete proposals. Independently check exact tool arguments and committed reference binding.
+
+**Real-provider boundary:** After simulated full-graph acceptance, run a small representative set with the actual configured LLM using the existing opt-in `workflow_dispatch` policy on trusted `main`; record observed model outputs, final answer quality, traces, measured usage and independent oracle. This remains required for model accuracy/generalization and is not replaced by successful fixtures. Existing `smoke`, `critical`, `uc01` and `uc01_policy` workflows retain their existing meanings until reviewed changes land.
+
+**Implementation note:** The file and command names for new full-graph fixtures/runners must be specified by the approved implementation PR; none are implied to exist merely by this policy. The current offline audit command remains a *domain regression gate*, not the Agentic acceptance gate.
 ## Running and interpreting evidence
 
 Use a clean synthetic fixture as required by the individual script. Some commands seed disposable databases; running `scripts.seed` directly can replace local synthetic working data, so use the existing runbook and back up customized fixtures. `--strict` fails when the scenario result contains FAIL/ERROR; a historical report may have used non-strict mode. Full-mode query audits may incur provider calls and require explicit `--confirm-live`; do not run them without configured credentials and a recorded model/version.
